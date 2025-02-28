@@ -106,6 +106,7 @@ alias glol='git log --graph --pretty='\''%Cred%h%Creset -%C(auto)%d%Creset %s %C
 alias glola='git log --graph --pretty='\''%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ar) %C(bold blue)<%an>%Creset'\'' --all'
 alias glols='git log --graph --pretty='\''%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ar) %C(bold blue)<%an>%Creset'\'' --stat'
 alias glp=_git_log_prettily
+alias glu='git log @{u}..'
 alias glum='git pull upstream $(git_main_branch)'
 alias gm='git merge --no-edit'
 alias gmn='git merge --no-commit'
