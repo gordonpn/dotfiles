@@ -13,19 +13,19 @@ if empty(glob('~/.vim/autoload/plug.vim'))
 endif
 
 call plug#begin('~/.vim/plugged')
-Plug 'chrisbra/matchit'
-Plug 'dbakker/vim-paragraph-motion'
-Plug 'easymotion/vim-easymotion'
-Plug 'justinmk/vim-sneak'
-Plug 'machakann/vim-highlightedyank'
-Plug 'michaeljsmith/vim-indent-object'
-Plug 'tommcdo/vim-exchange'
-Plug 'tpope/vim-commentary'
-Plug 'tpope/vim-surround'
-Plug 'unblevable/quick-scope'
-Plug 'vim-scripts/argtextobj.vim'
-Plug 'echasnovski/mini.ai'
-Plug 'kana/vim-textobj-function'
+Plug 'git@github.com:chrisbra/matchit.git'
+Plug 'git@github.com:dbakker/vim-paragraph-motion.git'
+Plug 'git@github.com:easymotion/vim-easymotion.git'
+Plug 'git@github.com:justinmk/vim-sneak.git'
+Plug 'git@github.com:machakann/vim-highlightedyank.git'
+Plug 'git@github.com:michaeljsmith/vim-indent-object.git'
+Plug 'git@github.com:tommcdo/vim-exchange.git'
+Plug 'git@github.com:tpope/vim-commentary.git'
+Plug 'git@github.com:tpope/vim-surround.git'
+Plug 'git@github.com:unblevable/quick-scope.git'
+Plug 'git@github.com:vim-scripts/argtextobj.vim.git'
+Plug 'git@github.com:echasnovski/mini.ai'
+Plug 'git@github.com:kana/vim-textobj-function'
 call plug#end()
 
 if has('termguicolors')
