@@ -17,7 +17,7 @@ Plug 'git@github.com:chrisbra/matchit.git'
 Plug 'git@github.com:dbakker/vim-paragraph-motion.git'
 Plug 'git@github.com:easymotion/vim-easymotion.git'
 Plug 'git@github.com:justinmk/vim-sneak.git'
-Plug 'git@github.com:machakann/vim-highlightedyank.git'
+" Plug 'git@github.com:machakann/vim-highlightedyank.git'
 Plug 'git@github.com:michaeljsmith/vim-indent-object.git'
 Plug 'git@github.com:tommcdo/vim-exchange.git'
 Plug 'git@github.com:tpope/vim-commentary.git'
@@ -25,7 +25,7 @@ Plug 'git@github.com:tpope/vim-surround.git'
 Plug 'git@github.com:unblevable/quick-scope.git'
 Plug 'git@github.com:vim-scripts/argtextobj.vim.git'
 Plug 'git@github.com:echasnovski/mini.ai.git'
-Plug 'git@github.com:kana/vim-textobj-function.git'
+" Plug 'git@github.com:kana/vim-textobj-function.git'
 call plug#end()
 
 if has('termguicolors')
