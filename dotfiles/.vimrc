@@ -25,7 +25,8 @@ Plug 'git@github.com:tpope/vim-surround.git'
 Plug 'git@github.com:unblevable/quick-scope.git'
 Plug 'git@github.com:vim-scripts/argtextobj.vim.git'
 Plug 'git@github.com:echasnovski/mini.ai.git'
-" Plug 'git@github.com:kana/vim-textobj-function.git'
+Plug 'git@github.com:kana/vim-textobj-user.git'
+Plug 'git@github.com:kana/vim-textobj-function.git'
 call plug#end()
 
 if has('termguicolors')
