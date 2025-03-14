@@ -1,5 +1,16 @@
 source ~/.vimrc
 
-set ideajoin
-set mini-ai
+set argtextobj
+set commentary
+set easymotion
+set exchange
 set functiontextobj
+set ideajoin
+set matchit
+set mini-ai
+set quickscope
+set sneak
+set surround
+set textobj-entire
+set textobj-indent
+set vim-paragraph-motion
