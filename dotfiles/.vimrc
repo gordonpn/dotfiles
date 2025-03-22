@@ -13,20 +13,21 @@ if empty(glob('~/.vim/autoload/plug.vim'))
 endif
 
 call plug#begin('~/.vim/plugged')
-Plug 'git@github.com:chrisbra/matchit.git'
-Plug 'git@github.com:dbakker/vim-paragraph-motion.git'
-Plug 'git@github.com:easymotion/vim-easymotion.git'
-Plug 'git@github.com:justinmk/vim-sneak.git'
-" Plug 'git@github.com:machakann/vim-highlightedyank.git'
-Plug 'git@github.com:michaeljsmith/vim-indent-object.git'
-Plug 'git@github.com:tommcdo/vim-exchange.git'
-Plug 'git@github.com:tpope/vim-commentary.git'
-Plug 'git@github.com:tpope/vim-surround.git'
-Plug 'git@github.com:unblevable/quick-scope.git'
-Plug 'git@github.com:vim-scripts/argtextobj.vim.git'
-Plug 'git@github.com:echasnovski/mini.ai.git'
-Plug 'git@github.com:kana/vim-textobj-user.git'
-Plug 'git@github.com:kana/vim-textobj-function.git'
+" Plug 'machakann/vim-highlightedyank'
+Plug 'chrisbra/matchit'
+Plug 'dbakker/vim-paragraph-motion'
+Plug 'easymotion/vim-easymotion'
+Plug 'echasnovski/mini.ai'
+Plug 'justinmk/vim-sneak'
+Plug 'kana/vim-textobj-entire'
+Plug 'kana/vim-textobj-function'
+Plug 'kana/vim-textobj-user'
+Plug 'michaeljsmith/vim-indent-object'
+Plug 'tommcdo/vim-exchange'
+Plug 'tpope/vim-commentary'
+Plug 'tpope/vim-surround'
+Plug 'unblevable/quick-scope'
+Plug 'vim-scripts/argtextobj.vim'
 call plug#end()
 
 if has('termguicolors')
@@ -49,7 +50,7 @@ let g:indentLine_enabled=1
 
 let g:vim_json_conceal=0
 
-let g:highlightedyank_highlight_duration = "1000"
+" let g:highlightedyank_highlight_duration = "1000"
 
 " let g:qs_primary_color = '#494949'
 " let g:qs_secondary_color = '#707070'
