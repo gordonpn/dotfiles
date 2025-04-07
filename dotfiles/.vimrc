@@ -50,6 +50,10 @@ let g:indentLine_enabled=1
 
 let g:vim_json_conceal=0
 
+" Quickly insert an empty new line without entering insert mode
+nnoremap <Leader>o o<Esc>
+nnoremap <Leader>O O<Esc>
+
 " let g:highlightedyank_highlight_duration = "1000"
 
 " let g:qs_primary_color = '#494949'
