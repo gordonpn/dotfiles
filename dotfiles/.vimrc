@@ -90,6 +90,7 @@ set ttymouse=
 set undolevels=1000
 set wildmenu
 set cursorline
+set nohlsearch
 
 set rtp+=/usr/local/opt/fzf
 
