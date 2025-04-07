@@ -115,6 +115,9 @@ set rtp+=/usr/local/opt/fzf
 " my config (0 mapped to v0, ^ mapped to v^, etc)
 " omap S v<Plug>Sneak_S
 
+" make Y effect to end of line instead of whole line
+map Y y$
+
 noremap <leader>y "*y
 noremap <Leader>p "*p
 " nnoremap <c-j> 5j
