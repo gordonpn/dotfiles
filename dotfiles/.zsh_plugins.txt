@@ -1,0 +1,6 @@
+Aloxaf/fzf-tab
+hlissner/zsh-autopair
+zsh-users/zsh-autosuggestions kind:defer
+zdharma-continuum/fast-syntax-highlighting kind:defer
+zsh-users/zsh-history-substring-search
+
