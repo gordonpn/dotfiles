@@ -5,12 +5,17 @@ email = gordon.pn6@gmail.com
 [color]
 ui = true
 
+[color "diff"]
+whitespace = red reverse
+
 [core]
 attributesfile = ~/.gitattributes
 autocrlf = input
 editor = vim
 eol = lf
 excludesfile = /Users/gordonpn/.gitignore
+pager = delta --paging=always
+safecrlf = true
 # hooksPath = ~/.githooks
 # pager = diff-so-fancy | less
 
@@ -21,35 +26,53 @@ reflog = delta
 show = delta
 
 [delta]
-# plus-style = "syntax #012800"
 # minus-style = "syntax #340001"
-syntax-theme = GitHub
-navigate = true
+# plus-style = "syntax #012800"
+# syntax-theme = GitHub
+dark = true
 features = side-by-side line-numbers decorations
+navigate = true
 
 [delta "decorations"]
-commit-decoration-style = bold black box ul
-file-style = bold black ul
-file-decoration-style = none
-hunk-header-decoration-style = black box
+# commit-decoration-style = bold black box ul
+# file-style = bold black ul
+# file-decoration-style = none
+# hunk-header-decoration-style = black box
 
 [interactive]
 diffFilter = delta --color-only
 
 [merge]
-tool = vscode
-; ff = false
-conflictstyle = diff3
+# tool = vscode
+# ff = false
+conflictstyle = zdiff3
 log = true
 
 [mergetool "vscode"]
 cmd = code --wait $MERGED
 
 [diff]
-tool = vscode
+algorithm = histogram
+colorMoved = plain
+colorMovedWS = allow-indentation-change
+mnemonicPrefix = true
+renames = true
+# tool = vscode
 
 [difftool "vscode"]
 cmd = code --wait --diff $LOCAL $REMOTE
+
+[format]
+pretty = fuller
+
+[log]
+date = iso
+
+[tag]
+sort = version:refname
+
+[apply]
+whitespace = fix
 
 [credential]
 helper = osxkeychain
@@ -60,21 +83,8 @@ smudge = git-lfs smudge -- %f
 process = git-lfs filter-process
 required = true
 
-[alias]
-alias = ! git config --get-regexp ^alias\\. | sed -e s/^alias\\.// -e s/\\ /\\ =\\ /
-authors = !git log --format='%aN <%aE>' | grep -v 'users.noreply.github.com' | sort -u --ignore-case
-default-branch = "!git remote show origin | grep 'HEAD branch' | cut -d' ' -f5"
-lb = !git reflog show --pretty=format:'%gs ~ %gd' --date=relative | grep 'checkout:' | grep -oE '[^ ]+ ~ .*' | awk -F~ '!seen[$1]++' | head -n 10 | awk -F' ~ HEAD@{' '{printf(\"  \\033[34m%s: \\033[32m %s\\033[0m\\n\", substr($2, 1, length($2)-1), $1)}'
-recent-branches = !git branch --sort=-committerdate | head
-wip = for-each-ref --sort='authordate:iso8601' --format=' %(color:blue)%(authordate:relative)%09%(color:green)%(refname:short)' refs/heads
-stash-staged = '!git diff --staged --name-only | xargs git stash push "$@" --'
-
 [hub]
 protocol = https
-
-[url "https://github.com/"]
-insteadOf = git@github.com:
-
 [url "https://"]
 insteadOf = git://
 
@@ -89,23 +99,47 @@ stripLeadingSymbols = true
 
 [pull]
 rebase = true
-; ff = only
+ff = only
 
 [rebase]
 autoStash = true
 autosquash = true
+updateRefs = true
 
 [rerere]
 enabled = true
 autoUpdate = true
 
-# [commit]
-# template = /Users/gordonpn/.stCommitMsg
+[commit]
+cleanup = strip
+verbose = true
 
 [init]
 defaultBranch = main
 
 [mergetool]
 prompt = false
+
 [push]
-	autoSetupRemote = true
+autoSetupRemote = true
+default = simple
+followTags = true
+
+[fetch]
+prune = true
+pruneTags = true
+all = true
+
+[include]
+path = /Users/gordonpn/workspace/delta/themes.gitconfig
+
+[branch]
+autoSetupMerge = always
+sort = -committerdate
+
+[status]
+showUntrackedFiles = all
+
+[help]
+autocorrect = prompt
+
