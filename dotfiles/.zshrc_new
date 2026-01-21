@@ -1,0 +1,111 @@
+zsh_plugins=${ZDOTDIR:-~}/.zsh_plugins
+[[ -f ${zsh_plugins}.txt ]] || touch ${zsh_plugins}.txt
+
+fpath=(${ZDOTDIR:-~}/.antidote/functions $fpath)
+autoload -Uz antidote
+
+if [[ ! ${zsh_plugins}.zsh -nt ${zsh_plugins}.txt ]]; then
+  antidote bundle <${zsh_plugins}.txt >|${zsh_plugins}.zsh
+fi
+
+HISTFILE=~/.zsh_history
+setopt EXTENDED_GLOB
+setopt GLOB_DOTS
+HISTSIZE=10000000
+SAVEHIST=$HISTSIZE
+setopt appendhistory
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_ALL_DUPS
+setopt AUTO_PUSHD
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT
+
+if type brew &>/dev/null; then
+  FPATH=$(brew --prefix)/share/zsh-completions:$FPATH
+
+  autoload -Uz compinit
+  compinit
+fi
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+source ${zsh_plugins}.zsh
+
+setopt MENU_COMPLETE
+zstyle ':completion:*' menu no
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath'
+zstyle ':fzf-tab:complete:*:*' fzf-preview 'less ${(Q)realpath}'
+zstyle ':fzf-tab:*' fzf-flags --height=35% --preview-window=right:60%
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/.zcompcache"
+
+# 1) exact match first
+# 2) then case-insensitive
+# 3) then flex on separators like . _ -
+# 4) then substring-ish matching
+zstyle ':completion:*' matcher-list \
+  '' \
+  'm:{a-zA-Z}={A-Za-z}' \
+  'r:|[._-]=* r:|=*' \
+  'l:|=* r:|=*'
+
+zshaddhistory() {
+  setopt LOCAL_OPTIONS
+  setopt EXTENDED_GLOB
+  print -sr -- "${1%%$'\n'##}"
+  fc -p "$HISTFILE"
+  return 1
+}
+
+bracketed-paste() {
+  zle .$WIDGET && LBUFFER=${LBUFFER%$'\n'}
+}
+zle -N bracketed-paste
+
+source /Users/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
+
+alias ls='eza -lah --group-directories-first --icons'
+alias cat='bat'
+alias grep='rg'
+alias find='fd'
+alias du='dust'
+alias df='duf'
+alias ps='procs'
+
+alias repomix='pnpx repomix@latest'
+
+pnpx() {
+  if [ -f "node_modules/.bin/$1" ]; then
+    pnpm exec "$@"
+  else
+    pnpm dlx "$@"
+  fi
+}
+
+bindkey "$terminfo[kcuu1]" history-substring-search-up
+bindkey "$terminfo[kcud1]" history-substring-search-down
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+bindkey '^[OA' history-substring-search-up
+bindkey '^[OB' history-substring-search-down
+
+bindkey '^R' fzf-history-widget
+bindkey '^ ' autosuggest-accept
+
+autoload -Uz edit-command-line
+zle -N edit-command-line
+
+# Esc+v
+bindkey -M viins '^[v' edit-command-line
+bindkey -M vicmd 'v' edit-command-line
+
+FNM_PATH="/opt/homebrew/opt/fnm/bin"
+if [ -d "$FNM_PATH" ]; then
+  eval "`fnm env`"
+fi
+
+[ -s "/Users/gordonpn/.bun/_bun" ] && source "/Users/gordonpn/.bun/_bun"
+
+eval "$(zoxide init zsh)"
+eval "$(starship init zsh)"
