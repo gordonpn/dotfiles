@@ -46,3 +46,5 @@ export ZPWR_EXPAND_SECOND_POSITION=true
 
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 
+export KUBE_EDITOR='nvim'
+

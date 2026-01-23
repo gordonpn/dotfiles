@@ -11,7 +11,7 @@ whitespace = red reverse
 [core]
 attributesfile = ~/.gitattributes
 autocrlf = input
-editor = vim
+	editor = nvim
 eol = lf
 excludesfile = /Users/gordonpn/.gitignore
 pager = delta --paging=always

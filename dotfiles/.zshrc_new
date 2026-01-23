@@ -72,7 +72,9 @@ alias find='fd'
 alias du='dust'
 alias df='duf'
 alias ps='procs'
-
+alias vi='nvim'
+alias vim='nvim'
+alias v='nvim'
 alias repomix='pnpx repomix@latest'
 
 pnpx() {
