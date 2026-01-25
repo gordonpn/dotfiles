@@ -1,16 +1,32 @@
 "$schema" = "https://starship.rs/config-schema.json"
 
-[package]
-disabled = true
+[kotlin]
+disabled = false
+
+[java]
+disabled = false
+
+[gradle]
+disabled = false
+
+[python]
+disabled = false
 
 [nodejs]
-disabled = true
+disabled = false
+
+[aws]
+disabled = false
 
 [lua]
-disabled = true
+disabled = false
+
+[package]
+disabled = false
 
 [golang]
-disabled = true
+disabled = false
 
 [hostname]
-ssh_symbol = ''
+ssh_symbol = ""
+
