@@ -1,8 +1,26 @@
-Aloxaf/fzf-tab
-Tarrasch/zsh-bd
-hlissner/zsh-autopair
-greymd/docker-zsh-completion
+# 1. Completions First (Blocking but fast if static)
+greymd/docker-zsh-completion kind:fpath
+$HOME/.zsh/plugins/uv-completions kind:fpath
+
+# 2. Core Functionality (Load immediately)
 MenkeTechnologies/zsh-expand
+
+# 3. Deferred Plugins (Load after prompt is visible)
+hlissner/zsh-autopair kind:defer
+
+# Autosuggestions is async by default but deferring init helps the first draw
 zsh-users/zsh-autosuggestions kind:defer
+
+# Fast Syntax Highlighting is already optimized, but deferring ensures prompt is instant
 zdharma-continuum/fast-syntax-highlighting kind:defer
-zsh-users/zsh-history-substring-search
+
+# 4. Interactive Tools (Lazy Load)
+# Use 'zsh-bd' only when you type 'bd'
+Tarrasch/zsh-bd kind:defer
+
+# 5. History Search (Must load AFTER syntax highlighting to avoid conflicts)
+zsh-users/zsh-history-substring-search kind:defer
+
+# 6. FZF Tab (Heavy, so defer it)
+Aloxaf/fzf-tab kind:defer
+

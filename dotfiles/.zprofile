@@ -50,3 +50,5 @@ export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 
 export KUBE_EDITOR='nvim'
 
+export ZSH_AUTOSUGGEST_USE_ASYNC=1
+
