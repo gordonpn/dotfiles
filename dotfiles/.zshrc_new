@@ -109,5 +109,7 @@ fi
 
 [ -s "/Users/gordonpn/.bun/_bun" ] && source "/Users/gordonpn/.bun/_bun"
 
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
+
 eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
