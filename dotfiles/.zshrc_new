@@ -63,7 +63,11 @@ bracketed-paste() {
 }
 zle -N bracketed-paste
 
-source /Users/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
+if [[ "$(uname)" == "Darwin" ]]; then
+  source /Users/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
+elif [[ "$(uname)" == "Linux" ]]; then
+  source /home/gordonpn/dotfiles/dotfiles/.git-aliases
+fi
 
 alias ls='eza -lah --group-directories-first --icons'
 alias cat='bat'
