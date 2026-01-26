@@ -1,3 +1,11 @@
+# OMZ dependency glue (recommended if using ohmyzsh/ohmyzsh path:...)
+getantidote/use-omz
+
+# OMZ base (load before OMZ plugins)
+# Cherry-picked OMZ Libs (Faster than loading all of path:lib)
+ohmyzsh/ohmyzsh path:lib/directories.zsh
+ohmyzsh/ohmyzsh path:lib/key-bindings.zsh
+
 # 1. Completions First (Blocking but fast if static)
 greymd/docker-zsh-completion kind:fpath
 $HOME/.zsh/plugins/uv-completions kind:fpath
