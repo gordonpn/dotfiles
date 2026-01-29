@@ -10,10 +10,10 @@ disabled = false
 disabled = false
 
 [python]
-disabled = false
+disabled = true
 
 [nodejs]
-disabled = false
+disabled = true
 
 [aws]
 disabled = false
