@@ -33,3 +33,5 @@ ssh_symbol = ""
 [cmd_duration]
 min_time = 60000
 
+[helm]
+disabled = true
