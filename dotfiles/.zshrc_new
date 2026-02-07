@@ -79,7 +79,8 @@ elif [[ "$(uname)" == "Linux" ]]; then
   source /home/gordonpn/dotfiles/dotfiles/.git-aliases
 fi
 
-alias ls='eza -lah --group-directories-first --icons'
+alias ls='eza -lah --group-directories-first --icons=always'
+compdef ls=eza
 alias cat='bat'
 alias grep='rg'
 alias find='fd'
