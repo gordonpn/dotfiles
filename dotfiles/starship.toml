@@ -22,7 +22,7 @@ disabled = false
 disabled = false
 
 [package]
-disabled = false
+disabled = true
 
 [golang]
 disabled = true
