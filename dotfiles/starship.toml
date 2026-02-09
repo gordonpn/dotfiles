@@ -4,10 +4,10 @@
 disabled = false
 
 [java]
-disabled = false
+disabled = true
 
 [gradle]
-disabled = false
+disabled = true
 
 [python]
 disabled = true
@@ -25,6 +25,9 @@ disabled = false
 disabled = true
 
 [golang]
+disabled = true
+
+[rust]
 disabled = true
 
 [hostname]
