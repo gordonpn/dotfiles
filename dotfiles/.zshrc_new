@@ -107,6 +107,10 @@ pnpx() {
   fi
 }
 
+preexec() {
+    echo "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+}
+
 bindkey "$terminfo[kcuu1]" fzf-history-widget
 bindkey "$terminfo[kcud1]" fzf-history-widget
 bindkey '^[[A' fzf-history-widget

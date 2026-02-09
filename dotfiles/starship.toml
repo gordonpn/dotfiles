@@ -30,8 +30,16 @@ disabled = true
 [hostname]
 ssh_symbol = ""
 
-[cmd_duration]
-min_time = 60000
-
 [helm]
 disabled = true
+
+[time]
+disabled = true
+time_format = "%T"
+utc_time_offset = "0"
+format = '[$time UTC]($style) '
+
+
+[cmd_duration]
+disabled = true
+min_time = 60000
