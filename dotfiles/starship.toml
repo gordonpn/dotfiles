@@ -42,7 +42,6 @@ time_format = "%T"
 utc_time_offset = "0"
 format = '[$time UTC]($style) '
 
-
 [cmd_duration]
-disabled = true
-min_time = 60000
+disabled = false
+min_time = 0
