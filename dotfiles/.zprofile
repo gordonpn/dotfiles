@@ -22,6 +22,7 @@ export PAGER="less"
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
+export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
 export BAT_STYLE="plain"
 
@@ -53,3 +54,4 @@ export KUBE_EDITOR='nvim'
 
 export ZSH_AUTOSUGGEST_USE_ASYNC=1
 
+export JAVA_HOME=$(/usr/libexec/java_home)
