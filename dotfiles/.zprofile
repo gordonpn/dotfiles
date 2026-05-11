@@ -57,3 +57,4 @@ export ZSH_AUTOSUGGEST_USE_ASYNC=1
 
 export JAVA_HOME=$(/usr/libexec/java_home)
 export PATH="$HOME/.local/share/npm-global/bin:$PATH"
+export HOMEBREW_CASK_OPTS="--no-quarantine"

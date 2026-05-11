@@ -100,6 +100,8 @@ alias qdrant="docker run --restart always -p 6333:6333 -v qdrant_storage:/qdrant
 alias treee='fd --type f --hidden --exclude .git | tree --fromfile'
 alias tree='tree -a -I ".git|node_modules|.venv"'
 alias gemini='gemini --skip-trust --approval-mode=yolo --resume'
+alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
+alias fullreboot='sudo reboot'
 
 pnpx() {
   if [ -f "node_modules/.bin/$1" ]; then
