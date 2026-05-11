@@ -23,5 +23,8 @@
   },
   "experimental": {
     "contextManagement": true
+  },
+  "model": {
+    "name": "auto-gemini-3"
   }
 }
