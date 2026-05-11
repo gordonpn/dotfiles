@@ -2,29 +2,43 @@
   "security": {
     "auth": {
       "selectedType": "oauth-personal"
-    }
+    },
+    "enablePermanentToolApproval": true,
+    "autoAddToPolicyByDefault": true
   },
   "general": {
-    "vimMode": true
+    "vimMode": true,
+    "enableNotifications": true,
+    "checkpointing": {
+      "enabled": true
+    }
   },
   "ui": {
     "footer": {
       "items": [
         "workspace",
         "git-branch",
-        "sandbox",
         "model-name",
         "quota",
-        "context-used",
-        "memory-usage"
-      ]
+        "context-used"
+      ],
+      "hideContextPercentage": false
     },
-    "theme": "Tokyo Night"
+    "theme": "Tokyo Night",
+    "showLineNumbers": false,
+    "showModelInfoInChat": true,
+    "terminalBuffer": true
   },
   "experimental": {
     "contextManagement": true
   },
   "model": {
     "name": "auto-gemini-3"
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "context": {
+    "loadMemoryFromIncludeDirectories": true
   }
 }
