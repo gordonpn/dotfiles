@@ -35,9 +35,6 @@
   "model": {
     "name": "auto-gemini-3"
   },
-  "privacy": {
-    "usageStatisticsEnabled": false
-  },
   "context": {
     "loadMemoryFromIncludeDirectories": true
   }
