@@ -220,11 +220,11 @@ source "$HOME/.aliases"
 source "$HOME/.exports"
 source "$HOME/.functions"
 
-if [[ "$unameOut" == "Linux" ]] then;
+if [[ "$unameOut" == "Linux" ]]; then
   source "$HOME/.exports-linux"
   source "$HOME/.aliases-linux"
   source "$HOME/.functions-linux"
-elif [[ "$unameOut" == "Darwin" ]] then;
+elif [[ "$unameOut" == "Darwin" ]]; then
   source "$HOME/.exports-mac"
   source "$HOME/.aliases-mac"
   source "$HOME/.functions-mac"
