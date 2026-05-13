@@ -143,6 +143,8 @@ fi
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
 
+eval "$($HOME/.local/bin/mise activate zsh)"
+
 eval "$(zoxide init zsh)"
 alias z='zi'
 eval "$(starship init zsh)"
