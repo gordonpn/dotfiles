@@ -134,6 +134,11 @@ bindkey -M viins '^v' edit-command-line
 # Normal Mode: v (Standard Vi behavior)
 bindkey -M vicmd 'v' edit-command-line
 
+TRAPINT() {
+  zle && [[ $BUFFER ]] && print -s -- "$BUFFER"
+  return $((128 + $1))
+}
+
 FNM_PATH="/opt/homebrew/opt/fnm/bin"
 if [ -d "$FNM_PATH" ]; then
   eval "`fnm env`"

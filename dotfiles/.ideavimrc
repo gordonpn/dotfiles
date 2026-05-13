@@ -15,6 +15,7 @@ set surround
 set textobj-entire
 set textobj-indent
 set vim-paragraph-motion
+set VimEverywhere
 
 " nmap s <Action>(flash.search)
 " xmap s <Action>(flash.search)
