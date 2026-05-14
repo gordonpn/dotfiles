@@ -30,6 +30,8 @@ elif [[ -d "/home/linuxbrew/.linuxbrew/share/zsh-completions" ]]; then
   FPATH="/home/linuxbrew/.linuxbrew/share/zsh-completions:$FPATH"
 fi
 
+fpath=(~/.zfunc $fpath)
+
 autoload -Uz compinit
 # Optimization: Check cache once a day (speed up startup by ~100ms)
 if [[ -n ${ZDOTDIR}/.zcompdump(#qN.mh+24) ]]; then
