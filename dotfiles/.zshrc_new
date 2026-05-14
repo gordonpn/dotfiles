@@ -144,7 +144,11 @@ TRAPINT() {
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
 
-eval "$($HOME/.local/bin/mise activate zsh)"
+if command -v mise >/dev/null; then
+  eval "$(mise activate zsh)"
+elif [[ -x "$HOME/.local/bin/mise" ]]; then
+  eval "$($HOME/.local/bin/mise activate zsh)"
+fi
 
 eval "$(zoxide init zsh)"
 alias z='zi'
