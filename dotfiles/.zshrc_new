@@ -140,11 +140,6 @@ TRAPINT() {
   return $((128 + $1))
 }
 
-FNM_PATH="/opt/homebrew/opt/fnm/bin"
-if [ -d "$FNM_PATH" ]; then
-  eval "`fnm env`"
-fi
-
 [ -s "/Users/gordonpn/.bun/_bun" ] && source "/Users/gordonpn/.bun/_bun"
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
