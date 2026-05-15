@@ -262,13 +262,16 @@ else
     opt.relativenumber = true
     opt.mouse = "a"
 
-    -- Statusline
-    local function git_branch()
+    -- Statusline (git branch is cached per-buffer; refreshed on enter/focus/shell)
+    local function refresh_git_branch()
         local branch = vim.fn.system("git rev-parse --abbrev-ref HEAD 2>/dev/null | tr -d '\n'")
-        if branch ~= "" then return "  " .. branch .. " " end
-        return ""
+        vim.b.git_branch = branch ~= "" and ("  " .. branch .. " ") or ""
     end
-    opt.statusline = "%#Normal# %f %m %r " .. git_branch() .. "%= %y [%{&fileformat}] %p%% %l:%c"
+    _G.statusline_git_branch = function() return vim.b.git_branch or "" end
+    vim.api.nvim_create_autocmd({ "BufEnter", "FocusGained", "ShellCmdPost" }, {
+        callback = refresh_git_branch,
+    })
+    opt.statusline = "%#Normal# %f %m %r %{v:lua.statusline_git_branch()}%= %y [%{&fileformat}] %p%% %l:%c"
 
     -- Netrw
     vim.g.netrw_liststyle = 3
