@@ -46,7 +46,6 @@ require("lazy").setup({
         desc = 'Join Toggle (Smart Fallback)',
       },
     },
-    cmd = { 'TSJToggle' },
     opts = { use_default_keymaps = false, max_join_length = 120 },
   },
 
