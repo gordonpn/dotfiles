@@ -102,6 +102,18 @@ alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
 alias fullreboot='sudo reboot'
 alias restartwifi='networksetup -setairportpower en0 off && networksetup -setairportpower en0 on'
 
+# # Use Flash for speed (Daily Driver)
+alias ask="aichat -m deepseek-v4-flash"
+
+# Use Pro for Reasoning (Architectural tasks)
+alias reason="llm -m deepseek-v4-pro"
+
+# The "Junior Developer" (Direct file editing)
+alias dev="aider --model deepseek/deepseek-v4-pro --architect"
+
+# The "Log Parser" (Unix piping)
+alias parse="mods --model deepseek-v4-flash"
+
 pnpx() {
   if [ -f "node_modules/.bin/$1" ]; then
     pnpm exec "$@"
