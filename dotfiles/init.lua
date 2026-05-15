@@ -142,6 +142,20 @@ require("lazy").setup({
     config = function() vim.cmd([[colorscheme tokyonight]]) end
   },
 
+  -- QUICKSCOPE (Highlights unique f/F/t/T targets — always on)
+  {
+    'unblevable/quick-scope',
+    cond = not vim.g.vscode,
+    event = 'BufReadPost',
+    init = function()
+      vim.g.qs_max_chars = 1000
+    end,
+    config = function()
+      vim.api.nvim_set_hl(0, 'QuickScopePrimary', { fg = '#afff5f', underline = true })
+      vim.api.nvim_set_hl(0, 'QuickScopeSecondary', { fg = '#5fffff', underline = true })
+    end,
+  },
+
   {
     "nvim-treesitter/nvim-treesitter",
     cond = not vim.g.vscode,
