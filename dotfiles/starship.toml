@@ -17,6 +17,7 @@ disabled = true
 
 [aws]
 disabled = false
+symbol = ""
 
 [lua]
 disabled = false
@@ -40,8 +41,9 @@ disabled = true
 disabled = true
 time_format = "%T"
 utc_time_offset = "0"
-format = '[$time UTC]($style) '
+format = "[$time UTC]($style) "
 
 [cmd_duration]
 disabled = false
 min_time = 0
+
