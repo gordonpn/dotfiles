@@ -8,11 +8,14 @@ if [[ ! ${zsh_plugins}.zsh -nt ${zsh_plugins}.txt ]]; then
   antidote bundle <${zsh_plugins}.txt >|${zsh_plugins}.zsh
 fi
 
+# History Configuration
 HISTFILE=~/.zsh_history
-setopt EXTENDED_GLOB
-setopt GLOB_DOTS
 HISTSIZE=10000000
 SAVEHIST=$HISTSIZE
+
+# Zsh Options
+setopt EXTENDED_GLOB
+setopt GLOB_DOTS
 setopt appendhistory
 setopt INC_APPEND_HISTORY
 setopt SHARE_HISTORY
@@ -40,9 +43,9 @@ else
   compinit -C
 fi
 
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
 source ${zsh_plugins}.zsh
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 setopt MENU_COMPLETE
 zstyle ':omz:update' mode auto
@@ -76,12 +79,41 @@ bracketed-paste() {
 }
 zle -N bracketed-paste
 
+autoload -Uz edit-command-line
+zle -N edit-command-line
+
+# Key Bindings
+# History navigation with FZF
+bindkey "$terminfo[kcuu1]" fzf-history-widget
+bindkey "$terminfo[kcud1]" fzf-history-widget
+bindkey '^[[A' fzf-history-widget
+bindkey '^[[B' fzf-history-widget
+bindkey '^[OA' fzf-history-widget
+bindkey '^[OB' fzf-history-widget
+bindkey '^R' fzf-history-widget
+
+# Autosuggest acceptance
+bindkey '^ ' autosuggest-accept
+
+# Edit command line
+# Insert Mode: Ctrl+v
+bindkey -M viins '^v' edit-command-line
+# Normal Mode: v (Standard Vi behavior)
+bindkey -M vicmd 'v' edit-command-line
+
+TRAPINT() {
+  zle && [[ $BUFFER ]] && print -s -- "$BUFFER"
+  return $((128 + $1))
+}
+
+# Git Aliases
 if [[ "$(uname)" == "Darwin" ]]; then
   source /Users/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
 elif [[ "$(uname)" == "Linux" ]]; then
   source /home/gordonpn/dotfiles/dotfiles/.git-aliases
 fi
 
+# Command Aliases
 alias ls='eza -lah --group-directories-first --icons=always'
 compdef ls=eza
 alias cat='bat'
@@ -97,12 +129,14 @@ alias repomix='pnpx repomix@latest'
 alias qdrant="docker run --restart always -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant"
 alias treee='fd --type f --hidden --exclude .git | tree --fromfile'
 alias tree='tree -a -I ".git|node_modules|.venv"'
-alias gemini='gemini --skip-trust --approval-mode=yolo --resume'
+alias gemini='gemini --skip-trust --approval-mode=yolo'
+alias copilot='copilot --effort=xhigh --allow-all'
 alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
 alias fullreboot='sudo reboot'
 alias restartwifi='networksetup -setairportpower en0 off && networksetup -setairportpower en0 on'
 
-# # Use Flash for speed (Daily Driver)
+# AI/ML Aliases
+# Use Flash for speed (Daily Driver)
 alias ask="aichat -m deepseek-v4-flash"
 
 # Use Pro for Reasoning (Architectural tasks)
@@ -114,40 +148,13 @@ alias dev="aider --model deepseek/deepseek-v4-pro --architect"
 # The "Log Parser" (Unix piping)
 alias parse="mods --model deepseek-v4-flash"
 
+# Custom Functions
 pnpx() {
   if [ -f "node_modules/.bin/$1" ]; then
     pnpm exec "$@"
   else
     pnpm dlx "$@"
   fi
-}
-
-# preexec() {
-#     echo "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-# }
-
-bindkey "$terminfo[kcuu1]" fzf-history-widget
-bindkey "$terminfo[kcud1]" fzf-history-widget
-bindkey '^[[A' fzf-history-widget
-bindkey '^[[B' fzf-history-widget
-bindkey '^[OA' fzf-history-widget
-bindkey '^[OB' fzf-history-widget
-
-bindkey '^R' fzf-history-widget
-bindkey '^ ' autosuggest-accept
-
-autoload -Uz edit-command-line
-zle -N edit-command-line
-
-# Insert Mode: Ctrl+v
-bindkey -M viins '^v' edit-command-line
-
-# Normal Mode: v (Standard Vi behavior)
-bindkey -M vicmd 'v' edit-command-line
-
-TRAPINT() {
-  zle && [[ $BUFFER ]] && print -s -- "$BUFFER"
-  return $((128 + $1))
 }
 
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
