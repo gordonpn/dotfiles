@@ -81,7 +81,10 @@ require("lazy").setup({
     end,
   },
 
-  -- MINI.AI (Replaces argtextobj, textobj-entire, textobj-function)
+  -- MINI.AI (Replaces argtextobj, textobj-entire)
+  -- Note: `f` (function call) is disabled so `af`/`if` resolve to function
+  -- *definitions* via nvim-treesitter-textobjects (matching IdeaVim's
+  -- functiontextobj). Use `aa`/`ia` for arguments, `ab`/`ib` for brackets.
   {
     "echasnovski/mini.ai",
     event = "VeryLazy",
@@ -97,8 +100,9 @@ require("lazy").setup({
             }
             return { from = from, to = to }
           end,
+          f = false,
         },
-      }) 
+      })
     end
   },
 
@@ -161,13 +165,34 @@ require("lazy").setup({
     cond = not vim.g.vscode,
     build = ":TSUpdate",
     event = { "BufReadPost", "BufNewFile" },
-    config = function() 
+    dependencies = { "nvim-treesitter/nvim-treesitter-textobjects" },
+    config = function()
       local status, ts = pcall(require, "nvim-treesitter.configs")
       if not status then return end
       ts.setup({
         ensure_installed = { "lua", "vim", "vimdoc", "query", "python", "javascript", "typescript", "go", "yaml", "json" },
         highlight = { enable = true },
         indent = { enable = true },
+        textobjects = {
+          select = {
+            enable = true,
+            lookahead = true,
+            keymaps = {
+              ['af'] = '@function.outer',
+              ['if'] = '@function.inner',
+              ['ac'] = '@class.outer',
+              ['ic'] = '@class.inner',
+            },
+          },
+          move = {
+            enable = true,
+            set_jumps = true,
+            goto_next_start = { [']f'] = '@function.outer', [']c'] = '@class.outer' },
+            goto_next_end = { [']F'] = '@function.outer', [']C'] = '@class.outer' },
+            goto_previous_start = { ['[f'] = '@function.outer', ['[c'] = '@class.outer' },
+            goto_previous_end = { ['[F'] = '@function.outer', ['[C'] = '@class.outer' },
+          },
+        },
       })
     end
   }
