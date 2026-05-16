@@ -2,6 +2,69 @@
 --  HYBRID NEOVIM CONFIG (VS CODE + TERMINAL)
 --  Updated: Smart Join Fallback + Cleaned Text Objects
 -- =============================================================================
+--
+-- =============================================================================
+--  CHEATSHEET
+-- =============================================================================
+--
+--  MOTIONS / JUMPS  (flash.nvim + quick-scope)
+--    f<char> / F<char>     Jump to char on screen — labels appear on duplicates
+--    t<char> / T<char>     Till before char — labels on duplicates
+--                          quick-scope underlines unique targets BEFORE pressing
+--    ; / ,                 Repeat last f/F/t/T forward / backward
+--    <leader>s             Flash jump (type any chars, then a label)
+--    <leader>S             Flash treesitter (jump to syntax nodes / blocks)
+--    r  (op-pending)       Remote flash, e.g. `dr<leader>s<chars>` deletes
+--                          a region elsewhere without moving the cursor
+--    During / or ?         Search labels appear — press a label to jump
+--
+--  TEXT OBJECTS  (use with d / c / y / v — e.g. `daf`, `vic`, `yi"`)
+--    af / if               Function definition (treesitter)
+--    ac / ic               Class (treesitter)
+--    aa / ia               Argument (mini.ai)
+--    ab / ib               Any bracket — () [] {} (mini.ai)
+--    aq / iq               Any quote — " ' ` (mini.ai)
+--    ae / ie               Entire buffer (mini.ai custom)
+--    ai / ii               Around / inside indent scope (mini.indentscope)
+--    Native: aw iw, as is, ap ip, a" i", a( i(, a{ i{ ...
+--
+--  TEXT OBJECT NAVIGATION  (treesitter)
+--    ]f  [f                Next / prev function start
+--    ]F  [F                Next / prev function end
+--    ]c  [c                Next / prev class start
+--    ]C  [C                Next / prev class end
+--    [i  ]i                Top / bottom of indent scope
+--
+--  EDITING
+--    J                     Smart join/split toggle (treesj, falls back to J)
+--    Y                     Yank to end of line (= y$)
+--    <leader>o / <leader>O Insert blank line below / above (no insert mode)
+--    <leader>y / <leader>p Yank / paste using system clipboard (*)
+--    <C-j> / <C-k>         Move current line down / up (n, v, i modes)
+--
+--  EXCHANGE  (substitute.nvim)
+--    cx{motion}            Exchange operator — run twice to swap regions
+--    cxx                   Exchange current line
+--    X  (visual)           Exchange visual selection
+--    cxc                   Cancel pending exchange
+--
+--  SURROUND  (vim-surround)
+--    ys{motion}{char}      Add surround, e.g. `ysiw"` quotes a word
+--    cs{old}{new}          Change surround, e.g. `cs"'` " → '
+--    ds{char}              Delete surround, e.g. `ds(`
+--    S{char}  (visual)     Surround visual selection
+--
+--  COMMENTS  (mini.comment — terminal only; VS Code uses native gc)
+--    gcc                   Toggle current line
+--    gc{motion}            Toggle motion, e.g. `gcap` paragraph
+--    gc  (visual)          Toggle selection
+--
+--  VS CODE EXTRAS  (only active when running inside vscode-neovim)
+--    gc                    VS Code's native comment toggle
+--    <Space>rn             Rename symbol
+--    <C-h> / <C-l>         Navigate to left / right editor group
+--
+-- =============================================================================
 
 -- 1. LAZY.NVIM BOOTSTRAP
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
