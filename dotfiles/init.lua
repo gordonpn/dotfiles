@@ -326,20 +326,35 @@ require("lazy").setup({
           automatic_installation = true,
         })
 
-        mason_lspconfig.setup_handlers({
-          -- default handler (for all servers): attempt to use the new API, otherwise fallback to require('lspconfig')
-          function(server_name)
-            local ok, srv = pcall(function() return lspconfig[server_name] end)
+        if type(mason_lspconfig.setup_handlers) == 'function' then
+          mason_lspconfig.setup_handlers({
+            -- default handler (for all servers): attempt to use the new API, otherwise fallback to require('lspconfig')
+            function(server_name)
+              local ok, srv = pcall(function() return lspconfig[server_name] end)
+              if ok and srv and srv.setup then
+                srv.setup({ capabilities = capabilities })
+              else
+                local ok2, lspc = pcall(require, 'lspconfig')
+                if ok2 and lspc[server_name] and lspc[server_name].setup then
+                  lspc[server_name].setup({ capabilities = capabilities })
+                end
+              end
+            end,
+          })
+        else
+          -- mason-lspconfig does not provide setup_handlers (older/newer API); fallback to manual setup
+          for _, server in ipairs(servers) do
+            local ok, srv = pcall(function() return lspconfig[server] end)
             if ok and srv and srv.setup then
               srv.setup({ capabilities = capabilities })
             else
               local ok2, lspc = pcall(require, 'lspconfig')
-              if ok2 and lspc[server_name] and lspc[server_name].setup then
-                lspc[server_name].setup({ capabilities = capabilities })
+              if ok2 and lspc[server] and lspc[server].setup then
+                lspc[server].setup({ capabilities = capabilities })
               end
             end
-          end,
-        })
+          end
+        end
 
       else
         -- Fallback: directly configure servers via the available lspconfig API
