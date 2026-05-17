@@ -97,6 +97,62 @@
 --    <leader>do           Step Over
 --    <leader>du           Toggle DAP UI panels
 --
+-- -----------------------------------------------------------------------------
+--  QUICK LSP REFERENCE
+--    gd                    Go to definition
+--    gr                    Find references (fzf-lua fallback)
+--    K                     Hover documentation
+--    <space>rn             Rename symbol
+--    <space>ca             Code action (quick fix)
+--
+--  COMPLETION (blink.cmp)
+--    Trigger: type or <C-Space> (Insert mode)
+--    Navigate: <C-n> / <C-p>
+--    Accept: <CR>
+--    Snippet expand/jump: <Tab> / <S-Tab> (depends on snippet engine)
+--
+--  FORMATTING (conform.nvim)
+--    Auto-format on save for supported ft: JS/TS/Python/Go/SH
+--    Command: :ConformInfo
+--
+--  PROJECT NAVIGATION (fzf-lua)
+--    <leader><space>       Find project files
+--    <leader>ff            Live grep across project
+--    <leader>fb            Buffers list
+--    <leader>fh            Help tags
+--
+--  FILESYSTEM (oil.nvim)
+--    -                     Open parent directory buffer (edit directory like a file)
+--    Rename/move: edit the file line and save
+--
+--  SNIPPETS
+--    Use rafamadriz/friendly-snippets with blink.cmp; expand via snippet key (Tab)
+--
+--  SEARCH & REPLACE
+--    / ? n N               Search forward/back and repeat
+--    :%s/foo/bar/gc        Replace with confirmation
+--    <leader>ff            Use fzf live_grep for project-wide searches
+--
+--  REGISTERS & MACROS
+--    "xy                  Use register x for yank/paste
+--    q{reg} ... q         Record macro to register
+--    @{reg}               Play macro
+--
+--  FOLDING
+--    Use treesitter for reliable folds; zc/zo to close/open; za to toggle
+--
+--  SESSIONS & WORKSPACES
+--    vim.fn.stdpath('data')/site/java/workspace-root/... used for jdtls workspaces
+--    Use :mksession / :source to save/restore layouts if desired
+--
+--  MASON / SERVERS
+--    :Mason                Open Mason UI
+--    :MasonInstall <pkg>   Install server manually (e.g. lua-language-server)
+--
+--  PERFORMANCE TIPS
+--    - Keep heavy filetypes/plugins lazy-loaded (cond = not vim.g.vscode)
+--    - Increase jdtls heap for Java projects (configured in jdtls plugin)
+--
 -- =============================================================================
 
 -- 1. LAZY.NVIM BOOTSTRAP
