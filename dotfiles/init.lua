@@ -295,23 +295,52 @@ require("lazy").setup({
     "neovim/nvim-lspconfig",
     cond = not vim.g.vscode,
     event = { "BufReadPre", "BufNewFile" },
-    dependencies = { "saghen/blink.cmp" },
+    dependencies = { "saghen/blink.cmp", "williamboman/mason.nvim", "williamboman/mason-lspconfig.nvim" },
     config = function()
+      -- Ensure mason is initialized so servers get installed and PATH updated
+      local ok_mason, mason = pcall(require, 'mason')
+      if ok_mason then
+        mason.setup()
+      end
+
+      local ok_mason_lsp, mason_lspconfig = pcall(require, 'mason-lspconfig')
+
       local lspconfig = require("lspconfig")
       local blink = require("blink.cmp")
-
       local capabilities = blink.get_lsp_capabilities()
 
-      local servers = { "pyright", "ts_ls", "gopls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
-      for _, server in ipairs(servers) do
-        lspconfig[server].setup({
-          capabilities = capabilities,
+      -- Preferred lspconfig server names
+      local servers = { "pyright", "tsserver", "gopls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
+
+      -- If mason-lspconfig is available, ask it to ensure servers are installed and wire up handlers
+      if ok_mason_lsp then
+        mason_lspconfig.setup({
+          ensure_installed = servers,
+          automatic_installation = true,
         })
+
+        mason_lspconfig.setup_handlers({
+          -- default handler (for all servers): use lspconfig with our capabilities
+          function(server_name)
+            lspconfig[server_name].setup({
+              capabilities = capabilities,
+            })
+          end,
+        })
+
+      else
+        -- Fallback: directly configure servers via lspconfig
+        for _, server in ipairs(servers) do
+          if lspconfig[server] then
+            lspconfig[server].setup({ capabilities = capabilities })
+          end
+        end
       end
 
       -- NOTE: Java (jdtls) is handled separately below for enterprise scaling
     end,
   },
+
 
   -- BLINK.CMP: High-performance completion engine
   {
