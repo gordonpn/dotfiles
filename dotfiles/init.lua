@@ -302,7 +302,7 @@ require("lazy").setup({
 
       local capabilities = blink.get_lsp_capabilities()
 
-      local servers = { "pyright", "ts_ls", "gopls", "bashls" }
+      local servers = { "pyright", "ts_ls", "gopls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
       for _, server in ipairs(servers) do
         lspconfig[server].setup({
           capabilities = capabilities,
