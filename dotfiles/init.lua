@@ -285,7 +285,7 @@ require("lazy").setup({
         "yamlls",
         "jsonls",
         "dockerls",
-        "lua_ls",
+        "lua-language-server",
       },
     },
   },
