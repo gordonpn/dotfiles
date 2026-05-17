@@ -258,7 +258,141 @@ require("lazy").setup({
         },
       })
     end
-  }
+  },
+
+  -- =========================
+  --  IDE INFRASTRUCTURE
+  -- =========================
+
+  -- MASON: Package manager for LSPs, linters, and formatters
+  {
+    "williamboman/mason.nvim",
+    cmd = "Mason",
+    cond = not vim.g.vscode,
+    opts = { ensure_installed = { "shfmt" } },
+  },
+
+  -- MASON LSPCONFIG: Bridges the gap between mason and nvim-lspconfig
+  {
+    "williamboman/mason-lspconfig.nvim",
+    cond = not vim.g.vscode,
+    opts = {
+      ensure_installed = {
+        "pyright",
+        "ts_ls",
+        "gopls",
+        "bashls",
+      },
+    },
+  },
+
+  -- NVIM LSPCONFIG: The native client configuration
+  {
+    "neovim/nvim-lspconfig",
+    cond = not vim.g.vscode,
+    event = { "BufReadPre", "BufNewFile" },
+    dependencies = { "saghen/blink.cmp" },
+    config = function()
+      local lspconfig = require("lspconfig")
+      local blink = require("blink.cmp")
+
+      local capabilities = blink.get_lsp_capabilities()
+
+      local servers = { "pyright", "ts_ls", "gopls", "bashls" }
+      for _, server in ipairs(servers) do
+        lspconfig[server].setup({
+          capabilities = capabilities,
+        })
+      end
+
+      -- NOTE: Java (jdtls) is handled separately below for enterprise scaling
+    end,
+  },
+
+  -- BLINK.CMP: High-performance completion engine
+  {
+    'saghen/blink.cmp',
+    version = '*',
+    cond = not vim.g.vscode,
+    event = "InsertEnter",
+    dependencies = 'rafamadriz/friendly-snippets',
+    opts = {
+      keymap = { preset = 'default' },
+      appearance = {
+        use_nvim_cmp_as_default = true,
+        nerd_font_variant = 'mono'
+      },
+      sources = {
+        default = { 'lsp', 'path', 'snippets', 'buffer' },
+      },
+    },
+  },
+
+  -- FZF-LUA: Ultra-fast project fuzzy finder
+  {
+    "ibhagwan/fzf-lua",
+    cond = not vim.g.vscode,
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    event = "VeryLazy",
+    config = function()
+      pcall(function() require("fzf-lua").setup({ "fzf-native" }) end)
+    end,
+  },
+
+  -- OIL.NVIM: Edit the file system like a text buffer
+  {
+    'stevearc/oil.nvim',
+    cond = not vim.g.vscode,
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    event = "VeryLazy",
+    opts = {
+      columns = { "icon" },
+      view_options = { show_hidden = true },
+    },
+  },
+
+  -- CONFORM.NVIM: Asynchronous formatter tool
+  {
+    "stevearc/conform.nvim",
+    cond = not vim.g.vscode,
+    event = { "BufWritePre" },
+    cmd = { "ConformInfo" },
+    opts = {
+      formatters_by_ft = {
+        javascript = { "prettier" },
+        typescript = { "prettier" },
+        python = { "black" },
+        go = { "gofmt", "goimports" },
+        sh = { "shfmt" },
+      },
+      format_on_save = { timeout_ms = 500, lsp_format = "fallback" },
+    },
+  },
+
+  -- NVIM-JDTLS: Specialized configuration extension for Java
+  {
+    "mfussenegger/nvim-jdtls",
+    cond = not vim.g.vscode,
+    ft = "java",
+    config = function()
+      local project_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
+      local workspace_dir = vim.fn.stdpath("data") .. "/site/java/workspace-root/" .. project_name
+
+      local config = {
+        cmd = {
+          "jdtls",
+          "-data", workspace_dir,
+          "--jvm-arg=-Xms2G",
+          "--jvm-arg=-Xmx6G",
+          "--jvm-arg=-XX:+UseG1GC",
+        },
+        root_dir = require('jdtls.setup').find_root({'.git', 'mvnw', 'gradlew', 'pom.xml'}),
+        capabilities = require('blink.cmp').get_lsp_capabilities(),
+      }
+      require('jdtls').start_or_attach(config)
+    end
+  },
+
 })
 
 -- 3. SHARED OPTIONS
@@ -324,6 +458,34 @@ else
     opt.number = true
     opt.relativenumber = true
     opt.mouse = "a"
+
+    -- LSP Telemetry & Code Intelligence Navigation
+    vim.api.nvim_create_autocmd('LspAttach', {
+        callback = function(event)
+            local opts = { buffer = event.buf }
+
+            map('n', 'gd', vim.lsp.buf.definition, opts)          -- Go to definition
+            map('n', 'gr', function() local ok, f = pcall(require, 'fzf-lua') if ok then f.lsp_references() else vim.lsp.buf.references() end end, opts) -- Find references (fzf fallback)
+            map('n', 'K', vim.lsp.buf.hover, opts)               -- Documentation popup
+            map('n', '<space>rn', vim.lsp.buf.rename, opts)       -- Rename symbol
+            map({ 'n', 'v' }, '<space>ca', vim.lsp.buf.code_action, opts) -- Code Actions (Quick-fix)
+        end,
+    })
+
+    -- Project Search & Navigation (Fzf-lua)
+    local ok_fzf, fzf = pcall(require, 'fzf-lua')
+    if ok_fzf then
+      map('n', '<leader><space>', function() fzf.files() end, { desc = "Find Project Files" })
+      map('n', '<leader>ff', function() fzf.live_grep() end, { desc = "Search Text Globally" })
+      map('n', '<leader>fb', function() fzf.buffers() end, { desc = "List Active Buffers" })
+      map('n', '<leader>fh', function() fzf.help_tags() end, { desc = "Search Documentation Help" })
+    else
+      -- fallback (if fzf-lua not available)
+      map('n', '<leader><space>', function() vim.cmd('echo "fzf-lua not available"') end, { desc = "Find Project Files (missing fzf)" })
+    end
+
+    -- File System Workspace Navigation (Oil.nvim)
+    map("n", "-", "<CMD>Oil<CR>", { desc = "Open Parent Directory Buffer" })
 
     -- Statusline (git branch is cached per-buffer; refreshed on enter/focus/shell)
     local function refresh_git_branch()
