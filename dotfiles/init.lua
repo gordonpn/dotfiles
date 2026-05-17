@@ -529,6 +529,69 @@ require("lazy").setup({
     },
   },
 
+  -- AUTOPAIRS: Auto-close brackets, quotes, and pairs
+  {
+    "windwp/nvim-autopairs",
+    cond = not vim.g.vscode,
+    event = "InsertEnter",
+    opts = {},
+  },
+
+  -- TS-AUTOTAG: Auto-close and rename HTML/JSX/TSX tags
+  {
+    "windwp/nvim-ts-autotag",
+    cond = not vim.g.vscode,
+    ft = { "typescript", "typescriptreact", "javascript", "javascriptreact", "html", "xml" },
+    opts = {},
+  },
+
+  -- DRESSING: Floating inputs for rename, code actions, and other prompts
+  {
+    "stevearc/dressing.nvim",
+    cond = not vim.g.vscode,
+    event = "VeryLazy",
+    opts = {},
+  },
+
+  -- NOICE: Better command line, messages, and LSP popups
+  {
+    "folke/noice.nvim",
+    cond = not vim.g.vscode,
+    event = "VeryLazy",
+    dependencies = {
+      "MunifTanjim/nui.nvim",
+      "rcarriga/nvim-notify",
+    },
+    opts = {
+      lsp = {
+        override = {
+          ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
+          ["vim.lsp.util.stylize_markdown"] = true,
+          ["cmp.entry.get_documentation"] = true,
+        },
+      },
+      presets = {
+        bottom_search = true,
+        command_palette = true,
+        long_message_to_split = true,
+      },
+    },
+  },
+
+  -- TODO-COMMENTS: Highlight and search TODO/FIXME/HACK notes
+  {
+    "folke/todo-comments.nvim",
+    cond = not vim.g.vscode,
+    event = { "BufReadPost", "BufNewFile" },
+    dependencies = { "nvim-lua/plenary.nvim" },
+    opts = {},
+    keys = {
+      { "]t", function() require("todo-comments").jump_next() end, desc = "Next Todo Comment" },
+      { "[t", function() require("todo-comments").jump_prev() end, desc = "Previous Todo Comment" },
+      { "<leader>st", "<cmd>TodoQuickFix<cr>", desc = "Search Workspace TODOs" },
+    },
+  },
+
   -- NVIM-JDTLS: Specialized configuration extension for Java
   {
     "mfussenegger/nvim-jdtls",
