@@ -279,7 +279,7 @@ require("lazy").setup({
     opts = {
       ensure_installed = {
         "pyright",
-        "tsserver",
+        "ts_ls",
         "gopls",
         "bashls",
         "yamlls",
