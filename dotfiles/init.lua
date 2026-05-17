@@ -326,47 +326,36 @@ require("lazy").setup({
           automatic_installation = true,
         })
 
+        -- Prefer the new vim.lsp.config API entirely to avoid requiring 'lspconfig' which emits deprecation warnings.
         if type(mason_lspconfig.setup_handlers) == 'function' then
           mason_lspconfig.setup_handlers({
-            -- default handler (for all servers): attempt to use the new API, otherwise fallback to require('lspconfig')
+            -- default handler: use the lspconfig variable (vim.lsp.config when available)
             function(server_name)
-              local ok, srv = pcall(function() return lspconfig[server_name] end)
-              if ok and srv and srv.setup then
+              local srv = lspconfig[server_name]
+              if srv and type(srv.setup) == 'function' then
                 srv.setup({ capabilities = capabilities })
               else
-                local ok2, lspc = pcall(require, 'lspconfig')
-                if ok2 and lspc[server_name] and lspc[server_name].setup then
-                  lspc[server_name].setup({ capabilities = capabilities })
-                end
+                -- no compatible server entry found in vim.lsp.config; skip to avoid requiring 'lspconfig'
+                -- This keeps us free of the deprecation warning. If needed, users can install the legacy lspconfig provider.
               end
             end,
           })
         else
-          -- mason-lspconfig does not provide setup_handlers (older/newer API); fallback to manual setup
+          -- mason-lspconfig does not provide setup_handlers (older/newer API); fallback to manual setup using vim.lsp.config where possible
           for _, server in ipairs(servers) do
-            local ok, srv = pcall(function() return lspconfig[server] end)
-            if ok and srv and srv.setup then
+            local srv = lspconfig[server]
+            if srv and type(srv.setup) == 'function' then
               srv.setup({ capabilities = capabilities })
-            else
-              local ok2, lspc = pcall(require, 'lspconfig')
-              if ok2 and lspc[server] and lspc[server].setup then
-                lspc[server].setup({ capabilities = capabilities })
-              end
             end
           end
         end
 
       else
-        -- Fallback: directly configure servers via the available lspconfig API
+        -- Fallback: directly configure servers via the available lspconfig API (vim.lsp.config preferred)
         for _, server in ipairs(servers) do
-          local ok, srv = pcall(function() return lspconfig[server] end)
-          if ok and srv and srv.setup then
+          local srv = lspconfig[server]
+          if srv and type(srv.setup) == 'function' then
             srv.setup({ capabilities = capabilities })
-          else
-            local ok2, lspc = pcall(require, 'lspconfig')
-            if ok2 and lspc[server] and lspc[server].setup then
-              lspc[server].setup({ capabilities = capabilities })
-            end
           end
         end
       end
