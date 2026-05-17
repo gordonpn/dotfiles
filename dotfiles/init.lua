@@ -152,6 +152,20 @@
 --  PERFORMANCE TIPS
 --    - Keep heavy filetypes/plugins lazy-loaded (cond = not vim.g.vscode)
 --    - Increase jdtls heap for Java projects (configured in jdtls plugin)
+
+--  UI POLISH (dressing.nvim + noice.nvim)
+--    LSP rename / code action prompts appear as floating UI instead of
+--    raw bottom-line input; command-line and notify popups are also styled.
+
+--  AUTO-PAIRS / TAGS (nvim-autopairs + nvim-ts-autotag)
+--    Brackets, quotes, and JSX/HTML tags close automatically while typing.
+
+--  TODO TRACKING (todo-comments.nvim)
+--    ]t / [t              Jump next / prev TODO/FIXME/HACK/NOTE
+--    <leader>st           Search workspace annotations
+
+--  DATABASE UI
+--    (Skipped) Dadbod was intentionally omitted from this setup.
 --
 -- =============================================================================
 
@@ -667,4 +681,3 @@ else
         end,
     })
 end
-
