@@ -279,13 +279,13 @@ require("lazy").setup({
     opts = {
       ensure_installed = {
         "pyright",
-        "ts_ls",
+        "tsserver",
         "gopls",
         "bashls",
         "yamlls",
         "jsonls",
         "dockerls",
-        "lua-language-server",
+        "lua_ls",
       },
     },
   },
