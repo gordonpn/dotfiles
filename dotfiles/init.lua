@@ -305,7 +305,14 @@ require("lazy").setup({
 
       local ok_mason_lsp, mason_lspconfig = pcall(require, 'mason-lspconfig')
 
-      local lspconfig = require("lspconfig")
+      -- Prefer the new vim.lsp.config API when available to avoid deprecation warnings
+      local lspconfig
+      if vim.lsp and vim.lsp.config then
+        lspconfig = vim.lsp.config
+      else
+        lspconfig = (pcall(require, 'lspconfig') and require('lspconfig')) or {}
+      end
+
       local blink = require("blink.cmp")
       local capabilities = blink.get_lsp_capabilities()
 
@@ -320,19 +327,31 @@ require("lazy").setup({
         })
 
         mason_lspconfig.setup_handlers({
-          -- default handler (for all servers): use lspconfig with our capabilities
+          -- default handler (for all servers): attempt to use the new API, otherwise fallback to require('lspconfig')
           function(server_name)
-            lspconfig[server_name].setup({
-              capabilities = capabilities,
-            })
+            local ok, srv = pcall(function() return lspconfig[server_name] end)
+            if ok and srv and srv.setup then
+              srv.setup({ capabilities = capabilities })
+            else
+              local ok2, lspc = pcall(require, 'lspconfig')
+              if ok2 and lspc[server_name] and lspc[server_name].setup then
+                lspc[server_name].setup({ capabilities = capabilities })
+              end
+            end
           end,
         })
 
       else
-        -- Fallback: directly configure servers via lspconfig
+        -- Fallback: directly configure servers via the available lspconfig API
         for _, server in ipairs(servers) do
-          if lspconfig[server] then
-            lspconfig[server].setup({ capabilities = capabilities })
+          local ok, srv = pcall(function() return lspconfig[server] end)
+          if ok and srv and srv.setup then
+            srv.setup({ capabilities = capabilities })
+          else
+            local ok2, lspc = pcall(require, 'lspconfig')
+            if ok2 and lspc[server] and lspc[server].setup then
+              lspc[server].setup({ capabilities = capabilities })
+            end
           end
         end
       end
@@ -340,6 +359,7 @@ require("lazy").setup({
       -- NOTE: Java (jdtls) is handled separately below for enterprise scaling
     end,
   },
+
 
 
   -- BLINK.CMP: High-performance completion engine
