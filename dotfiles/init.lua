@@ -1,10 +1,10 @@
 -- =============================================================================
 --  HYBRID NEOVIM CONFIG (VS CODE + TERMINAL)
---  Updated: Smart Join Fallback + Cleaned Text Objects
+--  Updated: Smart Join Fallback + Cleaned Text Objects + IDE Enhancements
 -- =============================================================================
 --
 -- =============================================================================
---  CHEATSHEET
+--  CHEATSHEET (core navigation, editing, IDE features)
 -- =============================================================================
 --
 --  MOTIONS / JUMPS  (flash.nvim + quick-scope)
@@ -63,6 +63,39 @@
 --    gc                    VS Code's native comment toggle
 --    <Space>rn             Rename symbol
 --    <C-h> / <C-l>         Navigate to left / right editor group
+--
+-- -----------------------------------------------------------------------------
+--  NEW IDE FEATURES (keys / behavior)
+--
+--  GIT (gitsigns)
+--    ─ Inline markers show added/changed/deleted lines
+--    ]h / [h              Jump next / prev git hunk
+--    <leader>hp           Preview hunk
+--    <leader>hb           Blame current line (full)
+--
+--  TERMINAL & GIT GUI (toggleterm + lazygit)
+--    <C-\>               Toggle floating terminal
+--    <leader>gg           Toggle LazyGit UI (if installed)
+--
+--  WORKSPACE PROBLEMS (trouble.nvim)
+--    <leader>xx           Toggle project diagnostics (Trouble)
+--    <leader>xb           Show buffer diagnostics in Trouble
+--    <leader>xq           Toggle quickfix list in Trouble
+--
+--  TEST RUNNER (neotest)
+--    <leader>tr           Run nearest test
+--    <leader>tf           Run tests in current file
+--    <leader>ts           Toggle test summary tree
+--
+--  BREADCRUMBS (dropbar)
+--    Dropbar shows structured breadcrumbs (Class > Method > Block)
+--
+--  DEBUGGING (nvim-dap + dap-ui)
+--    <leader>db           Toggle breakpoint
+--    <leader>dc           Start / Continue
+--    <leader>di           Step Into
+--    <leader>do           Step Over
+--    <leader>du           Toggle DAP UI panels
 --
 -- =============================================================================
 
