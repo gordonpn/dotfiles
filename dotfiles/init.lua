@@ -596,7 +596,10 @@ require("lazy").setup({
           "--jvm-arg=-Xmx6G",
           "--jvm-arg=-XX:+UseG1GC",
         },
-        root_dir = require('jdtls.setup').find_root({'.git', 'mvnw', 'gradlew', 'pom.xml'}),
+        root_dir = require('jdtls.setup').find_root({
+          '.git', 'mvnw', 'gradlew', 'pom.xml',
+          '.bemol', 'Config', 'packageInfo',
+        }),
         capabilities = require('blink.cmp').get_lsp_capabilities(),
       }
       require('jdtls').start_or_attach(config)
