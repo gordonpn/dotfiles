@@ -379,18 +379,11 @@ require("lazy").setup({
   {
     "williamboman/mason-lspconfig.nvim",
     cond = not vim.g.vscode,
-    opts = {
-      ensure_installed = {
-        "pyright",
-        "ts_ls",
-        "gopls",
-        "bashls",
-        "yamlls",
-        "jsonls",
-        "dockerls",
-        "lua_ls",
-      },
-    },
+    opts = function()
+      local servers = { "pyright", "ts_ls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
+      if vim.fn.executable("go") == 1 then table.insert(servers, "gopls") end
+      return { ensure_installed = servers }
+    end,
   },
 
   -- NVIM LSPCONFIG: The native client configuration
