@@ -393,12 +393,6 @@ require("lazy").setup({
     event = { "BufReadPre", "BufNewFile" },
     dependencies = { "saghen/blink.cmp", "williamboman/mason.nvim", "williamboman/mason-lspconfig.nvim" },
     config = function()
-      -- Ensure mason is initialized so servers get installed and PATH updated
-      local ok_mason, mason = pcall(require, 'mason')
-      if ok_mason then
-        mason.setup()
-      end
-
       local ok_mason_lsp, mason_lspconfig = pcall(require, 'mason-lspconfig')
 
       -- Prefer the new vim.lsp.config API when available to avoid deprecation warnings
