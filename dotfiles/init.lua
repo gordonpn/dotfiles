@@ -406,16 +406,12 @@ local plugin_specs = {
       local blink = require("blink.cmp")
       local capabilities = blink.get_lsp_capabilities()
 
-      -- Preferred lspconfig server names
-      local servers = { "pyright", "tsserver", "gopls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
+      -- Preferred lspconfig server names. mason-lspconfig is already configured
+      -- via lazy opts above; this list is just for the manual handler loop below.
+      local servers = { "pyright", "ts_ls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
+      if vim.fn.executable("go") == 1 then table.insert(servers, "gopls") end
 
-      -- If mason-lspconfig is available, ask it to ensure servers are installed and wire up handlers
       if ok_mason_lsp then
-        mason_lspconfig.setup({
-          ensure_installed = servers,
-          automatic_installation = true,
-        })
-
         -- Prefer the new vim.lsp.config API entirely to avoid requiring 'lspconfig' which emits deprecation warnings.
         if type(mason_lspconfig.setup_handlers) == 'function' then
           mason_lspconfig.setup_handlers({
