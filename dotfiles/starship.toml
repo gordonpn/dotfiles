@@ -20,7 +20,7 @@ disabled = false
 symbol = ""
 
 [lua]
-disabled = false
+disabled = true
 
 [package]
 disabled = true
