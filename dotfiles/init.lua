@@ -180,7 +180,7 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 -- 2. PLUGIN SPECS
-require("lazy").setup({
+local plugin_specs = {
   -- ===========================================================================
   --  SHARED PLUGINS (Enabled in both VS Code & Terminal)
   -- ===========================================================================
@@ -606,7 +606,18 @@ require("lazy").setup({
     end
   },
 
-})
+}
+
+-- Optional: extend plugin specs with internal/local entries (not tracked in dotfiles)
+local local_plugins_path = vim.fn.stdpath("config") .. "/local_plugins.lua"
+if vim.fn.filereadable(local_plugins_path) == 1 then
+  local ok, extra = pcall(dofile, local_plugins_path)
+  if ok and type(extra) == "table" then
+    vim.list_extend(plugin_specs, extra)
+  end
+end
+
+require("lazy").setup(plugin_specs)
 
 -- 3. SHARED OPTIONS
 local opt = vim.opt
@@ -733,4 +744,10 @@ else
             end
         end,
     })
+end
+
+-- Optional: load runtime overrides (internal-only config, not tracked in dotfiles)
+local local_config_path = vim.fn.stdpath("config") .. "/local_config.lua"
+if vim.fn.filereadable(local_config_path) == 1 then
+  pcall(dofile, local_config_path)
 end
