@@ -45,7 +45,7 @@ diffFilter = delta --color-only
 [merge]
 # tool = vscode
 # ff = false
-conflictstyle = zdiff3
+conflictStyle = zdiff3
 log = true
 
 [mergetool "vscode"]
