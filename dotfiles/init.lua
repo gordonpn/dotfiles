@@ -305,11 +305,11 @@ local plugin_specs = {
   },
 
   {
-    "folke/tokyonight.nvim",
+    "rebelot/kanagawa.nvim",
     lazy = false,
     priority = 1000,
     cond = not vim.g.vscode,
-    config = function() vim.cmd([[colorscheme tokyonight]]) end
+    config = function() vim.cmd([[colorscheme kanagawa-dragon]]) end
   },
 
   -- QUICKSCOPE (Highlights unique f/F/t/T targets — always on)
