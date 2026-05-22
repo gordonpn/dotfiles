@@ -24,6 +24,7 @@ diff = delta
 log = delta
 reflog = delta
 show = delta
+difftool = true
 
 [delta]
 dark = true
@@ -62,6 +63,10 @@ renames = true
 context = 10
 indentHeuristic = true
 wsErrorHighlight = all
+tool = difftastic
+
+[difftool "difftastic"]
+cmd = difft "$LOCAL" "$REMOTE"
 
 [format]
 pretty = fuller
