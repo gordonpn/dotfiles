@@ -170,3 +170,7 @@ fi
 eval "$(zoxide init zsh)"
 alias z='zi'
 eval "$(starship init zsh)"
+
+
+# Added by Antigravity CLI installer
+export PATH="/Users/gordonpn/.local/bin:$PATH"
