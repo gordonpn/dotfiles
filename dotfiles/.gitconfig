@@ -26,18 +26,18 @@ reflog = delta
 show = delta
 
 [delta]
-# minus-style = "syntax #340001"
-# plus-style = "syntax #012800"
-# syntax-theme = GitHub
 dark = true
-features = side-by-side line-numbers decorations
 navigate = true
+true-color = always
+syntax-theme = gruvbox-dark
+keep-plus-minus-markers = false
+diff-so-fancy = true
 
 [delta "decorations"]
-# commit-decoration-style = bold black box ul
-# file-style = bold black ul
-# file-decoration-style = none
-# hunk-header-decoration-style = black box
+commit-decoration-style = bold yellow box ul
+file-style = bold yellow ul
+file-decoration-style = none
+hunk-header-decoration-style = yellow box
 
 [interactive]
 diffFilter = delta --color-only
@@ -129,9 +129,6 @@ followTags = true
 prune = true
 pruneTags = true
 all = true
-
-[include]
-path = /Users/gordonpn/workspace/delta/themes.gitconfig
 
 [branch]
 autoSetupMerge = always
