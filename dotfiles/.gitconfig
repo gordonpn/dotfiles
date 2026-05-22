@@ -32,6 +32,8 @@ true-color = always
 syntax-theme = gruvbox-dark
 keep-plus-minus-markers = false
 diff-so-fancy = true
+hyperlinks = true
+side-by-side = true
 
 [delta "decorations"]
 commit-decoration-style = bold yellow box ul
