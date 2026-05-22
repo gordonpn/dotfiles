@@ -47,6 +47,11 @@ diffFilter = delta --color-only
 [merge]
 conflictStyle = zdiff3
 log = true
+tool = nvimdiff
+
+[mergetool]
+prompt = false
+keepBackup = false
 
 [diff]
 algorithm = histogram
@@ -113,9 +118,6 @@ verbose = true
 
 [init]
 defaultBranch = main
-
-[mergetool]
-prompt = false
 
 [push]
 autoSetupRemote = true
