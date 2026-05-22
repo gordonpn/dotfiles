@@ -45,13 +45,8 @@ hunk-header-decoration-style = yellow box
 diffFilter = delta --color-only
 
 [merge]
-# tool = vscode
-# ff = false
 conflictStyle = zdiff3
 log = true
-
-[mergetool "vscode"]
-cmd = code --wait $MERGED
 
 [diff]
 algorithm = histogram
@@ -62,10 +57,6 @@ renames = true
 context = 10
 indentHeuristic = true
 wsErrorHighlight = all
-# tool = vscode
-
-[difftool "vscode"]
-cmd = code --wait --diff $LOCAL $REMOTE
 
 [format]
 pretty = fuller
