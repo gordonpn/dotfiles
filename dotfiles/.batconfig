@@ -1,0 +1,36 @@
+# bat configuration
+# Reference: https://github.com/sharkdp/bat#configuration-file
+
+# Theme — gruvbox-dark to match delta
+--theme="gruvbox-dark"
+
+# Style — line numbers, git change markers, filename header
+# (informative without too much noise)
+--style="numbers,changes,header"
+
+# Italics where the terminal supports them
+--italic-text=always
+
+# Pager — page when output is a terminal and exceeds screen height
+--paging=auto
+
+# --- Syntax mappings ---------------------------------------------------------
+# For files bat doesn't auto-detect, or where we want to override the default.
+
+# Homebrew Brewfile (already auto-detected, kept for clarity)
+--map-syntax="Brewfile:Ruby"
+
+# .env, .env.local, .env.production, etc. (already auto-detected, kept for clarity)
+--map-syntax=".env*:DotENV"
+
+# direnv .envrc — bat defaults to DotENV; override to shell since direnv files are bash
+--map-syntax="*.envrc:Bourne Again Shell (bash)"
+
+# Dockerfile.dev, Dockerfile.prod, etc.
+--map-syntax="Dockerfile.*:Dockerfile"
+
+# .ignore-style files (e.g. .ag-ignore, .rg-ignore, .fdignore)
+--map-syntax="*.ignore:Git Ignore"
+
+# Heroku/Foreman Procfile (no auto-detection)
+--map-syntax="Procfile:YAML"
