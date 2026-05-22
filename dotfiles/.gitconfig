@@ -55,10 +55,13 @@ cmd = code --wait $MERGED
 
 [diff]
 algorithm = histogram
-colorMoved = plain
+colorMoved = zebra
 colorMovedWS = allow-indentation-change
 mnemonicPrefix = true
 renames = true
+context = 10
+indentHeuristic = true
+wsErrorHighlight = all
 # tool = vscode
 
 [difftool "vscode"]
