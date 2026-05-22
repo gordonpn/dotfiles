@@ -122,6 +122,7 @@ alias ls='eza -lah --group-directories-first --icons=always'
 compdef ls=eza
 alias cat='bat'
 alias bathelp='bat --plain --language=help'
+alias bless='bat --paging=always --style=plain'
 alias grep='rg'
 alias find='fd'
 alias du='dust'
