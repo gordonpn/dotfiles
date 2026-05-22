@@ -47,6 +47,14 @@ export BAT_STYLE="plain"
 export KUBE_EDITOR='nvim'
 export FUNCNEST=1000000
 
+# Docker BuildKit & CLI
+export COMPOSE_DOCKER_CLI_BUILD=1
+export DOCKER_BUILDKIT=1
+export DOCKER_CLI_EXPERIMENTAL=enabled
+
+# Python / VirtualEnv Safety
+export PIP_REQUIRE_VIRTUALENV=true
+
 # FZF Configuration
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git --exclude node_modules'
 export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git --exclude node_modules'
