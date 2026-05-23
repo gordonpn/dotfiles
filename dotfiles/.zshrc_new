@@ -47,9 +47,18 @@ source ${zsh_plugins}.zsh
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+# LS_COLORS setup with caching for performance (inspired by local/.zshrc)
+if [[ ! -f ~/.ls_colors_cache ]]; then
+  if command -v vivid >/dev/null; then
+    vivid generate ayu > ~/.ls_colors_cache
+  fi
+fi
+[[ -f ~/.ls_colors_cache ]] && export LS_COLORS=$(<~/.ls_colors_cache)
+
 setopt MENU_COMPLETE
 zstyle ':omz:update' mode auto
 zstyle ':completion:*' menu no
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath'
 zstyle ':fzf-tab:complete:*:*' fzf-preview 'less ${(Q)realpath}'
 zstyle ':fzf-tab:*' fzf-flags --height=35% --preview-window=right:60%
