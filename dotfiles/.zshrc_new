@@ -136,9 +136,7 @@ alias repomix='pnpx repomix@latest'
 alias qdrant="docker run --restart always -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant"
 alias treee='fd --type f --hidden --exclude .git | tree --fromfile'
 alias tree='tree -a -I ".git|node_modules|.venv"'
-alias gemini='gemini --skip-trust --approval-mode=yolo'
 alias gmi='gemini --skip-trust --approval-mode=yolo'
-alias copilot='copilot --effort=xhigh --allow-all'
 alias cpt='copilot --effort=xhigh --allow-all'
 alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
 alias fullreboot='sudo reboot'
