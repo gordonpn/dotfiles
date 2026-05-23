@@ -305,11 +305,17 @@ local plugin_specs = {
   },
 
   {
-    "rebelot/kanagawa.nvim",
+    "catppuccin/nvim",
+    name = "catppuccin",
     lazy = false,
     priority = 1000,
     cond = not vim.g.vscode,
-    config = function() vim.cmd([[colorscheme kanagawa-wave]]) end
+    config = function()
+      require("catppuccin").setup({
+        flavour = "mocha",
+      })
+      vim.cmd.colorscheme("catppuccin-nvim")
+    end
   },
 
   -- QUICKSCOPE (Highlights unique f/F/t/T targets — always on)
