@@ -305,16 +305,16 @@ local plugin_specs = {
   },
 
   {
-    "catppuccin/nvim",
-    name = "catppuccin",
+    "rebelot/kanagawa.nvim",
+    name = "kanagawa",
     lazy = false,
     priority = 1000,
     cond = not vim.g.vscode,
     config = function()
-      require("catppuccin").setup({
-        flavour = "mocha",
+      require("kanagawa").setup({
+        theme = "dragon",
       })
-      vim.cmd.colorscheme("catppuccin-nvim")
+      vim.cmd.colorscheme("kanagawa")
     end
   },
 
