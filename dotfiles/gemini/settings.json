@@ -14,7 +14,7 @@
     }
   },
   "ui": {
-    "useAlternateBuffer": false,
+    "useAlternateBuffer": true,
     "footer": {
       "items": [
         "workspace",
