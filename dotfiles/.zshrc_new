@@ -174,8 +174,8 @@ elif [[ -x "$HOME/.local/bin/mise" ]]; then
   eval "$($HOME/.local/bin/mise activate zsh)"
 fi
 
-eval "$(zoxide init zsh)"
-alias z='zi'
+# This forces zoxide to intercept the 'cd' command entirely
+eval "$(zoxide init zsh --cmd cd)"
 eval "$(starship init zsh)"
 
 # Background-fetch the current git repo on cd (rate-limited per repo).
