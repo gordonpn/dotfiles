@@ -638,6 +638,11 @@ if vim.fn.filereadable(local_plugins_path) == 1 then
   end
 end
 
+if not vim.g.vscode then
+  vim.opt.termguicolors = true
+  vim.opt.background = "dark"
+end
+
 require("lazy").setup(plugin_specs)
 
 -- 3. SHARED OPTIONS
@@ -698,8 +703,6 @@ if vim.g.vscode then
 
 else
     -- --- TERMINAL MODE ---
-    opt.termguicolors = true
-    opt.background = "dark"
     opt.number = true
     opt.relativenumber = true
     opt.mouse = "a"
