@@ -45,6 +45,9 @@ background = #181616
 # 0 maps directly to unlimited scrollback tracking pages dynamically
 scrollback-limit = 0
 
+# Increase scroll sensitivity for trackpads (precision) and mouse wheels (discrete)
+mouse-scroll-multiplier = precision:2.0,discrete:3.0
+
 # Static cursor rules (Bypasses shell integration switching)
 cursor-style = bar
 cursor-style-blink = true
