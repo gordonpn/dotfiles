@@ -1,0 +1,70 @@
+# ~/.config/ghostty/config
+
+# ---------------------------------------------------------------------
+# Theme (Built-in match for your Kanagawa Dragon preset)
+# ---------------------------------------------------------------------
+theme = Kanagawa Dragon
+
+# ---------------------------------------------------------------------
+# Typography (Parsed from your active iTerm2 profile)
+# ---------------------------------------------------------------------
+font-family = "JetBrainsMonoNFM-Regular"
+font-size = 15
+font-synthetic-style = true
+
+# Font feature configurations (Ligatures are on by default in Ghostty)
+# To thicken the font slightly on macOS for lower eye strain (matches your thin-strokes override)
+font-thicken = true
+font-thicken-strength = 120
+
+# ---------------------------------------------------------------------
+# Window and Grid Geometry
+# ---------------------------------------------------------------------
+window-width = 80
+window-height = 25
+window-padding-x = 12
+window-padding-y = 12
+
+# Cosmetics
+window-theme = "dark"
+macos-titlebar-style = "tabs"
+
+# ---------------------------------------------------------------------
+# Interaction and Buffer Behavior
+# ---------------------------------------------------------------------
+# Matches your iTerm 'Unlimited Scrollback' selection (0 = pages to disk as needed)
+scrollback-limit = 0
+
+# Cursor style matching your vertical beam (Type 2) + blinking true
+cursor-style = block
+cursor-style-blink = true
+
+# ---------------------------------------------------------------------
+# Clipboard and Key Mechanics
+# ---------------------------------------------------------------------
+mouse-hide-while-typing = true
+
+# Fixes the left option key to behave as Alt instead of typing unicode glyphs
+macos-option-as-alt = left
+
+# ---------------------------------------------------------------------
+# Cross-Platform Environment Sync (For your Ubuntu Home Server)
+# ---------------------------------------------------------------------
+# Injects terminfo over SSH pipelines so utilities don't break on remote sessions
+shell-integration-features = ssh-env,ssh-terminfo,no-cursor
+
+# ---------------------------------------------------------------------
+# Custom Keybindings
+# ---------------------------------------------------------------------
+# Rebinds Cmd+, to open the config file in your terminal editor (vim)
+# instead of the default macOS TextEdit. 
+# Note: This types the command into your active prompt.
+keybind = cmd+,=text:ghostty +edit-config\r
+
+# ---------------------------------------------------------------------
+# Theme Overrides
+# ---------------------------------------------------------------------
+# CRITICAL: This MUST be placed below the theme line to override it.
+# Force the terminal padding background to match Kanagawa Dragon's editor canvas exactly.
+# If #181616 still looks slightly off, try #121214 (Dragon's alternate dark ink layer).
+background = #181616
