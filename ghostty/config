@@ -16,6 +16,14 @@ font-synthetic-style = true
 font-thicken = true
 font-thicken-strength = 120
 
+# Add fine pixel adjustments to individual character cells
+adjust-cell-width = 0
+adjust-cell-height = 2
+
+# Explicitly disable specific font ligatures if they interfere with code symbols 
+# (e.g., disabling '==' transformations while keeping others active)
+# font-feature = -calt
+
 # ---------------------------------------------------------------------
 # Window and Grid Geometry
 # ---------------------------------------------------------------------
