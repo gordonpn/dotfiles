@@ -42,14 +42,14 @@ background = #181616
 # ---------------------------------------------------------------------
 # Interaction and Buffer Behavior
 # ---------------------------------------------------------------------
-# 0 maps directly to unlimited scrollback tracking pages dynamically
-scrollback-limit = 0
+# The maximum number of lines to keep in the scrollback buffer.
+scrollback-limit = 100000
 
 # Increase scroll sensitivity for trackpads (precision) and mouse wheels (discrete)
 mouse-scroll-multiplier = precision:2.0,discrete:3.0
 
 # Static cursor rules (Bypasses shell integration switching)
-cursor-style = bar
+cursor-style = block
 cursor-style-blink = true
 
 # ---------------------------------------------------------------------
