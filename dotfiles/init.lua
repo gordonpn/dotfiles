@@ -729,6 +729,15 @@ else
     opt.relativenumber = true
     opt.mouse = "a"
 
+    -- Automatically reload files when they change on disk
+    opt.autoread = true
+
+    -- Force a disk check every time you switch buffers or regain window focus
+    vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGained" }, {
+        command = "if mode() != 'c' | checktime | endif",
+        pattern = "*",
+    })
+
     -- LSP Telemetry & Code Intelligence Navigation
     vim.api.nvim_create_autocmd('LspAttach', {
         callback = function(event)
