@@ -313,7 +313,29 @@ local plugin_specs = {
     config = function()
       require("kanagawa").setup({
         theme = "dragon",
+        undercurl = true,
+        commentStyle = { italic = true },
       })
+
+      -- FORCE TRANSPARENCY BY CLEARING HIGHLIGHT GROUPS DIRECTLY
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        pattern = "*",
+        callback = function()
+          local hl_groups = {
+            "Normal",       -- Core editor workspace background
+            "NormalNC",     -- Non-current window backgrounds
+            "SignColumn",   -- Git signs and diagnostic column
+            "FoldColumn",   -- Code folding column
+            "LineNr",       -- Line numbers
+            "CursorLineNr", -- Active line number
+            "EndOfBuffer",  -- The '~' characters at the bottom of empty files
+          }
+          for _, group in ipairs(hl_groups) do
+            vim.api.nvim_set_hl(0, group, { bg = "none" })
+          end
+        end,
+      })
+
       vim.cmd.colorscheme("kanagawa")
     end
   },
