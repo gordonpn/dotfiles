@@ -17,6 +17,10 @@ font-synthetic-style = true
 font-thicken = true
 font-thicken-strength = 120
 
+# Add fine pixel adjustments to individual character cells
+adjust-cell-width = 0
+adjust-cell-height = 2
+
 # ---------------------------------------------------------------------
 # Window and Grid Geometry
 # ---------------------------------------------------------------------
@@ -25,9 +29,33 @@ window-height = 25
 window-padding-x = 12
 window-padding-y = 12
 
-# Cosmetics
+# ---------------------------------------------------------------------
+# Cosmetics & UI
+# ---------------------------------------------------------------------
 window-theme = "dark"
-macos-titlebar-style = "tabs"
+macos-titlebar-style = "hidden"
+
+# Sets background transparency (0.0 to 1.0)
+background-opacity = 0.94
+# Applies a system-level Gaussian blur to the transparent background (macOS only)
+background-blur-radius = 20
+
+# Removes window animations (like fading or resizing bounces) for a snappier feel
+window-animation-style = none
+
+# Tabs
+tab-style = classic
+tab-position = top
+
+# ---------------------------------------------------------------------
+# Performance Fine-Tuning
+# ---------------------------------------------------------------------
+# Forces rendering pipeline optimizations via local graphics hardware
+gpu-rendering = true
+# Pin the frame rate ceiling. Ghostty matches ProMotion automatically, but you can hard-cap it.
+fps-limit = 120
+# Controls how text is rendered when split panes are active.
+gl-split = true
 
 # ---------------------------------------------------------------------
 # Interaction and Buffer Behavior
@@ -36,8 +64,11 @@ macos-titlebar-style = "tabs"
 scrollback-limit = 0
 
 # Cursor style matching your vertical beam (Type 2) + blinking true
-cursor-style = block
+cursor-style = bar
 cursor-style-blink = true
+
+# Keep the terminal window open even if the shell process exits with an error
+abnormal-command-exit-behavior = do-not-close
 
 # ---------------------------------------------------------------------
 # Clipboard and Key Mechanics
@@ -47,11 +78,19 @@ mouse-hide-while-typing = true
 # Fixes the left option key to behave as Alt instead of typing unicode glyphs
 macos-option-as-alt = left
 
+# Automatically copy any mouse-selected text directly into the system clipboard
+copy-on-select = true
+
+# Allow remote servers (via SSH) to write to your local macOS clipboard 
+# using OSC 52 escape sequences (essential for copying text out of remote Neovim instances)
+clipboard-write = allow
+clipboard-read = allow
+
 # ---------------------------------------------------------------------
 # Cross-Platform Environment Sync (For your Ubuntu Home Server)
 # ---------------------------------------------------------------------
 # Injects terminfo over SSH pipelines so utilities don't break on remote sessions
-shell-integration-features = ssh-env,ssh-terminfo,no-cursor
+shell-integration-features = ssh-env,ssh-terminfo
 
 # ---------------------------------------------------------------------
 # Custom Keybindings
@@ -60,6 +99,20 @@ shell-integration-features = ssh-env,ssh-terminfo,no-cursor
 # instead of the default macOS TextEdit. 
 # Note: This types the command into your active prompt.
 keybind = cmd+,=text:ghostty +edit-config\r
+
+# Quick font resizing variations
+keybind = super++=increase_font_size:1
+keybind = super+-=decrease_font_size:1
+keybind = super+0=reset_font_size
+
+# Jump directly to specific tabs using number rows
+keybind = super+1=goto_tab:1
+keybind = super+2=goto_tab:2
+keybind = super+3=goto_tab:3
+keybind = super+4=goto_tab:4
+
+# Toggle the maximize/zoom state of the current active split pane
+keybind = super+shift+f=toggle_split_zoom
 
 # ---------------------------------------------------------------------
 # Theme Overrides
