@@ -62,9 +62,22 @@ symlink_iterm_settings() {
 	done
 }
 
+symlink_ghostty_settings() {
+	DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+	mkdir -p "$HOME/.config/ghostty"
+	for file in "$DIR"/ghostty/*; do
+		if [ -d "$file" ]; then
+			continue
+		fi
+		file_name="${file##*/}"
+		ln -sfn "$file" "$HOME/.config/ghostty/$file_name"
+	done
+}
+
 download_chrome_extensions
 download_completions
 create_symlinks
 symlink_iterm_settings
+symlink_ghostty_settings
 
 # sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
