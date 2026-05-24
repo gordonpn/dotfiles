@@ -77,3 +77,6 @@ shell-integration-features = ssh-env,ssh-terminfo,no-cursor
 # ---------------------------------------------------------------------
 # Seamlessly clear the prompt buffer to boot into your config layout via Neovim
 keybind = super+,=text:\x1bqghostty +edit-config\x0d
+
+# Force Shift+Backspace to send a literal Forward Delete over the wire
+keybind = shift+backspace=text:\x1b[3~
