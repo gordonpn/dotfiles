@@ -74,7 +74,10 @@ export HISTORY_SUBSTRING_SEARCH_ENSURE_UNIQUE=1
 export ZPWR_EXPAND_TO_HISTORY=true
 export ZPWR_EXPAND=true
 export ZPWR_EXPAND_SECOND_POSITION=true
-export ZPWR_EXPAND_BLACKLIST=(cd ls grep vi vim nvim rm cp mv)
+export ZPWR_EXPAND_BLACKLIST=(cd ls)
+export ZPWR_EXPAND_PRE_EXEC_NATIVE=true
+export ZPWR_EXPAND_ALL_POSITIONS=true
+export ZPWR_EXPAND_BRACKETED_PASTE=true
 
 # XDG Base Directory
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
