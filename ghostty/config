@@ -60,6 +60,7 @@ macos-option-as-alt = left
 
 # Automatically copy any mouse-selected text directly into the system clipboard
 copy-on-select = true
+selection-clipboard = clipboard
 
 # Allow remote servers (via SSH) to write to your local macOS clipboard 
 # using OSC 52 escape sequences (essential for copying text out of remote Neovim instances)
