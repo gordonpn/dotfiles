@@ -186,6 +186,7 @@ fi
 # This forces zoxide to intercept the 'cd' command entirely
 eval "$(zoxide init zsh --cmd cd)"
 eval "$(starship init zsh)"
+eval "$(npm completion)"
 
 # Background-fetch the current git repo on cd (rate-limited per repo).
 # Lets starship's git_status show ⇣N when behind upstream without manual fetch.
