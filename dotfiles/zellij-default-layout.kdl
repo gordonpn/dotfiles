@@ -1,34 +1,49 @@
-// Default layout — uses zjstatus as a custom status bar
-// Plugin install: wget -O ~/.config/zellij/plugins/zjstatus.wasm \
-//   https://github.com/dj95/zjstatus/releases/latest/download/zjstatus.wasm
-// Reference: https://github.com/dj95/zjstatus
+// Default layout — mirrors zellij's stock built-in `default` layout exactly so
+// the status-bar plugin shows mode + keybind hints. Verified with:
+//   zellij setup --dump-layout default
+//
+// To opt into a slimmer single-line UI later, replace status-bar with
+// `zellij:compact-bar` (mode + session + tabs only, no key hints).
+//
+// To use the custom kanagawa-dragon zjstatus bar, swap the status-bar pane
+// for the commented block at the bottom of this file. Plugin install:
+//   wget -O ~/.config/zellij/plugins/zjstatus.wasm \
+//     https://github.com/dj95/zjstatus/releases/latest/download/zjstatus.wasm
 layout {
-    default_tab_template {
-        children
-        pane size=1 borderless=true {
-            plugin location="file:~/.config/zellij/plugins/zjstatus.wasm" {
-                // Formatting rules for the custom bar
-                format_left  "{mode} #[fg=#8da5ab,bold]{session}"
-                format_right "{tabs}"
-                format_space ""
-
-                mode_normal        "#[bg=#8ba4b0,fg=#181616,bold] NORMAL "
-                mode_locked        "#[bg=#c4746e,fg=#181616,bold] LOCKED "
-                mode_pane          "#[bg=#a292a3,fg=#181616,bold] PANE "
-                mode_resize        "#[bg=#c4b28a,fg=#181616,bold] RESIZE "
-                mode_tab           "#[bg=#8a9a86,fg=#181616,bold] TAB "
-                mode_scroll        "#[bg=#8ea5ab,fg=#181616,bold] SCROLL "
-                mode_search        "#[bg=#b6927b,fg=#181616,bold] SEARCH "
-                mode_entersearch   "#[bg=#b6927b,fg=#181616,bold] SEARCH+ "
-                mode_renametab     "#[bg=#8a9a86,fg=#181616,bold] RENAME "
-                mode_renamepane    "#[bg=#a292a3,fg=#181616,bold] RENAME "
-                mode_session       "#[bg=#C8C093,fg=#181616,bold] SESSION "
-                mode_move          "#[bg=#a292a3,fg=#181616,bold] MOVE "
-                mode_tmux          "#[bg=#c4746e,fg=#181616,bold] TMUX "
-
-                tab_normal   "#[fg=#c5c9c5] {name} "
-                tab_active   "#[fg=#c4b28a,bold,underline] {name} "
-            }
-        }
+    pane size=1 borderless=true {
+        plugin location="zellij:tab-bar"
+    }
+    pane
+    pane size=1 borderless=true {
+        plugin location="zellij:status-bar"
     }
 }
+
+// === Minimal kanagawa-dragon status bar (zjstatus) — uncomment to use ===
+// Replace the bottom status-bar pane above with this one. size=1, single line.
+// Does NOT show keybind hints — only mode/session/tabs.
+//
+// pane size=1 borderless=true {
+//     plugin location="file:~/.config/zellij/plugins/zjstatus.wasm" {
+//         format_left  "{mode} #[fg=#8da5ab,bold]{session}"
+//         format_right "{tabs}"
+//         format_space ""
+//
+//         mode_normal        "#[bg=#8ba4b0,fg=#181616,bold] NORMAL "
+//         mode_locked        "#[bg=#c4746e,fg=#181616,bold] LOCKED "
+//         mode_pane          "#[bg=#a292a3,fg=#181616,bold] PANE "
+//         mode_resize        "#[bg=#c4b28a,fg=#181616,bold] RESIZE "
+//         mode_tab           "#[bg=#8a9a86,fg=#181616,bold] TAB "
+//         mode_scroll        "#[bg=#8ea5ab,fg=#181616,bold] SCROLL "
+//         mode_search        "#[bg=#b6927b,fg=#181616,bold] SEARCH "
+//         mode_entersearch   "#[bg=#b6927b,fg=#181616,bold] SEARCH+ "
+//         mode_renametab     "#[bg=#8a9a86,fg=#181616,bold] RENAME "
+//         mode_renamepane    "#[bg=#a292a3,fg=#181616,bold] RENAME "
+//         mode_session       "#[bg=#C8C093,fg=#181616,bold] SESSION "
+//         mode_move          "#[bg=#a292a3,fg=#181616,bold] MOVE "
+//         mode_tmux          "#[bg=#c4746e,fg=#181616,bold] TMUX "
+//
+//         tab_normal   "#[fg=#c5c9c5] {name} "
+//         tab_active   "#[fg=#c4b28a,bold,underline] {name} "
+//     }
+// }
