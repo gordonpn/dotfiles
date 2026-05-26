@@ -137,6 +137,24 @@ alias find='fd'
 alias du='dust'
 alias df='duf'
 alias ps='procs'
+# zj: attach to most recent LIVE zellij session, or start fresh if none.
+# Skips EXITED sessions (dead-shell remnants from Ctrl+D etc.) — those would
+# resurrect as a blank screen. Args are forwarded as-is (e.g. `zj kill-all-sessions`).
+zj() {
+    if (( $# > 0 )); then
+        command zellij "$@"
+        return
+    fi
+    local last
+    last=$(command zellij list-sessions -r -n 2>/dev/null \
+           | grep -v 'EXITED' \
+           | awk 'NR==1 {print $1}')
+    if [[ -n $last ]]; then
+        command zellij attach "$last"
+    else
+        command zellij
+    fi
+}
 alias vi='nvim'
 alias vim='nvim'
 alias v='nvim'
