@@ -178,9 +178,9 @@ pnpx() {
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
 
 if command -v mise >/dev/null; then
-  eval "$(mise activate zsh)"
+  eval "$(mise activate zsh --shims)"
 elif [[ -x "$HOME/.local/bin/mise" ]]; then
-  eval "$($HOME/.local/bin/mise activate zsh)"
+  eval "$($HOME/.local/bin/mise activate zsh --shims)"
 fi
 
 # This forces zoxide to intercept the 'cd' command entirely
