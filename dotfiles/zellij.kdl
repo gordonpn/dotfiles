@@ -4,8 +4,8 @@ options {
     // --- UI ---
     // Strip thick pane borders to maximize screen space
     pane_frames false
-    // Use the compact status bar (matches the compact-bar plugin alias below)
-    default_layout "compact"
+    // Use the default layout (custom default.kdl in layouts/ uses zjstatus)
+    default_layout "default"
     // Start in locked mode — Ctrl+g toggles. Prevents accidental keybind grabs.
     default_mode "locked"
     // Mouse interaction in panes (explicit; default is true)
