@@ -414,6 +414,23 @@ local plugin_specs = {
     },
   },
 
+  -- LAZYGIT: Floating lazygit terminal inside Neovim
+  {
+    "kdheepak/lazygit.nvim",
+    cond = not vim.g.vscode,
+    cmd = {
+      "LazyGit",
+      "LazyGitConfig",
+      "LazyGitCurrentFile",
+      "LazyGitFilter",
+      "LazyGitFilterCurrentFile",
+    },
+    dependencies = { "nvim-lua/plenary.nvim" },
+    keys = {
+      { "<leader>gg", "<cmd>LazyGit<cr>", desc = "Toggle LazyGit Floating Window" },
+    },
+  },
+
   -- MASON: Package manager for LSPs, linters, and formatters
   {
     "williamboman/mason.nvim",
