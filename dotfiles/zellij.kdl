@@ -34,6 +34,9 @@ options {
     // --- Performance ---
     // Per-pane scrollback (default: 10000)
     scroll_buffer_size 50000
+
+    // Controls how many history lines are saved (0 saves everything)
+    scrollback_lines_to_serialize 1000
 }
 
 keybinds clear-defaults=true {
