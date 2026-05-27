@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# shell
+alias change='vim $HOME/.zshrc'
+# system
+alias sysup='sudo apt-get update'
+alias listd='sudo lsblk -o NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL; df -hl'
+# network
+alias ufwnum="sudo ufw status numbered"
+# mail
+alias checkmail='sudo less /var/mail/$(whoami)'
+alias deletemail='sudo rm /var/mail/$(whoami)'
+# zombie processes
+alias zombie="ps axo stat,ppid,pid,comm | grep -w defunct"

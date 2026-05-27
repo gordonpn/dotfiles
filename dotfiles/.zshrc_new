@@ -1,13 +1,3 @@
-# Dotfiles Path
-export DOTFILES_ROOT="$HOME/workspace/dotfiles"
-
-# OS Check
-if [[ "$(uname)" == "Darwin" ]]; then
-  IS_MAC=true
-elif [[ "$(uname)" == "Linux" ]]; then
-  IS_LINUX=true
-fi
-
 zsh_plugins=${ZDOTDIR:-~}/.zsh_plugins
 [[ -f ${zsh_plugins}.txt ]] || touch ${zsh_plugins}.txt
 
@@ -304,11 +294,6 @@ _git_bg_fetch() {
 
 add-zsh-hook chpwd _git_bg_fetch
 
-
-# Load organized legacy configurations
-for file in $DOTFILES_ROOT/dotfiles/.zsh/*.zsh; do
-  source "$file"
-done
 
 # Added by Antigravity CLI installer
 export PATH="/Users/gordonpn/.local/bin:$PATH"
