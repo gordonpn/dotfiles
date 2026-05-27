@@ -27,14 +27,24 @@ show = delta
 difftool = true
 
 [delta]
-dark = true
-navigate = true
-true-color = always
-syntax-theme = gruvbox-dark
-keep-plus-minus-markers = false
-diff-so-fancy = true
-hyperlinks = true
-side-by-side = true
+    features = kanagawa-dragon
+    dark = true
+    navigate = true
+    side-by-side = true
+    line-numbers = true
+    true-color = always
+    hyperlinks = true
+    keep-plus-minus-markers = false
+
+[delta "kanagawa-dragon"]
+    syntax-theme = Kanagawa
+    minus-style = red bold "#2a1f21"
+    minus-non-current-style = red bold "#2a1f21"
+    minus-emphasized-style = bold red "#432426"
+    plus-style = green bold "#1e2b22"
+    plus-non-current-style = green bold "#1e2b22"
+    plus-emphasized-style = bold green "#2b402d"
+    whitespace-error-style = "#c34043" reverse
 
 [delta "decorations"]
 commit-decoration-style = bold yellow box ul
