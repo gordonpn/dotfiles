@@ -47,6 +47,54 @@ source ${zsh_plugins}.zsh
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+# FZF Configuration
+if command -v fzf >/dev/null; then
+  # Use fd instead of find
+  export FZF_DEFAULT_COMMAND='fd --type f --strip-cwd-prefix --hidden --follow --exclude .git'
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+  export FZF_ALT_C_COMMAND='fd --type d --strip-cwd-prefix --hidden --follow --exclude .git'
+
+  # UI Improvements
+  export FZF_DEFAULT_OPTS="
+    --ansi
+    --height 40%
+    --layout reverse
+    --border sharp
+    --color=bg+:#222121,bg:#181616,spinner:#c8c093,hl:#c4746e \
+    --color=fg:#c8c093,header:#c8c093,info:#717c7c,pointer:#7aa89f \
+    --color=marker:#7aa89f,fg+:#dcd7ba,prompt:#7aa89f,hl+:#7aa89f
+    --prompt='❯ '
+    --pointer='▶'
+    --marker='✓'
+  "
+
+  # CTRL-T: File preview with bat
+  export FZF_CTRL_T_OPTS="
+    --preview 'bat -n --color=always --colors=\"ui:less\" --line-range :500 {}'
+    --bind 'ctrl-/:change-preview-window(down|hidden|)'
+    --bind 'ctrl-d:preview-page-down,ctrl-u:preview-page-up'
+  "
+
+  # CTRL-R: History search with sorting and keybinds
+  if [[ "$(uname)" == "Darwin" ]]; then
+    export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window down:3:hidden:wrap --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort' --header 'Press CTRL-Y to copy command'"
+  else
+    export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window down:3:hidden:wrap --bind 'ctrl-y:execute-silent(echo -n {2..} | xclip -sel clip)+abort' --header 'Press CTRL-Y to copy command'"
+  fi
+
+  # ALT-C: Directory preview with eza
+  export FZF_ALT_C_OPTS="--preview 'eza -T --color=always {} | head -200'"
+
+  # Advanced completions helper functions
+  _fzf_compgen_path() {
+    fd --hidden --follow --exclude ".git" . "$1"
+  }
+
+  _fzf_compgen_dir() {
+    fd --type d --hidden --follow --exclude ".git" . "$1"
+  }
+fi
+
 # LS_COLORS setup with caching for performance (inspired by local/.zshrc)
 if [[ ! -f ~/.ls_colors_cache ]]; then
   if command -v vivid >/dev/null; then
@@ -59,9 +107,25 @@ setopt MENU_COMPLETE
 zstyle ':omz:update' mode auto
 zstyle ':completion:*' menu no
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+zstyle ':fzf-tab:*' fzf-flags \
+  --height=35% \
+  --preview-window=right:60% \
+  --color='bg+:#222121,bg:#181616,spinner:#c8c093,hl:#c4746e' \
+  --color='fg:#c8c093,header:#c8c093,info:#717c7c,pointer:#7aa89f' \
+  --color='marker:#7aa89f,fg+:#dcd7ba,prompt:#7aa89f,hl+:#7aa89f' \
+  --bind='ctrl-d:preview-page-down,ctrl-u:preview-page-up'
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath'
-zstyle ':fzf-tab:complete:*:*' fzf-preview 'less ${(Q)realpath}'
-zstyle ':fzf-tab:*' fzf-flags --height=35% --preview-window=right:60%
+zstyle ':fzf-tab:complete:*:*' fzf-preview '
+  if [ -d $realpath ]; then
+    eza -1 --color=always $realpath
+  else
+    bat --color=always --line-range :500 $realpath 2>/dev/null || cat $realpath
+  fi'
+zstyle ':fzf-tab:complete:(-command-|-parameter-|-brace-parameter-|export|unset|alias):*' fzf-preview 'echo ${(P)word}'
+zstyle ':fzf-tab:complete:git-(add|diff|restore):*' fzf-preview 'git diff $word | delta'
+zstyle ':fzf-tab:complete:git-log:*' fzf-preview 'git log --color=always $word'
+zstyle ':fzf-tab:complete:git-show:*' fzf-preview 'git show --color=always $word | delta'
+zstyle ':fzf-tab:complete:git-checkout:*' fzf-preview 'git show --color=always $word | delta'
 zstyle ':completion:*' use-cache on
 zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/.zcompcache"
 
