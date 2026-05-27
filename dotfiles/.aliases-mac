@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# modern defaults
+alias cat="bat --paging=never"
+alias skl="sk --ansi -i -c 'grep -rI --color=always --line-number "{}" .'"
+alias gtop="pnpm dlx gtop"
+alias tldr="pnpm dlx tldr"
+alias btm="btm --color=default-light"
+alias glances="glances --theme-white"
+alias yless="jless --yaml"
+# Gatekeeper (for installing 3rd party apps)
+alias gatekeeperOff="sudo spctl --master-disable"
+alias gatekeeperOn="sudo spctl --master-enable"
+# sort LaunchPad
+alias sortlaunchpad="defaults write com.apple.dock ResetLaunchPad -bool true; killall Dock"
+# Clean up LaunchServices to remove duplicates in the “Open With” menu
+alias lscleanup="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user && killall Finder"
+# shell
+alias change='code $DOTFILES_ROOT'
+# Brew
+alias brews="brew list --formula -1"
+alias brewsc="brew list --cask -1"
+# GH
+alias ghrv="gh repo view --web"
+alias ghil="gh issue list"
+alias ghis="gh issue status"
+# Convenience
+alias jsontidy="pbpaste | jq '.'"
+alias sql-formatter="npx sql-formatter -u"
+alias o="open_command"
+alias cpd='copydir'
+alias cpf='copyfile'
+alias torrent='webtorrent download $(pbpaste) --iina'
+alias wakedev='wakeonlan 94:c6:91:12:c8:e2'
+alias restartwifi='sudo ifconfig en0 down && sudo ifconfig en0 up'
+# python
+alias avenv="source .venv/bin/activate"
+# themes
+alias ncdu="ncdu --color off"
+alias mmdc='npx -p @mermaid-js/mermaid-cli mmdc'

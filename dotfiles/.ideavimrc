@@ -1,0 +1,25 @@
+source ~/.vimrc
+
+set VimEverywhere
+set anyobject
+set argtextobj
+set classtextobj
+set commentary
+set easymotion
+set exchange
+set functextobj
+set functiontextobj
+set ideajoin
+set matchit
+set mini-ai
+set quickscope
+set sneak
+set surround
+set textobj-entire
+set textobj-indent
+set vim-paragraph-motion
+
+" nmap s <Action>(flash.search)
+" xmap s <Action>(flash.search)
+map <leader>s <Action>(flash.search)
+
