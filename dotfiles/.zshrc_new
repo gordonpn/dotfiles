@@ -1,4 +1,10 @@
 zsh_plugins=${ZDOTDIR:-~}/.zsh_plugins
+# Ensure ghostty's shell-integration loads in re-invoked shells (exec zsh, sudo -E zsh, etc.).
+# Without this, the ssh wrapper that auto-installs xterm-ghostty terminfo on remotes is lost.
+if [[ -n $GHOSTTY_RESOURCES_DIR ]]; then
+  source "$GHOSTTY_RESOURCES_DIR"/shell-integration/zsh/ghostty-integration
+fi
+
 [[ -f ${zsh_plugins}.txt ]] || touch ${zsh_plugins}.txt
 
 fpath=(${ZDOTDIR:-~}/.antidote/functions $fpath)
