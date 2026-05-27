@@ -71,7 +71,6 @@ if command -v fzf >/dev/null; then
   export FZF_DEFAULT_OPTS="
     --ansi
     --height 40%
-    --layout reverse
     --border sharp
     --color=bg+:#222121,bg:#181616,spinner:#c8c093,hl:#c4746e \
     --color=fg:#c8c093,header:#c8c093,info:#717c7c,pointer:#7aa89f \
