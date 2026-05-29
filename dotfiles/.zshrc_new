@@ -203,7 +203,7 @@ TRAPINT() {
 if [[ "$(uname)" == "Darwin" ]]; then
   source /Users/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
 elif [[ "$(uname)" == "Linux" ]]; then
-  source /home/gordonpn/dotfiles/dotfiles/.git-aliases
+  source /home/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
 fi
 
 # bat — config lives at ~/.config/bat/config (symlinked from .batconfig in dotfiles)
