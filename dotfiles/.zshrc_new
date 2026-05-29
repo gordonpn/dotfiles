@@ -22,6 +22,7 @@ SAVEHIST=$HISTSIZE
 # Zsh Options
 setopt EXTENDED_GLOB
 setopt GLOB_DOTS
+export COLORTERM="truecolor"
 setopt AUTO_CD
 setopt CORRECT
 setopt INTERACTIVE_COMMENTS
