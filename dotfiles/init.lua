@@ -626,6 +626,80 @@ local plugin_specs = {
     end
   },
 
+  -- TOGGLETERM: Managed terminal layers inside Neovim
+  {
+    "akinsho/toggleterm.nvim",
+    version = '*',
+    cond = not vim.g.vscode,
+    event = "VeryLazy",
+    opts = {
+      size = 20,
+      open_mapping = [[<C-\>]],
+      direction = 'float',
+      float_opts = { border = 'curved' }
+    }
+  },
+
+  -- NEOTEST: Interactive test runner framework
+  {
+    "nvim-neotest/neotest",
+    cond = not vim.g.vscode,
+    dependencies = {
+      "nvim-neotest/nvim-nio",
+      "nvim-lua/plenary.nvim",
+      "antoinemadec/FixCursorHold.nvim",
+      "nvim-treesitter/nvim-treesitter",
+      "nvim-neotest/neotest-go",
+      "rcarriga/neotest-python",
+      "haynes61/neotest-jest",
+    },
+    keys = {
+      { "<leader>tr", function() require("neotest").run.run() end, desc = "Run Nearest Test" },
+      { "<leader>tf", function() require("neotest").run.run(vim.fn.expand("%")) end, desc = "Run Current File Tests" },
+      { "<leader>ts", function() require("neotest").summary.toggle() end, desc = "Toggle Test Summary Tree" },
+    },
+    config = function()
+      require("neotest").setup({
+        adapters = {
+          require("neotest-go"),
+          require("neotest-python"),
+          require("haynes61/neotest-jest")({ jestConfigFile = "jest.config.ts" }),
+        }
+      })
+    end
+  },
+
+  -- DROPBAR: Interactive structural breadcrumbs
+  {
+    'Bekaboo/dropbar.nvim',
+    cond = not vim.g.vscode,
+    event = { "BufReadPost", "BufNewFile" },
+    opts = {}
+  },
+
+  -- NVIM-DAP: Debug Adapter Protocol infrastructure & UI panels
+  {
+    "rcarriga/nvim-dap-ui",
+    cond = not vim.g.vscode,
+    dependencies = { "mfussenegger/nvim-dap", "nvim-neotech/nvim-nio" },
+    keys = {
+      { "<leader>db", function() require("dap").toggle_breakpoint() end, desc = "Debug: Toggle Breakpoint" },
+      { "<leader>dc", function() require("dap").continue() end, desc = "Debug: Start / Continue" },
+      { "<leader>di", function() require("dap").step_into() end, desc = "Debug: Step Into" },
+      { "<leader>do", function() require("dap").step_over() end, desc = "Debug: Step Over" },
+      { "<leader>du", function() require("dapui").toggle() end, desc = "Debug: Toggle UI Panels" },
+    },
+    config = function()
+      local dap = require("dap")
+      local dapui = require("dapui")
+      dapui.setup()
+      dap.listeners.before.attach.dapui_config = function() dapui.open() end
+      dap.listeners.before.launch.dapui_config = function() dapui.open() end
+      dap.listeners.after.event_terminated.dapui_config = function() dapui.close() end
+      dap.listeners.after.event_exited.dapui_config = function() dapui.close() end
+    end
+  },
+
 }
 
 -- Optional: extend plugin specs with internal/local entries (not tracked in dotfiles)
