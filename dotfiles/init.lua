@@ -458,59 +458,19 @@ local plugin_specs = {
     dependencies = { "saghen/blink.cmp", "williamboman/mason.nvim", "williamboman/mason-lspconfig.nvim" },
     config = function()
       local ok_mason_lsp, mason_lspconfig = pcall(require, 'mason-lspconfig')
-
-      -- Prefer the new vim.lsp.config API when available to avoid deprecation warnings
-      local lspconfig
-      if vim.lsp and vim.lsp.config then
-        lspconfig = vim.lsp.config
-      else
-        lspconfig = (pcall(require, 'lspconfig') and require('lspconfig')) or {}
-      end
+      local ok_lspconfig, lspconfig = pcall(require, 'lspconfig')
+      if not ok_lspconfig then return end
 
       local blink = require("blink.cmp")
       local capabilities = blink.get_lsp_capabilities()
 
-      -- Preferred lspconfig server names. mason-lspconfig is already configured
-      -- via lazy opts above; this list is just for the manual handler loop below.
-      local servers = { "pyright", "ts_ls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
-      if vim.fn.executable("go") == 1 then table.insert(servers, "gopls") end
-
       if ok_mason_lsp then
-        -- Prefer the new vim.lsp.config API entirely to avoid requiring 'lspconfig' which emits deprecation warnings.
-        if type(mason_lspconfig.setup_handlers) == 'function' then
-          mason_lspconfig.setup_handlers({
-            -- default handler: use the lspconfig variable (vim.lsp.config when available)
-            function(server_name)
-              local srv = lspconfig[server_name]
-              if srv and type(srv.setup) == 'function' then
-                srv.setup({ capabilities = capabilities })
-              else
-                -- no compatible server entry found in vim.lsp.config; skip to avoid requiring 'lspconfig'
-                -- This keeps us free of the deprecation warning. If needed, users can install the legacy lspconfig provider.
-              end
-            end,
-          })
-        else
-          -- mason-lspconfig does not provide setup_handlers (older/newer API); fallback to manual setup using vim.lsp.config where possible
-          for _, server in ipairs(servers) do
-            local srv = lspconfig[server]
-            if srv and type(srv.setup) == 'function' then
-              srv.setup({ capabilities = capabilities })
-            end
-          end
-        end
-
-      else
-        -- Fallback: directly configure servers via the available lspconfig API (vim.lsp.config preferred)
-        for _, server in ipairs(servers) do
-          local srv = lspconfig[server]
-          if srv and type(srv.setup) == 'function' then
-            srv.setup({ capabilities = capabilities })
-          end
-        end
+        mason_lspconfig.setup_handlers({
+          function(server_name)
+            lspconfig[server_name].setup({ capabilities = capabilities })
+          end,
+        })
       end
-
-      -- NOTE: Java (jdtls) is handled separately below for enterprise scaling
     end,
   },
 
