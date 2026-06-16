@@ -729,16 +729,10 @@ else
     })
 
     -- Project Search & Navigation (Fzf-lua)
-    local ok_fzf, fzf = pcall(require, 'fzf-lua')
-    if ok_fzf then
-      map('n', '<leader><space>', function() fzf.files() end, { desc = "Find Project Files" })
-      map('n', '<leader>ff', function() fzf.live_grep() end, { desc = "Search Text Globally" })
-      map('n', '<leader>fb', function() fzf.buffers() end, { desc = "List Active Buffers" })
-      map('n', '<leader>fh', function() fzf.help_tags() end, { desc = "Search Documentation Help" })
-    else
-      -- fallback (if fzf-lua not available)
-      map('n', '<leader><space>', function() vim.cmd('echo "fzf-lua not available"') end, { desc = "Find Project Files (missing fzf)" })
-    end
+    map('n', '<leader><space>', function() require('fzf-lua').files() end, { desc = "Find Project Files" })
+    map('n', '<leader>ff', function() require('fzf-lua').live_grep() end, { desc = "Search Text Globally" })
+    map('n', '<leader>fb', function() require('fzf-lua').buffers() end, { desc = "List Active Buffers" })
+    map('n', '<leader>fh', function() require('fzf-lua').help_tags() end, { desc = "Search Documentation Help" })
 
     -- File System Workspace Navigation (Oil.nvim)
     map("n", "-", "<CMD>Oil<CR>", { desc = "Open Parent Directory Buffer" })
