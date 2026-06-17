@@ -82,7 +82,3 @@ export ZPWR_EXPAND_BRACKETED_PASTE=true
 
 # XDG Base Directory
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
-
-
-# Added by Antigravity CLI installer
-export PATH="/Users/gordonpn/.local/bin:$PATH"
