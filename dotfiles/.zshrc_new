@@ -265,7 +265,7 @@ alias ask="aichat -m deepseek-v4-flash"
 alias reason="llm -m deepseek-v4-pro"
 
 # The "Junior Developer" (Direct file editing)
-alias dev="aider --model deepseek/deepseek-v4-pro --architect"
+alias dev='aider --model deepseek/deepseek-v4-pro --editor-model deepseek/deepseek-chat --architect --reasoning-effort high --dark-mode --no-attribute-author --no-attribute-committer --no-attribute-commit-message-author --no-attribute-commit-message-committer --no-attribute-co-authored-by --cache-prompts --commit-prompt "write single concern atomic conventional commits"' 
 
 # The "Log Parser" (Unix piping)
 alias parse="mods --model deepseek-v4-flash"
