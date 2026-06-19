@@ -43,7 +43,7 @@ background = #181616
 # Interaction and Buffer Behavior
 # ---------------------------------------------------------------------
 # The maximum number of lines to keep in the scrollback buffer.
-scrollback-limit = 100000
+scrollback-limit = 1000000
 
 # Increase scroll sensitivity for trackpads (precision) and mouse wheels (discrete)
 mouse-scroll-multiplier = precision:2.0,discrete:3.0
