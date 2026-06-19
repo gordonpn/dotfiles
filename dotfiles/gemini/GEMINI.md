@@ -10,3 +10,9 @@
 ## Workflow & Research
 - **Holistic Review:** Before implementing changes, always read through existing Markdown files (`README.md`, etc.) and configuration files to understand the project's architecture and requirements.
 - **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux (like dotfiles), always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
+
+## Solution Validation
+- **Clarifying Questions:** Always ask clarifying questions before implementing. Do not assume you understand the full requirement without user confirmation.
+- **Problem Understanding:** Challenge assumptions about what the problem actually is. Ask: "Is this the root issue, or a symptom?" Distinguish between the presented problem and the underlying need.
+- **Solution Validation:** Before implementing, validate the proposed approach with the user. Ensure the solution directly addresses the root problem, not just a workaround.
+- **Trade-offs:** When multiple solutions exist, present options with their trade-offs and let the user decide which aligns best with their goals.
