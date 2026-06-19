@@ -649,7 +649,7 @@ local plugin_specs = {
       "nvim-treesitter/nvim-treesitter",
       "nvim-neotest/neotest-go",
       "rcarriga/neotest-python",
-      "haynes61/neotest-jest",
+      "haydenmeade/neotest-jest",
     },
     keys = {
       { "<leader>tr", function() require("neotest").run.run() end, desc = "Run Nearest Test" },
@@ -661,7 +661,7 @@ local plugin_specs = {
         adapters = {
           require("neotest-go"),
           require("neotest-python"),
-          require("haynes61/neotest-jest")({ jestConfigFile = "jest.config.ts" }),
+          require("neotest-jest")({ jestConfigFile = "jest.config.ts" }),
         }
       })
     end
@@ -679,7 +679,7 @@ local plugin_specs = {
   {
     "rcarriga/nvim-dap-ui",
     cond = not vim.g.vscode,
-    dependencies = { "mfussenegger/nvim-dap", "nvim-neotech/nvim-nio" },
+    dependencies = { "mfussenegger/nvim-dap", "nvim-neotest/nvim-nio" },
     keys = {
       { "<leader>db", function() require("dap").toggle_breakpoint() end, desc = "Debug: Toggle Breakpoint" },
       { "<leader>dc", function() require("dap").continue() end, desc = "Debug: Start / Continue" },
