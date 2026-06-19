@@ -16,3 +16,6 @@
 - **Problem Understanding:** Challenge assumptions about what the problem actually is. Ask: "Is this the root issue, or a symptom?" Distinguish between the presented problem and the underlying need.
 - **Solution Validation:** Before implementing, validate the proposed approach with the user. Ensure the solution directly addresses the root problem, not just a workaround.
 - **Trade-offs:** When multiple solutions exist, present options with their trade-offs and let the user decide which aligns best with their goals.
+
+## Documentation & Artifacts
+- **Repository Documentation:** Always write markdown and text artifacts into the repository under `/docs/` directory, not into temporary session folders. This keeps documentation discoverable and persistent with the code.
