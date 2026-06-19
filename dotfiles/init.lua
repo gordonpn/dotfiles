@@ -458,16 +458,13 @@ local plugin_specs = {
     dependencies = { "saghen/blink.cmp", "williamboman/mason.nvim", "williamboman/mason-lspconfig.nvim" },
     config = function()
       local ok_mason_lsp, mason_lspconfig = pcall(require, 'mason-lspconfig')
-      local ok_lspconfig, lspconfig = pcall(require, 'lspconfig')
-      if not ok_lspconfig then return end
+      if not ok_mason_lsp then return end
 
       local blink = require("blink.cmp")
       local capabilities = blink.get_lsp_capabilities()
 
-      if ok_mason_lsp then
-        for _, server_name in ipairs(mason_lspconfig.get_installed_servers()) do
-          lspconfig[server_name].setup({ capabilities = capabilities })
-        end
+      for _, server_name in ipairs(mason_lspconfig.get_installed_servers()) do
+        vim.lsp.config(server_name, { capabilities = capabilities })
       end
     end,
   },
