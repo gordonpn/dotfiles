@@ -249,7 +249,9 @@ alias treee='fd --type f --hidden --exclude .git | tree --fromfile'
 alias tree='tree -a -I ".git|node_modules|.venv"'
 alias gmi='gemini --skip-trust --approval-mode=yolo'
 alias agy='agy --continue --dangerously-skip-permissions'
-alias cpt='copilot --effort=xhigh --allow-all'
+alias cpt='copilot --effort=max --allow-all --enable-memory --mode=plan --model=auto'
+alias cld="claude --allow-dangerously-skip-permissions --continue --dangerously-skip-permissions --permission-mode=auto"
+alias cldn="claude --allow-dangerously-skip-permissions --dangerously-skip-permissions --permission-mode=auto"
 alias fullreboot='sudo reboot'
 if [[ "$(uname)" == "Darwin" ]]; then
   alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
@@ -265,7 +267,7 @@ alias ask="aichat -m deepseek-v4-flash"
 alias reason="llm -m deepseek-v4-pro"
 
 # The "Junior Developer" (Direct file editing)
-alias dev='aider --model deepseek/deepseek-v4-pro --editor-model deepseek/deepseek-chat --architect --reasoning-effort high --dark-mode --no-attribute-author --no-attribute-committer --no-attribute-commit-message-author --no-attribute-commit-message-committer --no-attribute-co-authored-by --cache-prompts --commit-prompt "write single concern atomic conventional commits"' 
+alias dev='aider --model deepseek/deepseek-v4-pro --editor-model deepseek/deepseek-chat --architect --reasoning-effort high --dark-mode --no-attribute-author --no-attribute-committer --no-attribute-commit-message-author --no-attribute-commit-message-committer --no-attribute-co-authored-by --cache-prompts --commit-prompt "write single concern atomic conventional commits" --auto-accept-architect --yes-always --no-check-model-accepts-settings' 
 
 # The "Log Parser" (Unix piping)
 alias parse="mods --model deepseek-v4-flash"
