@@ -27,11 +27,11 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="/usr/local/go/bin:$PATH"
 
-# Package Manager Configuration
 export PNPM_HOME="$HOME/.local/share/pnpm"
+# Appends both layouts safely; satisfies v11 on Ubuntu and v10 on macOS
 case ":$PATH:" in
-  *":$PNPM_HOME/bin:"*) ;;
-  *) export PATH="$PNPM_HOME/bin:$PATH" ;;
+  *":$PNPM_HOME/bin:$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH" ;;
 esac
 
 # Pager and Display Configuration
