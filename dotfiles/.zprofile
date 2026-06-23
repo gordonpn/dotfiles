@@ -82,3 +82,13 @@ export ZPWR_EXPAND_BRACKETED_PASTE=true
 
 # XDG Base Directory
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+
+export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+export ANTHROPIC_MODEL="deepseek-v4-pro[1m]"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="deepseek-v4-pro[1m]"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="deepseek-v4-flash"
+export CLAUDE_CODE_SUBAGENT_MODEL="deepseek-v4-flash"
+export CLAUDE_CODE_EFFORT_LEVEL="max"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    export ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -a "$USER" -s "deepseek_api_key" -w 2>/dev/null)
+fi
