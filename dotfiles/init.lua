@@ -295,6 +295,20 @@ local plugin_specs = {
   --  TERMINAL ONLY PLUGINS (Skip in VS Code)
   -- ===========================================================================
   
+  -- VIM-INDENTWISE: Move uniquely based on relative indentation levels
+  {
+    "jeetsukumaran/vim-indentwise",
+    cond = not vim.g.vscode,
+    keys = {
+      { "[-", "<Plug>(IndentWisePreviousLesserIndent)", mode = "n", desc = "Move to prev lesser indent" },
+      { "[+", "<Plug>(IndentWisePreviousGreaterIndent)", mode = "n", desc = "Move to prev greater indent" },
+      { "[=", "<Plug>(IndentWisePreviousEqualIndent)", mode = "n", desc = "Move to prev equal indent" },
+      { "]-", "<Plug>(IndentWiseNextLesserIndent)", mode = "n", desc = "Move to next lesser indent" },
+      { "]+", "<Plug>(IndentWiseNextGreaterIndent)", mode = "n", desc = "Move to next greater indent" },
+      { "]=", "<Plug>(IndentWiseNextEqualIndent)", mode = "n", desc = "Move to next equal indent" },
+    },
+  },
+
   -- COMMENTING
   {
     "echasnovski/mini.comment",
