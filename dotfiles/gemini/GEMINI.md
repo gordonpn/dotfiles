@@ -5,6 +5,7 @@
 - **Conventional Commits:** Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for all commit messages (e.g., `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `style:`, `test:`).
 - **Instruction Maintenance:** Always keep the project-specific `GEMINI.md` and global `~/.gemini/GEMINI.md` files updated with new patterns, preferences, or established workflows identified during the session.
 - **No Co-Authored-By:** Do not add `Co-Authored-By` lines to commit messages.
+- **No Emojis:** Do not use emojis in commit messages, code comments, or documentation.
 - **Conciseness:** Prefer commit messages that are clear and focused on the "why" rather than just the "what".
 
 ## Workflow & Research
