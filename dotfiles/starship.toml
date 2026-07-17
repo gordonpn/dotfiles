@@ -22,6 +22,9 @@ symbol = ""
 [lua]
 disabled = true
 
+[ruby]
+disabled = true
+
 [package]
 disabled = true
 
