@@ -162,8 +162,23 @@ zstyle ':completion:*' matcher-list \
 zshaddhistory() {
   setopt LOCAL_OPTIONS
   setopt EXTENDED_GLOB
-  print -sr -- "${1%%$'\n'##}"
+
+  local cmd="$1"
+
+  # 1. Flatten lines explicitly split with a backslash \
+  cmd="${cmd//\\$'\n'/ }"
+
+  # 2. Trim leading (left) and trailing (right) whitespace/newlines
+  cmd="${cmd##[[:space:]]#}"
+  cmd="${cmd%%[[:space:]]#}"
+
+  # If the command is completely empty after cleaning, drop it
+  [[ -z "$cmd" ]] && return 1
+
+  # 3. Save your clean command using your raw (-r) print setup
+  print -sr -- "$cmd"
   fc -p "$HISTFILE"
+  
   return 1
 }
 
