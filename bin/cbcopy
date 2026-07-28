@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Dynamic clipboard helper for Zellij across macOS, Linux (X11/Wayland), and SSH/OSC 52
+
+set -euo pipefail
+
+content=$(cat)
+
+if [[ -z "$content" ]]; then
+    exit 0
+fi
+
+copied=false
+
+# 1. macOS (pbcopy)
+if [[ "$(uname)" == "Darwin" ]] && command -v pbcopy >/dev/null 2>&1; then
+    printf "%s" "$content" | pbcopy
+    copied=true
+fi
+
+# 2. Wayland (wl-copy)
+if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v wl-copy >/dev/null 2>&1; then
+    printf "%s" "$content" | wl-copy
+    copied=true
+fi
+
+# 3. X11 (xclip or xsel)
+if [[ -n "${DISPLAY:-}" ]]; then
+    if command -v xclip >/dev/null 2>&1; then
+        printf "%s" "$content" | xclip -selection clipboard
+        copied=true
+    elif command -v xsel >/dev/null 2>&1; then
+        printf "%s" "$content" | xsel --clipboard --input
+        copied=true
+    fi
+fi
+
+# 4. SSH / Remote / OSC 52 Fallback (for terminal emulators like Ghostty, iTerm2, Alacritty, Kitty, WezTerm)
+encoded=$(printf "%s" "$content" | base64 | tr -d '\r\n')
+osc_sequence=$(printf "\033]52;c;%s\007" "$encoded")
+
+if [[ -n "${SSH_TTY:-}" || -n "${SSH_CLIENT:-}" || "$copied" == false ]]; then
+    if [[ -w /dev/tty ]]; then
+        printf "%s" "$osc_sequence" > /dev/tty 2>/dev/null || true
+    else
+        printf "%s" "$osc_sequence" || true
+    fi
+fi
+
+exit 0

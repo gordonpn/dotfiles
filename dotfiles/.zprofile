@@ -25,6 +25,7 @@ export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/workspace/dotfiles/bin:$PATH"
 export PATH="/usr/local/go/bin:$PATH"
 
 export PNPM_HOME="$HOME/.local/share/pnpm"

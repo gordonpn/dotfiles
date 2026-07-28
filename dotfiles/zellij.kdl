@@ -18,8 +18,8 @@ options {
     // --- Clipboard ---
     // Auto-copy text to system clipboard on mouse selection
     copy_on_select true
-    // Sync the copied text to a clipboard utility (macOS pbcopy; "xclip -selection clipboard" on Linux)
-    copy_command "pbcopy"
+    // Sync the copied text via dynamic clipboard wrapper (pbcopy / wl-copy / xclip / OSC 52)
+    copy_command "cbcopy"
 
     // --- Shell ---
     // Use zsh for new panes instead of /bin/sh
