@@ -5,6 +5,11 @@ if [[ -n $GHOSTTY_RESOURCES_DIR ]]; then
   source "$GHOSTTY_RESOURCES_DIR"/shell-integration/zsh/ghostty-integration
 fi
 
+# Ensure environment variables from .zprofile are available in interactive subshells
+if [[ -z "$ANTHROPIC_BASE_URL" && -f "${ZDOTDIR:-$HOME}/.zprofile" ]]; then
+  source "${ZDOTDIR:-$HOME}/.zprofile"
+fi
+
 [[ -f ${zsh_plugins}.txt ]] || touch ${zsh_plugins}.txt
 
 fpath=(${ZDOTDIR:-~}/.antidote/functions $fpath)
