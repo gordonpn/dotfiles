@@ -90,5 +90,14 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_SUBAGENT_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_EFFORT_LEVEL="max"
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    export ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -a "$USER" -s "deepseek_api_key" -w 2>/dev/null)
+    export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-$(security find-generic-password -a "$USER" -s "deepseek_api_key" -w 2>/dev/null)}"
+else
+    if [[ -z "$ANTHROPIC_AUTH_TOKEN" ]] && command -v secret-tool >/dev/null 2>&1; then
+        export ANTHROPIC_AUTH_TOKEN=$(secret-tool lookup service deepseek_api_key 2>/dev/null)
+    fi
+    if [[ -z "$ANTHROPIC_AUTH_TOKEN" && -f "$HOME/.config/deepseek/api_key" ]]; then
+        export ANTHROPIC_AUTH_TOKEN=$(< "$HOME/.config/deepseek/api_key")
+    elif [[ -z "$ANTHROPIC_AUTH_TOKEN" && -f "$HOME/.deepseek_api_key" ]]; then
+        export ANTHROPIC_AUTH_TOKEN=$(< "$HOME/.deepseek_api_key")
+    fi
 fi
