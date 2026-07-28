@@ -259,6 +259,12 @@ zj() {
         command zellij
     fi
 }
+
+# Auto-attach to (or create) 'polite-accordion' Zellij session on SSH logins
+if [[ -z "$ZELLIJ" ]] && [[ -n "$SSH_TTY" ]] && (( $+commands[zellij] )); then
+    exec zellij attach -c polite-accordion
+fi
+
 alias vi='nvim'
 alias vim='nvim'
 alias v='nvim'
