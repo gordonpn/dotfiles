@@ -6,6 +6,9 @@ disabled = true
 [java]
 disabled = true
 
+[terraform]
+disabled = true
+
 [gradle]
 disabled = true
 
