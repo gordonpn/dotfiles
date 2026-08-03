@@ -3,7 +3,7 @@
 ## Engineering Standards
 - **Atomic Commits:** Always create small, atomic, single-concern commits as you work. Do not bundle unrelated changes into a single commit.
 - **Conventional Commits:** Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for all commit messages (e.g., `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `style:`, `test:`).
-- **Instruction Maintenance:** Always keep the project-specific `AGENTS.md` and global `~/.gemini/GEMINI.md` files updated with new patterns, preferences, or established workflows identified during the session.
+- **Instruction Maintenance:** Always keep the project-specific `GEMINI.md`/`AGENTS.md` and global `~/.gemini/GEMINI.md` files updated with new patterns, preferences, or established workflows identified during the session.
 - **No Co-Authored-By:** Do not add `Co-Authored-By` lines to commit messages.
 - **No Emojis:** Do not use emojis in commit messages, code comments, or documentation.
 - **Conciseness:** Prefer commit messages that are clear and focused on the "why" rather than just the "what".
@@ -20,3 +20,7 @@
 
 ## Documentation & Artifacts
 - **Repository Documentation:** Always write markdown and text artifacts into the repository under `/docs/` directory, not into temporary session folders. This keeps documentation discoverable and persistent with the code.
+
+## Infrastructure as Code (IaC)
+- **Avoid Hardcoding Credentials:** Use Terraform variables rather than placeholder strings for sensitive values (e.g. `cloudflare_account_id`).
+- **Git Safety:** Exclude local Terraform directories (`.terraform/`), workspace locks, and state files (`*.tfstate`, `*.tfstate.backup`) in `.gitignore`.

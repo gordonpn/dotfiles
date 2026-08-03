@@ -1,6 +1,6 @@
 # Dotfiles Project Instructions
 
-These instructions apply specifically to this repository. Global engineering standards are managed in the global `AGENTS.md` (which is symlinked to `dotfiles/gemini/GEMINI.md`).
+These instructions apply specifically to this repository. Global engineering standards are managed in the global `AGENTS.md` (which is symlinked to `dotfiles/gemini/GEMINI.md` or `dotfiles/gemini/AGENTS.md`).
 
 ## Repo-Specific Context
 - **Shell Configuration:** This repository contains the source of truth for shell exports, aliases, and setup scripts for both macOS and Ubuntu systems.
