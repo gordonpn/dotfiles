@@ -319,7 +319,9 @@ fi
 
 # This forces zoxide to intercept the 'cd' command entirely
 eval "$(zoxide init zsh --cmd cd)"
-eval "$(starship init zsh)"
+# starship is initialized by starship-ftl (see .zsh_plugins.txt), which draws
+# the prompt up front and then loads starship behind it. Initializing it again
+# here would re-register starship's precmd hooks and reset PS1.
 eval "$(npm completion)"
 
 # Background-fetch the current git repo on cd (rate-limited per repo).
