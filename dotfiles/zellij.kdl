@@ -23,10 +23,11 @@ options {
 
     // --- Shell ---
     // Use zsh for new panes instead of /bin/sh. Absolute path on purpose: a bare
-    // "zsh" is resolved through PATH, and on the cloud desktop a Brazil runtime
-    // bin dir sits early in PATH shipping a relocated zsh whose module/function
-    // paths point at a build staging dir, so panes came up with no fpath, no
-    // modules and no prompt. /bin/zsh is the working system zsh on both hosts.
+    // "zsh" is resolved through PATH, and on the cloud desktop
+    // /apollo/env/envImprovement/bin sits ahead of /usr/bin and ships a
+    // relocated zsh 5.9 whose module and function paths point at a build
+    // staging dir, so panes came up with no fpath, no modules and no prompt.
+    // /bin/zsh is the working system zsh on both hosts.
     default_shell "/bin/zsh"
 
     // --- Persistence ---
