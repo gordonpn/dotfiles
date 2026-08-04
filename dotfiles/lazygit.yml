@@ -8,3 +8,17 @@ git:
 gui:
   mainPanelSplitMode: "flexible"
   sideBySideView: auto
+  theme:
+    selectedLineBgColor:
+      - "#2D4F67"
+    selectedRangeBgColor:
+      - "#223249"
+    defaultFgColor:
+      - "#DCD7BA"
+    activeBorderColor:
+      - "#8EA4A2"
+      - bold
+    inactiveBorderColor:
+      - "#2A2A37"
+    optionsTextColor:
+      - "#7E9CD8"
