@@ -57,3 +57,12 @@ min_time = 0
 [directory]
 truncation_length = 0
 truncate_to_repo = false
+
+# Transient prompt used by starship-ftl (`ftl-transient on`): finished commands
+# collapse to just the prompt character, so scrollback reads as a list of
+# commands. Using $character rather than a literal keeps the success/failure
+# colouring of the real prompt (green on success, red on failure).
+# Keep [profiles] last — it is a TOML table, so any top-level key placed after
+# it would be parsed as part of it.
+[profiles]
+transient = "$character"

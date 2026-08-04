@@ -2,7 +2,9 @@
 # Draws the starship prompt before the rest of this bundle and .zshrc load,
 # then swaps in the real one. `post:` runs the starship init, which is why
 # .zshrc no longer calls `eval "$(starship init zsh)"` itself.
-mattmc3/starship-ftl post:"ftl-prompt starship"
+# `ftl-transient on` collapses finished commands to the `transient` profile
+# defined in starship.toml.
+mattmc3/starship-ftl post:"ftl-prompt starship; ftl-transient on"
 
 # OMZ dependency glue (recommended if using ohmyzsh/ohmyzsh path:...)
 getantidote/use-omz
