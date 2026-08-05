@@ -31,8 +31,8 @@ hlissner/zsh-autopair kind:defer
 # Autosuggestions is async by default but deferring init helps the first draw
 zsh-users/zsh-autosuggestions kind:defer
 
-# Fast Syntax Highlighting is already optimized, but deferring ensures prompt is instant
-zdharma-continuum/fast-syntax-highlighting kind:defer
+# Fast Syntax Highlighting
+zdharma-continuum/fast-syntax-highlighting
 
 # 4. Interactive Tools (Lazy Load)
 # Use 'zsh-bd' only when you type 'bd'
