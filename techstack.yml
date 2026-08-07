@@ -1,0 +1,103 @@
+repo_name: gordonpn/dotfiles
+report_id: 3b0979d02c69f54cc81aca36a1f17224
+version: 0.1
+repo_type: Public
+timestamp: '2024-02-29T18:01:59+00:00'
+requested_by: gordonpn
+provider: github
+branch: master
+detected_tools_count: 8
+tools:
+- name: Python
+  description: A clear and powerful object-oriented programming language, comparable
+    to Perl, Ruby, Scheme, or Java.
+  website_url: https://www.python.org
+  open_source: true
+  hosted_saas: false
+  category: Languages & Frameworks
+  sub_category: Languages
+  image_url: https://img.stackshare.io/service/993/pUBY5pVj.png
+  detection_source_url: https://github.com/gordonpn/dotfiles/blob/master/dotfiles/.requirements.txt
+  detection_source: dotfiles/.requirements.txt
+  last_updated_by: Gordon Pham-Nguyen
+  last_updated_on: 2021-03-01 19:42:00.000000000 Z
+- name: Ruby
+  description: A dynamic, interpreted, open source programming language with a focus
+    on simplicity and productivity
+  website_url: https://www.ruby-lang.org
+  open_source: true
+  hosted_saas: false
+  category: Languages & Frameworks
+  sub_category: Languages
+  image_url: https://img.stackshare.io/service/989/ruby.png
+  detection_source_url: https://github.com/gordonpn/dotfiles
+  detection_source: Repo Metadata
+- name: Git
+  description: Fast, scalable, distributed revision control system
+  website_url: http://git-scm.com/
+  open_source: true
+  hosted_saas: false
+  category: Build, Test, Deploy
+  sub_category: Version Control System
+  image_url: https://img.stackshare.io/service/1046/git.png
+  detection_source_url: https://github.com/gordonpn/dotfiles
+  detection_source: Repo Metadata
+- name: PyPI
+  description: A repository of software for the Python programming language
+  website_url: https://pypi.org/
+  open_source: false
+  hosted_saas: false
+  category: Build, Test, Deploy
+  sub_category: Hosted Package Repository
+  image_url: https://img.stackshare.io/service/12572/-RIWgodF_400x400.jpg
+  detection_source_url: https://github.com/gordonpn/dotfiles/blob/master/dotfiles/.requirements.txt
+  detection_source: dotfiles/.requirements.txt
+  last_updated_by: Gordon Pham-Nguyen
+  last_updated_on: 2021-03-01 19:42:00.000000000 Z
+- name: Pylint
+  description: Source-code, bug and quality checker for the Python programming language
+  website_url: https://www.pylint.org/
+  license: GPL-2.0
+  open_source: true
+  hosted_saas: false
+  category: Build, Test, Deploy
+  sub_category: Code Review
+  image_url: https://img.stackshare.io/service/4837/py.jpg
+  detection_source_url: https://github.com/gordonpn/dotfiles/blob/master/dotfiles/.requirements.txt
+  detection_source: dotfiles/.requirements.txt
+  last_updated_by: Gordon Pham-Nguyen
+  last_updated_on: 2021-03-01 19:42:00.000000000 Z
+- name: flake8
+  description: Tool for style guide enforcement
+  website_url: https://github.com/PyCQA/flake8
+  open_source: true
+  hosted_saas: false
+  category: Build, Test, Deploy
+  sub_category: Code Review
+  image_url: https://img.stackshare.io/service/4838/default_c37162891c64eca7fafe782d9c191e409aae1e93.png
+  detection_source_url: https://github.com/gordonpn/dotfiles/blob/master/dotfiles/.requirements.txt
+  detection_source: dotfiles/.requirements.txt
+  last_updated_by: Gordon Pham-Nguyen
+  last_updated_on: 2021-03-01 19:42:00.000000000 Z
+- name: Shell
+  description: A shell is a text-based terminal, used for manipulating programs and
+    files. Shell scripts typically manage program execution.
+  website_url: https://en.wikipedia.org/wiki/Shell_script
+  open_source: false
+  hosted_saas: false
+  category: Languages & Frameworks
+  sub_category: Languages
+  image_url: https://img.stackshare.io/service/4631/default_c2062d40130562bdc836c13dbca02d318205a962.png
+  detection_source_url: https://github.com/gordonpn/dotfiles
+  detection_source: Repo Metadata
+- name: mypy
+  description: Developers of mypy, a Python variant with seamless dynamic and static
+    typing
+  website_url: http://mypy-lang.org/
+  open_source: false
+  hosted_saas: false
+  image_url: https://img.stackshare.io/service/7350/eaca159133a3901e24ddb407d1235c25_normal.png
+  detection_source_url: https://github.com/gordonpn/dotfiles/blob/master/dotfiles/.requirements.txt
+  detection_source: dotfiles/.requirements.txt
+  last_updated_by: Gordon Pham-Nguyen
+  last_updated_on: 2021-03-01 19:42:00.000000000 Z
