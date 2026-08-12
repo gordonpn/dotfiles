@@ -1,15 +1,3 @@
-# -------- instant prompt (must stay first) --------
-# Draws the starship prompt before the rest of this bundle and .zshrc load,
-# then swaps in the real one. `post:` runs the starship init, which is why
-# .zshrc no longer calls `eval "$(starship init zsh)"` itself.
-#
-# ftl-transient collapses finished commands to the `transient` profile in
-# starship.toml. It needs zsh 5.9+: it calls `zle widget -f nolast` when another
-# plugin already owns zle-line-finish (fast-syntax-highlighting does), and that
-# form was only added in 5.9. On 5.8.1 and older it errors after every command
-# with `unknown option: f`, so the guard skips it there.
-mattmc3/starship-ftl post:"ftl-prompt starship; autoload -Uz is-at-least; is-at-least 5.9 && ftl-transient on"
-
 # OMZ dependency glue (recommended if using ohmyzsh/ohmyzsh path:...)
 getantidote/use-omz
 
