@@ -1,0 +1,168 @@
+# Shared git configuration for every machine (personal Mac, work Mac, cloud desktop).
+#
+# Included from each machine's ~/.gitconfig via:
+#     [include]
+#         path = ~/.gitconfig-common
+#
+# ~/.gitconfig-common is a symlink to this file. The include path is deliberately
+# absolute (~/…) rather than relative: a relative include resolves against the
+# directory of the *symlink*, not its target, which silently breaks.
+#
+# Machine-specific settings do NOT belong here — keep them in the per-machine
+# .gitconfig: user.email, credential.helper, and the includeIf gitdir rules.
+#
+# Requires on PATH: delta, bat (for the Kanagawa syntax theme), difft, nvim.
+# The Kanagawa theme must be installed for delta to resolve syntax-theme:
+#     mkdir -p ~/.config/bat/themes
+#     ln -sf <repo>/dotfiles/bat/themes/Kanagawa.tmTheme ~/.config/bat/themes/
+#     bat cache --build
+
+[color]
+ui = true
+
+[color "diff"]
+whitespace = red reverse
+
+[core]
+attributesfile = ~/.gitattributes
+autocrlf = input
+editor = nvim
+eol = lf
+excludesfile = ~/.gitignore
+pager = delta --paging=auto
+safecrlf = true
+
+[pager]
+diff = delta
+log = delta
+reflog = delta
+show = delta
+difftool = true
+
+[delta]
+    features = kanagawa-dragon
+    dark = true
+    navigate = true
+    side-by-side = true
+    line-numbers = true
+    true-color = always
+    hyperlinks = true
+    keep-plus-minus-markers = false
+
+[delta "kanagawa-dragon"]
+    syntax-theme = Kanagawa
+    minus-style = red bold "#2a1f21"
+    minus-non-current-style = red bold "#2a1f21"
+    minus-emphasized-style = bold red "#432426"
+    plus-style = green bold "#1e2b22"
+    plus-non-current-style = green bold "#1e2b22"
+    plus-emphasized-style = bold green "#2b402d"
+    whitespace-error-style = "#c34043" reverse
+
+[delta "decorations"]
+commit-decoration-style = bold yellow box ul
+file-style = bold yellow ul
+file-decoration-style = none
+hunk-header-decoration-style = yellow box
+
+[interactive]
+diffFilter = delta --color-only
+
+[diff]
+algorithm = histogram
+colorMoved = zebra
+colorMovedWS = allow-indentation-change
+mnemonicPrefix = true
+renames = true
+context = 10
+indentHeuristic = true
+wsErrorHighlight = all
+tool = difftastic
+
+[difftool]
+prompt = false
+
+[difftool "difftastic"]
+cmd = difft "$LOCAL" "$REMOTE"
+
+[diff-so-fancy]
+changeHunkIndicators = true
+markEmptyLines = false
+rulerWidth = 80
+stripLeadingSymbols = true
+
+[merge]
+conflictStyle = zdiff3
+log = true
+tool = nvimdiff
+
+[mergetool]
+prompt = false
+keepBackup = false
+
+[pull]
+rebase = true
+ff = only
+
+[rebase]
+autoStash = true
+autosquash = true
+updateRefs = true
+
+[rerere]
+enabled = true
+autoUpdate = true
+
+[fetch]
+prune = true
+pruneTags = true
+all = true
+
+[push]
+autoSetupRemote = true
+default = simple
+followTags = true
+
+[branch]
+autoSetupMerge = always
+sort = -committerdate
+
+[commit]
+cleanup = strip
+verbose = true
+
+[status]
+showUntrackedFiles = all
+
+[log]
+date = iso
+
+[format]
+pretty = fuller
+
+[tag]
+sort = version:refname
+
+[apply]
+whitespace = fix
+
+[init]
+defaultBranch = main
+
+[help]
+autocorrect = prompt
+
+[url "https://"]
+insteadOf = git://
+
+[hub]
+protocol = https
+
+[filter "lfs"]
+clean = git-lfs clean -- %f
+smudge = git-lfs smudge -- %f
+process = git-lfs filter-process
+required = true
+
+[alias]
+dag = log --graph --format='format:%C(yellow)%h%C(reset) %C(blue)\"%an\" <%ae>%C(reset) %C(magenta)%cr%C(reset)%C(auto)%d%C(reset)%n%s' --date-order
