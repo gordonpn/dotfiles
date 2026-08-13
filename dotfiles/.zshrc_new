@@ -228,7 +228,6 @@ fi
 
 # bat — config lives at ~/.config/bat/config (symlinked from .batconfig in dotfiles)
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
-export BAT_THEME="gruvbox-dark"
 
 # Command Aliases
 alias ls='eza -lah --group-directories-first --icons=always'
