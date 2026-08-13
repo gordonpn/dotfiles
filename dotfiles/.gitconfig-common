@@ -52,11 +52,11 @@ difftool = true
 [delta "kanagawa-dragon"]
     syntax-theme = Kanagawa
     minus-style = red bold "#2a1f21"
-    minus-non-current-style = red bold "#2a1f21"
-    minus-emphasized-style = bold red "#432426"
+    minus-non-emph-style = red bold "#2a1f21"
+    minus-emph-style = bold red "#432426"
     plus-style = green bold "#1e2b22"
-    plus-non-current-style = green bold "#1e2b22"
-    plus-emphasized-style = bold green "#2b402d"
+    plus-non-emph-style = green bold "#1e2b22"
+    plus-emph-style = bold green "#2b402d"
     whitespace-error-style = "#c34043" reverse
 
 [delta "decorations"]
