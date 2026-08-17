@@ -22,8 +22,8 @@ hlissner/zsh-autopair kind:defer
 # Autosuggestions is async by default but deferring init helps the first draw
 zsh-users/zsh-autosuggestions kind:defer
 
-# Fast Syntax Highlighting
-zdharma-continuum/fast-syntax-highlighting
+# Syntax highlighting is handled by zsh-patina (a Rust daemon activated in
+# .zshrc), not by a bundled plugin.
 
 # 4. Interactive Tools (Lazy Load)
 # Use 'zsh-bd' only when you type 'bd'

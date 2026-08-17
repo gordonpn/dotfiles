@@ -349,3 +349,9 @@ add-zsh-hook chpwd _git_bg_fetch
 
 # Added by Antigravity CLI installer
 export PATH="/Users/gordonpn/.local/bin:$PATH"
+
+# Syntax highlighting via zsh-patina (Rust daemon, replaces
+# fast-syntax-highlighting). Must be activated last so it hooks ZLE after
+# every other plugin. Guarded because this config is shared with hosts where
+# patina isn't installed — it needs zsh >= 5.9.
+(( $+commands[zsh-patina] )) && eval "$(zsh-patina activate)"
