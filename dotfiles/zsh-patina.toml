@@ -1,0 +1,14 @@
+# zsh-patina configuration
+# Symlinked to ~/.config/zsh-patina/config.toml
+# Reference: https://github.com/michel-kraemer/zsh-patina#configuration
+#
+# Restart the daemon after editing: zsh-patina restart
+
+[highlighting]
+# kanagawa to match the zellij kanagawa-dragon theme
+theme = "kanagawa"
+
+# Dynamically highlight callables (missing commands turn red) and paths
+# (existing files/dirs are underlined). "complete" only highlights a path once
+# it has been typed in full; "partial" also highlights prefixes.
+dynamic = { callables = true, paths = "complete" }
