@@ -350,6 +350,18 @@ add-zsh-hook chpwd _git_bg_fetch
 # Added by Antigravity CLI installer
 export PATH="/Users/gordonpn/.local/bin:$PATH"
 
+# carapace: multi-shell completion engine, fills in commands that ship no zsh
+# completion of their own (docker, kubectl, curl, tar, ...).
+# CARAPACE_EXCLUDES keeps the completions that beat carapace's generic ones:
+# brew site-functions (bat eza fd gh rg zoxide), hand-written ~/.zfunc entries
+# (lazygit starship), `npm completion`, and zsh's own _git and _ssh, which
+# understand git aliases and ssh config Include directives respectively.
+# Must run after compinit, which the antidote bundle handles.
+if (( $+commands[carapace] )); then
+  export CARAPACE_EXCLUDES='bat,eza,fd,gh,git,lazygit,npm,rg,ssh,starship,zoxide'
+  source <(carapace _carapace zsh)
+fi
+
 # Syntax highlighting via zsh-patina (Rust daemon, replaces
 # fast-syntax-highlighting). Must be activated last so it hooks ZLE after
 # every other plugin. Guarded because this config is shared with hosts where
