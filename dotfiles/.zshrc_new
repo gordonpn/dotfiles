@@ -91,6 +91,8 @@ if command -v fzf >/dev/null; then
     --preview 'bat -n --color=always --colors=\"ui:less\" --line-range :500 {}'
     --bind 'ctrl-/:change-preview-window(down|hidden|)'
     --bind 'ctrl-d:preview-page-down,ctrl-u:preview-page-up'
+    --multi
+    --bind 'ctrl-o:execute(nvim {+})+abort'
   "
 
   # CTRL-R: History search with sorting and keybinds
