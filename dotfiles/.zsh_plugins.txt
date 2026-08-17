@@ -30,7 +30,8 @@ zdharma-continuum/fast-syntax-highlighting
 Tarrasch/zsh-bd kind:defer
 
 # 5. History Search (Must load AFTER syntax highlighting to avoid conflicts)
-zsh-users/zsh-history-substring-search kind:defer
+# Unused — no key bindings wired up; arrow keys are bound to fzf-history-widget
+#zsh-users/zsh-history-substring-search kind:defer
 
 # 6. FZF Tab (Heavy, so defer it)
 Aloxaf/fzf-tab kind:defer
