@@ -95,9 +95,9 @@ if command -v fzf >/dev/null; then
 
   # CTRL-R: History search with sorting and keybinds
   if [[ "$(uname)" == "Darwin" ]]; then
-    export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window down:3:hidden:wrap --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort' --header 'Press CTRL-Y to copy command'"
+    export FZF_CTRL_R_OPTS="--scheme=history --preview 'echo {}' --preview-window down:3:hidden:wrap --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort' --header 'Press CTRL-Y to copy command'"
   else
-    export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window down:3:hidden:wrap --bind 'ctrl-y:execute-silent(echo -n {2..} | xclip -sel clip)+abort' --header 'Press CTRL-Y to copy command'"
+    export FZF_CTRL_R_OPTS="--scheme=history --preview 'echo {}' --preview-window down:3:hidden:wrap --bind 'ctrl-y:execute-silent(echo -n {2..} | xclip -sel clip)+abort' --header 'Press CTRL-Y to copy command'"
   fi
 
   # ALT-C: Directory preview with eza
