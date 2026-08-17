@@ -231,6 +231,9 @@ fi
 # bat — config lives at ~/.config/bat/config (symlinked from .batconfig in dotfiles)
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 
+# Suppress docker's promotional hints on every command
+export DOCKER_CLI_HINTS=false
+
 # Command Aliases
 alias ls='eza -lah --group-directories-first --icons=always'
 compdef ls=eza
