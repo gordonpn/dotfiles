@@ -33,6 +33,9 @@ hlissner/zsh-autopair kind:defer
 # Autosuggestions is async by default but deferring init helps the first draw
 zsh-users/zsh-autosuggestions kind:defer
 
+# Multiline commands without a PS2 continuation prompt.
+romkatv/zsh-no-ps2
+
 # Syntax highlighting is handled by zsh-patina (a Rust daemon activated in
 # .zshrc), not by a bundled plugin.
 
