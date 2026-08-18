@@ -13,6 +13,10 @@ ohmyzsh/ohmyzsh path:lib/key-bindings.zsh
 greymd/docker-zsh-completion kind:fpath
 $HOME/.zsh/plugins/uv-completions kind:fpath
 
+# Runs compinit, deferred to a post-.zshrc hook so starship-ftl draws first.
+# Wraps compdef in a queue, so plugins loaded later can still register.
+mattmc3/zephyr path:plugins/completion
+
 # Only ever raises HISTSIZE/SAVEHIST, so the values set in .zshrc survive.
 mattmc3/zephyr path:plugins/history
 
