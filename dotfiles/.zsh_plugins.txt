@@ -20,6 +20,9 @@ mattmc3/zephyr path:plugins/completion
 # Only ever raises HISTSIZE/SAVEHIST, so the values set in .zshrc survive.
 mattmc3/zephyr path:plugins/history
 
+# Autoloaded macOS helpers: trash, ofd, pfd, cdf, peek, rmdsstore, flushdns.
+mattmc3/zephyr path:plugins/macos
+
 # 2. Core Functionality (Load immediately)
 MenkeTechnologies/zsh-expand
 
