@@ -59,6 +59,10 @@ fpath=(~/.zfunc $fpath)
 # compinit is owned by mattmc3/zephyr path:plugins/completion, which defers it to
 # a post-.zshrc hook so the prompt draws before paying for it.
 
+# Cache the compinit dumpfile. Invalidated on an fpath change or when any
+# completion directory is touched, so a new tool is still picked up.
+zstyle ':zephyr:plugin:completion' use-cache yes
+
 source ${zsh_plugins}.zsh
 
 # zephyr's history plugin sets NO_share_history; we want it on.
