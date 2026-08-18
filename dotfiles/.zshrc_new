@@ -378,6 +378,13 @@ sedi() {
   sed --version &>/dev/null && sed -i -- "$@" || sed -i "" "$@"
 }
 
+# mkdir -p plus cd in one step. Extracted from OMZ lib/functions.zsh rather than
+# loading the whole lib, which also brings upgrade_oh_my_zsh and zsh_stats that
+# mean nothing under antidote. OMZ's takeurl/takegit variants are left out.
+take() {
+  mkdir -p -- "$@" && cd -- "${@[-1]}"
+}
+
 # Syntax highlighting via zsh-patina (Rust daemon, replaces
 # fast-syntax-highlighting). Must be activated last so it hooks ZLE after
 # every other plugin. Guarded because this config is shared with hosts where
