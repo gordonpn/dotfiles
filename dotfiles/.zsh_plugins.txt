@@ -13,6 +13,9 @@ ohmyzsh/ohmyzsh path:lib/key-bindings.zsh
 greymd/docker-zsh-completion kind:fpath
 $HOME/.zsh/plugins/uv-completions kind:fpath
 
+# Only ever raises HISTSIZE/SAVEHIST, so the values set in .zshrc survive.
+mattmc3/zephyr path:plugins/history
+
 # 2. Core Functionality (Load immediately)
 MenkeTechnologies/zsh-expand
 

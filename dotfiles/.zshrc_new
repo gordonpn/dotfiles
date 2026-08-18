@@ -20,7 +20,9 @@ if [[ ! ${zsh_plugins}.zsh -nt ${zsh_plugins}.txt ]]; then
 fi
 
 # History Configuration
-HISTFILE=~/.zsh_history
+# zephyr's history plugin always assigns HISTFILE, so pin it with a zstyle
+# instead of assigning here. Keeps the existing history file.
+zstyle ':zephyr:plugin:history' histfile "$HOME/.zsh_history"
 HISTSIZE=10000000
 SAVEHIST=$HISTSIZE
 
@@ -63,6 +65,9 @@ else
 fi
 
 source ${zsh_plugins}.zsh
+
+# zephyr's history plugin sets NO_share_history; we want it on.
+setopt SHARE_HISTORY
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
