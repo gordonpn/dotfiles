@@ -32,6 +32,9 @@ ohmyzsh/ohmyzsh path:plugins/colored-man-pages
 # restores it after the next command. ^Z was previously unbound.
 ohmyzsh/ohmyzsh path:plugins/fancy-ctrl-z
 
+# Esc-Esc prefixes the current line with sudo.
+ohmyzsh/ohmyzsh path:plugins/sudo
+
 # 3. Deferred Plugins (Load after prompt is visible)
 hlissner/zsh-autopair kind:defer
 
