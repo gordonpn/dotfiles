@@ -28,6 +28,10 @@ mattmc3/zephyr path:plugins/macos
 MenkeTechnologies/zsh-expand
 ohmyzsh/ohmyzsh path:plugins/colored-man-pages
 
+# Ctrl-Z on an empty line resumes the last job, otherwise stashes the line and
+# restores it after the next command. ^Z was previously unbound.
+ohmyzsh/ohmyzsh path:plugins/fancy-ctrl-z
+
 # 3. Deferred Plugins (Load after prompt is visible)
 hlissner/zsh-autopair kind:defer
 
