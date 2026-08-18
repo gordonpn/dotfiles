@@ -371,6 +371,13 @@ if (( $+commands[carapace] )); then
   source <(carapace _carapace zsh)
 fi
 
+# Cross-platform `sed -i`. GNU sed wants no suffix arg, BSD sed requires one, so
+# ask which is installed. Matters here because GNU coreutils on PATH makes the
+# answer machine-dependent. Lifted from mattmc3/zephyr plugins/utility.
+sedi() {
+  sed --version &>/dev/null && sed -i -- "$@" || sed -i "" "$@"
+}
+
 # Syntax highlighting via zsh-patina (Rust daemon, replaces
 # fast-syntax-highlighting). Must be activated last so it hooks ZLE after
 # every other plugin. Guarded because this config is shared with hosts where
