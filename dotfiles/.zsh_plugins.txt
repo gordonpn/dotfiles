@@ -26,6 +26,7 @@ mattmc3/zephyr path:plugins/macos
 
 # 2. Core Functionality (Load immediately)
 MenkeTechnologies/zsh-expand
+ohmyzsh/ohmyzsh path:plugins/colored-man-pages
 
 # 3. Deferred Plugins (Load after prompt is visible)
 hlissner/zsh-autopair kind:defer
