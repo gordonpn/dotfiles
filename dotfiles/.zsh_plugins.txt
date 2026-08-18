@@ -10,6 +10,7 @@ ohmyzsh/ohmyzsh path:lib/directories.zsh
 ohmyzsh/ohmyzsh path:lib/key-bindings.zsh
 
 # 1. Completions First (Blocking but fast if static)
+zsh-users/zsh-completions kind:fpath path:src
 greymd/docker-zsh-completion kind:fpath
 $HOME/.zsh/plugins/uv-completions kind:fpath
 
