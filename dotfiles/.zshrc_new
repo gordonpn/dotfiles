@@ -61,7 +61,14 @@ fpath=(~/.zfunc $fpath)
 
 # Cache the compinit dumpfile. Invalidated on an fpath change or when any
 # completion directory is touched, so a new tool is still picked up.
-zstyle ':zephyr:plugin:completion' use-cache yes
+# Expansion Configuration for zsh-expand
+export ZPWR_EXPAND_TO_HISTORY=true
+export ZPWR_EXPAND=true
+export ZPWR_EXPAND_SECOND_POSITION=true
+typeset -ga ZPWR_EXPAND_BLACKLIST=(cd ls)
+export ZPWR_EXPAND_PRE_EXEC_NATIVE=true
+export ZPWR_EXPAND_ALL_POSITIONS=true
+export ZPWR_EXPAND_BRACKETED_PASTE=true
 
 source ${zsh_plugins}.zsh
 
