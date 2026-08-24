@@ -201,12 +201,27 @@ local plugin_specs = {
       {
         'J',
         function()
-          local tsj = require('treesj')
-          local has_parser = pcall(vim.treesitter.get_parser, 0)
-          if not has_parser then
-            vim.cmd('normal! J')
+          -- treesj ships presets for 39 languages, and markdown is not one of
+          -- them. Markdown also injects markdown_inline for every run of prose,
+          -- so a plain "does this buffer have a parser" guard is not enough:
+          -- markdown has one, treesj then declined the node, and J did nothing
+          -- but print 'Language "markdown_inline" is not configured'.
+          --
+          -- Ask treesj the same question it asks itself, so a fenced lua block
+          -- inside a markdown file still resolves to lua and splits properly,
+          -- while prose falls through to the builtin join. Any failure in here
+          -- means treesj cannot format this node, which is exactly when the
+          -- builtin is wanted.
+          local supported = pcall(function()
+            local parser = assert(vim.treesitter.get_parser(0))
+            parser:parse(true) -- injected languages only resolve once parsed
+            local node = require('treesj.format').get_node_at_cursor(parser)
+            return require('treesj.search').get_configured_node(assert(node))
+          end)
+          if supported then
+            require('treesj').toggle()
           else
-            tsj.toggle()
+            vim.cmd('normal! J')
           end
         end,
         desc = 'Join Toggle (Smart Fallback)',
