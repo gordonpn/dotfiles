@@ -2,9 +2,9 @@
 # Reference: https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md
 
 git:
-  pagers:
+  diffRenderers:
     - colorArg: always
-      pager: delta --dark --paging=never --line-numbers
+      command: delta --dark --paging=never --line-numbers
 gui:
   mainPanelSplitMode: "flexible"
   sideBySideView: auto
