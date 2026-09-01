@@ -1,8 +1,10 @@
 # bat configuration
 # Reference: https://github.com/sharkdp/bat#configuration-file
 
-# Theme — gruvbox-dark to match delta
---theme="gruvbox-dark"
+# Theme. Kanagawa, matching delta's syntax-theme in .gitconfig-common. This is
+# the custom theme in bat/themes/Kanagawa.tmTheme, so it only resolves once that
+# file is in ~/.config/bat/themes/ and `bat cache --build` has run.
+--theme="Kanagawa"
 
 # Style — line numbers, git change markers, filename header
 # (informative without too much noise)
