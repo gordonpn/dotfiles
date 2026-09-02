@@ -332,8 +332,26 @@ elif [[ -x "$HOME/.local/bin/mise" ]]; then
   eval "$($HOME/.local/bin/mise activate zsh --shims)"
 fi
 
+# Source the output of an init/completion command from an mtime-invalidated cache
+# file, avoiding a fork and subshell on every interactive startup. Rebuilds
+# whenever the generating binary is newer than the cache, so tool upgrades
+# (e.g. `brew upgrade zoxide`) are automatically picked up.
+# Delete ~/.cache/zsh/init to force a rebuild.
+_zcache_source() {
+  local name=$1 bin=$2; shift 2
+  local cache="$HOME/.cache/zsh/init/$name.zsh"
+  [[ -n ${commands[$bin]} ]] || return 0
+  if [[ ! -f $cache || ${commands[$bin]} -nt $cache ]]; then
+    [[ -d ${cache:h} ]] || mkdir -p ${cache:h}
+    "$@" >| $cache 2>/dev/null || { rm -f $cache; return 1 }
+  fi
+  source $cache
+}
+
 # This forces zoxide to intercept the 'cd' command entirely
-eval "$(zoxide init zsh --cmd cd)"
+if (( $+commands[zoxide] )); then
+  _zcache_source zoxide zoxide zoxide init zsh --cmd cd
+fi
 # starship is initialized by starship-ftl (see .zsh_plugins.txt), which uses instant
 # prompt for local shells and falls back to standard starship init on SSH sessions.
 eval "$(npm completion)"
@@ -375,7 +393,7 @@ export PATH="/Users/gordonpn/.local/bin:$PATH"
 # Must run after compinit, which the antidote bundle handles.
 if (( $+commands[carapace] )); then
   export CARAPACE_EXCLUDES='bat,eza,fd,gh,git,lazygit,npm,rg,ssh,starship,zoxide'
-  source <(carapace _carapace zsh)
+  _zcache_source carapace carapace carapace _carapace zsh
 fi
 
 # Cross-platform `sed -i`. GNU sed wants no suffix arg, BSD sed requires one, so
@@ -395,5 +413,5 @@ take() {
 # Syntax highlighting via zsh-patina (Rust daemon, replaces
 # fast-syntax-highlighting). Must be activated last so it hooks ZLE after
 # every other plugin. Guarded because this config is shared with hosts where
-# patina isn't installed — it needs zsh >= 5.9.
-(( $+commands[zsh-patina] )) && eval "$(zsh-patina activate)"
+# patina isn't installed. It needs zsh >= 5.9.
+(( $+commands[zsh-patina] )) && _zcache_source zsh-patina zsh-patina zsh-patina activate
