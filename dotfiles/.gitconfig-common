@@ -17,6 +17,9 @@
 #     ln -sf <repo>/dotfiles/bat/themes/Kanagawa.tmTheme ~/.config/bat/themes/
 #     bat cache --build
 
+[url "git@github.com:"]
+    insteadOf = https://github.com/
+
 [color]
 ui = true
 
