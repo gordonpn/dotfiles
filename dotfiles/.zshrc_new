@@ -351,6 +351,15 @@ fi
 # prompt for local shells and falls back to standard starship init on SSH sessions.
 eval "$(npm completion)"
 
+# zellij tab name: directory label plus an agent status glyph. Must come after
+# the plugin bundle so it can put its precmd hook ahead of starship's and still
+# see the real exit status.
+if [[ "$(uname)" == "Darwin" ]]; then
+  source /Users/gordonpn/workspace/dotfiles/dotfiles/.zsh-zellij-tab
+elif [[ "$(uname)" == "Linux" ]]; then
+  source /home/gordonpn/workspace/dotfiles/dotfiles/.zsh-zellij-tab
+fi
+
 # Background-fetch the current git repo on cd (rate-limited per repo).
 # Lets starship's git_status show ⇣N when behind upstream without manual fetch.
 # Override interval (seconds) with GIT_BG_FETCH_INTERVAL (default 600).

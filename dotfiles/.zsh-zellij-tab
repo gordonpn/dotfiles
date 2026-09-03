@@ -1,0 +1,165 @@
+#!/usr/bin/env zsh
+# Shared by every machine's .zshrc. Sourced, never executed.
+#
+# Names the zellij tab after the shell's directory, and prefixes a status glyph
+# while an agent CLI is running in it, so a backgrounded tab shows whether the
+# agent is still working, finished, or failed.
+#
+#   ~/open-source/dotfiles/bin   ->  dotfiles:bin
+#   running claude there         ->  ⟳ dotfiles:bin
+#   it exits 0                   ->  ✓ dotfiles:bin
+#   it exits non-zero            ->  ✗ dotfiles:bin
+#   next command you run         ->  dotfiles:bin
+#
+# Cost model, which drives most of the design below. `zellij action` is a
+# separate process invocation costing ~12ms, so it is only ever called when the
+# label actually changes: the label is recomputed with no forks at all (zsh
+# builtins only, including the git-root walk), compared against what was last
+# sent, and the process is spawned only on a real difference. Idle prompts and
+# cd's within one repo directory cost nothing.
+#
+# Note this renames tabs unconditionally, so a tab named by a layout (or by hand
+# with Ctrl-t r) loses that name on the first prompt. The layout file still holds
+# the original names, so re-running the layout restores them.
+
+# --- configuration ---------------------------------------------------------
+
+# Nerd Font glyphs, single-width so the tab bar does not shift on a transition.
+# Set any of these before sourcing to override.
+: ${ZTAB_ICON_RUNNING:=⟳}
+: ${ZTAB_ICON_OK:=✓}
+: ${ZTAB_ICON_FAIL:=✗}
+
+# Commands that count as an agent session. Matched against the leading word of
+# the alias-expanded command line with any directory part stripped, so an alias
+# (`q` -> `kiro-cli chat ...`) and an absolute path (the layout invokes
+# /home/gorpha/.toolbox/bin/kiro-cli) both match. Listing a command that is not
+# installed is harmless; it simply never matches.
+typeset -ga ZTAB_AGENT_COMMANDS
+(( $#ZTAB_AGENT_COMMANDS )) || ZTAB_AGENT_COMMANDS=(claude kiro-cli antigravity agy)
+
+# --- state -----------------------------------------------------------------
+
+typeset -g _ZTAB_APPLIED=''   # label last handed to zellij
+typeset -g _ZTAB_STATUS=''    # '' | running | ok | fail
+typeset -g _ZTAB_TAB_ID=''    # this shell's tab, resolved once
+
+# --- internals -------------------------------------------------------------
+
+# Sets REPLY to the git-aware label for $PWD. Deliberately walks up for .git
+# rather than calling `git rev-parse`, which would fork on every prompt. -e, not
+# -d, because .git is a file in worktrees and submodules.
+_ztab_dir_label() {
+  local d=$PWD root=''
+  while [[ -n $d && $d != / ]]; do
+    if [[ -e $d/.git ]]; then root=$d; break; fi
+    d=${d:h}
+  done
+
+  if [[ -n $root ]]; then
+    if [[ $PWD == $root ]]; then
+      REPLY=${root:t}
+    else
+      REPLY="${root:t}:${PWD#$root/}"
+    fi
+  elif [[ $PWD == $HOME ]]; then
+    REPLY='~'
+  elif [[ $PWD == / ]]; then
+    REPLY='/'
+  else
+    REPLY=${PWD:t}
+  fi
+}
+
+# Resolve and cache the tab this shell lives in, so renames survive the user
+# switching tabs while an agent runs. `zellij action` defaults to the FOCUSED
+# tab, which is the wrong one as soon as you background the work and look
+# elsewhere; -t pins it. current-tab-info reports the focused tab, so this is
+# only correct if resolved while the shell's own tab is focused. That holds
+# because the first call happens on this shell's first prompt, when it is by
+# definition the tab being looked at. Falls back to untargeted renaming.
+_ztab_resolve_tab_id() {
+  [[ -n $_ZTAB_TAB_ID ]] && return 0
+  local info line
+  info=$(command zellij action current-tab-info 2>/dev/null) || return 1
+  for line in ${(f)info}; do
+    if [[ $line == id:* ]]; then
+      _ZTAB_TAB_ID=${line#id: }
+      return 0
+    fi
+  done
+  return 1
+}
+
+_ztab_apply() {
+  [[ -n $ZELLIJ ]] || return 0
+
+  local REPLY
+  _ztab_dir_label
+  local label=$REPLY
+
+  case $_ZTAB_STATUS in
+    running) label="$ZTAB_ICON_RUNNING $label" ;;
+    ok)      label="$ZTAB_ICON_OK $label" ;;
+    fail)    label="$ZTAB_ICON_FAIL $label" ;;
+  esac
+
+  [[ $label == $_ZTAB_APPLIED ]] && return 0
+  _ZTAB_APPLIED=$label
+
+  _ztab_resolve_tab_id
+  local -a target
+  [[ -n $_ZTAB_TAB_ID ]] && target=(-t $_ZTAB_TAB_ID)
+  command zellij action rename-tab $target -- "$label" 2>/dev/null
+}
+
+# --- hooks -----------------------------------------------------------------
+
+_ztab_preexec() {
+  [[ -n $ZELLIJ ]] || return 0
+
+  # The VAR=value pattern below needs extendedglob, which is not on by default.
+  # localoptions confines the change to this function.
+  setopt localoptions extendedglob
+
+  # $3 is the line after alias expansion. (z) splits it the way the shell does,
+  # so quoting is respected; skip any leading VAR=value assignments.
+  local -a words=(${(z)3})
+  local w cmd=''
+  for w in $words; do
+    [[ $w == [[:alnum:]_]##=* ]] && continue
+    cmd=$w
+    break
+  done
+
+  if (( ${ZTAB_AGENT_COMMANDS[(Ie)${cmd:t}]} )); then
+    _ZTAB_STATUS=running
+  else
+    _ZTAB_STATUS=''   # any other command clears a stale ✓/✗
+  fi
+  _ztab_apply
+}
+
+# Also covers cd: chpwd needs no hook of its own, since the next prompt runs
+# this and the label is recomputed from $PWD for free.
+_ztab_precmd() {
+  local st=$?
+  [[ -n $ZELLIJ ]] || return 0
+
+  if [[ $_ZTAB_STATUS == running ]]; then
+    if (( st == 0 )); then _ZTAB_STATUS=ok; else _ZTAB_STATUS=fail; fi
+    _ztab_apply
+    printf '\a'   # bell, for a desktop notification from the outer terminal
+  else
+    _ztab_apply
+  fi
+  return 0
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec _ztab_preexec
+
+# Must run before any precmd hook registered earlier. A hook's own return value
+# becomes $? for the next one, so starship's would mask the exit status of the
+# command that just finished, and every agent run would report success.
+precmd_functions=(_ztab_precmd ${precmd_functions:#_ztab_precmd})
