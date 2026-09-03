@@ -334,10 +334,13 @@ elif [[ "$(uname)" == "Linux" ]]; then
   source /home/gordonpn/workspace/dotfiles/dotfiles/.zsh-init-cache
 fi
 
-if command -v mise >/dev/null; then
-  eval "$(mise activate zsh --shims)"
-elif [[ -x "$HOME/.local/bin/mise" ]]; then
-  eval "$($HOME/.local/bin/mise activate zsh --shims)"
+# mise emits only static `export PATH` lines here, so it caches cleanly. Bare
+# name first so a Homebrew mise wins; the explicit path covers hosts where mise
+# is installed but not yet on PATH at this point. Both write one cache entry.
+if (( $+commands[mise] )); then
+  _zcache_source mise mise mise activate zsh --shims
+else
+  _zcache_source mise ~/.local/bin/mise ~/.local/bin/mise activate zsh --shims
 fi
 
 # This forces zoxide to intercept the 'cd' command entirely
