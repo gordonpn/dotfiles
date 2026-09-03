@@ -43,6 +43,7 @@ typeset -ga ZTAB_AGENT_COMMANDS
 typeset -g _ZTAB_APPLIED=''   # label last handed to zellij
 typeset -g _ZTAB_STATUS=''    # '' | running | ok | fail
 typeset -g _ZTAB_TAB_ID=''    # this shell's tab, resolved once
+typeset -g _ZTAB_USE_TAB_ID=1 # cleared if this zellij is too old for -t
 
 # --- internals -------------------------------------------------------------
 
@@ -81,13 +82,17 @@ _ztab_dir_label() {
 _ztab_resolve_tab_id() {
   [[ -n $_ZTAB_TAB_ID ]] && return 0
   local info line
-  info=$(command zellij action current-tab-info 2>/dev/null) || return 1
-  for line in ${(f)info}; do
-    if [[ $line == id:* ]]; then
-      _ZTAB_TAB_ID=${line#id: }
-      return 0
-    fi
-  done
+  # Any failure is permanent for this shell (the subcommand does not exist before
+  # zellij 0.44.0), so give up for good rather than re-probing on every change.
+  if info=$(command zellij action current-tab-info 2>/dev/null); then
+    for line in ${(f)info}; do
+      if [[ $line == id:* ]]; then
+        _ZTAB_TAB_ID=${line#id: }
+        return 0
+      fi
+    done
+  fi
+  _ZTAB_USE_TAB_ID=0
   return 1
 }
 
@@ -107,10 +112,22 @@ _ztab_apply() {
   [[ $label == $_ZTAB_APPLIED ]] && return 0
   _ZTAB_APPLIED=$label
 
-  _ztab_resolve_tab_id
   local -a target
-  [[ -n $_ZTAB_TAB_ID ]] && target=(-t $_ZTAB_TAB_ID)
-  command zellij action rename-tab $target -- "$label" 2>/dev/null
+  if (( _ZTAB_USE_TAB_ID )); then
+    _ztab_resolve_tab_id
+    [[ -n $_ZTAB_TAB_ID ]] && target=(-t $_ZTAB_TAB_ID)
+  fi
+
+  command zellij action rename-tab $target -- "$label" 2>/dev/null && return 0
+
+  # Both -t and current-tab-info arrived in zellij 0.44.0, so an older zellij
+  # rejects the targeted form. Retry untargeted and stop trying, so one probe
+  # costs one extra process rather than silently renaming nothing forever.
+  if (( $#target )); then
+    _ZTAB_USE_TAB_ID=0
+    _ZTAB_TAB_ID=''
+    command zellij action rename-tab -- "$label" 2>/dev/null
+  fi
 }
 
 # --- hooks -----------------------------------------------------------------
