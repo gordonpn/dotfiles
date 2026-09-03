@@ -326,27 +326,19 @@ pnpx() {
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
 
+# _zcache_source, shared with the work machines' .zshrc. Must be sourced before
+# the tool inits below, which all go through it.
+if [[ "$(uname)" == "Darwin" ]]; then
+  source /Users/gordonpn/workspace/dotfiles/dotfiles/.zsh-init-cache
+elif [[ "$(uname)" == "Linux" ]]; then
+  source /home/gordonpn/workspace/dotfiles/dotfiles/.zsh-init-cache
+fi
+
 if command -v mise >/dev/null; then
   eval "$(mise activate zsh --shims)"
 elif [[ -x "$HOME/.local/bin/mise" ]]; then
   eval "$($HOME/.local/bin/mise activate zsh --shims)"
 fi
-
-# Source the output of an init/completion command from an mtime-invalidated cache
-# file, avoiding a fork and subshell on every interactive startup. Rebuilds
-# whenever the generating binary is newer than the cache, so tool upgrades
-# (e.g. `brew upgrade zoxide`) are automatically picked up.
-# Delete ~/.cache/zsh/init to force a rebuild.
-_zcache_source() {
-  local name=$1 bin=$2; shift 2
-  local cache="$HOME/.cache/zsh/init/$name.zsh"
-  [[ -n ${commands[$bin]} ]] || return 0
-  if [[ ! -f $cache || ${commands[$bin]} -nt $cache ]]; then
-    [[ -d ${cache:h} ]] || mkdir -p ${cache:h}
-    "$@" >| $cache 2>/dev/null || { rm -f $cache; return 1 }
-  fi
-  source $cache
-}
 
 # This forces zoxide to intercept the 'cd' command entirely
 if (( $+commands[zoxide] )); then

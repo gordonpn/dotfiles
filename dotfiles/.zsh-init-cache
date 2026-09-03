@@ -1,0 +1,43 @@
+#!/usr/bin/env zsh
+# Shared by every machine's .zshrc. Sourced, never executed.
+#
+# Tool init commands (`zoxide init`, `mise activate`, `carapace _carapace`, ...)
+# each cost a fork and a subshell on every interactive startup, to print output
+# that almost never changes. This caches that output to a file and sources the
+# file instead.
+#
+# Lives in the shared repo because all four machines want the same behaviour;
+# only the set of tools differs per host. Keeping one definition here is what
+# stops the per-host .zshrc copies from drifting.
+
+# _zcache_source <cache-name> <binary> <command to run...>
+#
+# Rebuilds whenever <binary> is newer than the cache, so a tool upgrade
+# (`brew upgrade zoxide`, `mise self-update`) is picked up without manual
+# intervention. Delete ~/.cache/zsh/init to force a rebuild.
+#
+# <binary> is either a bare command name, resolved through $commands, or a path
+# containing a slash, for tools not yet on PATH at the point of the call. A
+# binary that resolves to nothing is not an error: the call becomes a no-op, so
+# the same line is safe on a host that does not have the tool installed.
+#
+# The cache is written with >| and removed if the generating command fails, so a
+# broken tool cannot leave a half-written file that gets sourced forever.
+_zcache_source() {
+  local name=$1 bin=$2; shift 2
+  local binpath cache="$HOME/.cache/zsh/init/$name.zsh"
+
+  if [[ $bin == */* ]]; then
+    binpath=${~bin}
+    [[ -x $binpath ]] || return 0
+  else
+    binpath=${commands[$bin]}
+    [[ -n $binpath ]] || return 0
+  fi
+
+  if [[ ! -f $cache || $binpath -nt $cache ]]; then
+    [[ -d ${cache:h} ]] || mkdir -p ${cache:h}
+    "$@" >| $cache 2>/dev/null || { rm -f $cache; return 1 }
+  fi
+  source $cache
+}
