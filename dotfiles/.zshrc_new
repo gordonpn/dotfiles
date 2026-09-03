@@ -70,6 +70,18 @@ export ZPWR_EXPAND_PRE_EXEC_NATIVE=true
 export ZPWR_EXPAND_ALL_POSITIONS=true
 export ZPWR_EXPAND_BRACKETED_PASTE=true
 
+# Force the emacs keymap. Nothing here runs `bindkey -v`, but zsh picks the vi
+# keymap on its own when $VISUAL or $EDITOR contains "vi", and .zprofile sets both
+# to nvim/vim. That gave a modal line editor nobody asked for, visible as
+# starship's chevron flipping ❯ -> ❮ on Esc.
+#
+# Deliberately ahead of the plugin bundle and fzf. `bindkey -e` re-links the main
+# keymap, discarding anything previously bound into it, and several things below
+# bind into main without naming a keymap: fzf's Tab binding, fzf-tab's, and
+# zsh-autosuggestions'. Selecting the keymap first means every later binding lands
+# in the one actually in use.
+bindkey -e
+
 source ${zsh_plugins}.zsh
 
 # zephyr's history plugin sets NO_share_history; we want it on.
@@ -221,11 +233,11 @@ bindkey '^R' fzf-history-widget
 # Autosuggest acceptance
 bindkey '^ ' autosuggest-accept
 
-# Edit command line
-# Insert Mode: Ctrl+v
-bindkey -M viins '^v' edit-command-line
-# Normal Mode: v (Standard Vi behavior)
-bindkey -M vicmd 'v' edit-command-line
+# Edit command line. Bound into the main keymap (emacs, set above) rather than
+# viins/vicmd: those keymaps are no longer in use, so a `-M viins` binding here
+# would be accepted silently and never fire. Matches the work machines, so Ctrl+V
+# is the same key everywhere.
+bindkey '^v' edit-command-line
 
 TRAPINT() {
   zle && [[ $BUFFER ]] && print -s -- "$BUFFER"
