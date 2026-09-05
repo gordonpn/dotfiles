@@ -27,6 +27,8 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/workspace/dotfiles/bin:$PATH"
 export PATH="/usr/local/go/bin:$PATH"
+export PATH="$HOME/go/bin:$PATH"
+export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
 
 export PNPM_HOME="$HOME/.local/share/pnpm"
 # Appends both layouts safely; satisfies v11 on Ubuntu and v10 on macOS
