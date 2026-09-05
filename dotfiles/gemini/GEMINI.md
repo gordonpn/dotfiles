@@ -8,6 +8,7 @@
 - **No Emojis & No Em Dashes:** Do not use emojis or em dashes in commit messages, code comments, or documentation.
 - **No AI Attribution:** Never add "AI assisted" or bot disclaimers to commits, PRs, comments, or documentation. Write in the first person for human engineering peers.
 - **Intent-Focused Comments:** Keep code comments succinct and focused on *why* (intent, trade-offs, non-obvious constraints), never restating *what* the code already makes clear.
+- **MCP Tool Prioritization:** When specialized MCP servers (such as `kubernetes`, `prometheus`, `github`, or database servers) are configured, prioritize calling them directly instead of falling back to ad-hoc raw shell commands (`kubectl`, `curl`, etc.) via bash or zsh.
 
 ## Testing & Verification
 - **Reproduction First:** For bug fixes, reproduce the issue with a failing test before writing the fix. For features, write the failing behavior test first.
