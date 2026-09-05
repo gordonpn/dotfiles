@@ -186,6 +186,9 @@ sync_mcp_config() {
   local prom_url
   prom_url="${PROMETHEUS_URL:-http://master.tailb65f8c.ts.net:30090}"
 
+  local loki_url
+  loki_url="${LOKI_URL:-http://master.tailb65f8c.ts.net:31100}"
+
   local kuma_url
   kuma_url="${UPTIME_KUMA_URL:-https://p01--uptime-kuma--m5z2j5q8x7zn.code.run}"
 
@@ -223,6 +226,7 @@ sync_mcp_config() {
   export HEALTHCHECKS_API_KEY="${hc_key}"
   export CLOUDFLARE_ACCOUNT_ID="${cf_account}"
   export PROMETHEUS_URL="${prom_url}"
+  export LOKI_URL="${loki_url}"
   export UPTIME_KUMA_URL="${kuma_url}"
   export SQLITE_DB_PATH="${sqlite_db}"
   export CADDY_ADMIN_URL="${caddy_url}"
@@ -250,6 +254,7 @@ replacements = {
     '\${SQLITE_DB_PATH}': os.environ.get('SQLITE_DB_PATH', ''),
     '\${CLOUDFLARE_ACCOUNT_ID}': os.environ.get('CLOUDFLARE_ACCOUNT_ID', ''),
     '\${PROMETHEUS_URL}': os.environ.get('PROMETHEUS_URL', ''),
+    '\${LOKI_URL}': os.environ.get('LOKI_URL', ''),
     '\${TAILSCALE_API_KEY}': os.environ.get('TAILSCALE_API_KEY', ''),
     '\${UPTIME_KUMA_URL}': os.environ.get('UPTIME_KUMA_URL', ''),
     '\${UPTIME_KUMA_JWT_TOKEN}': os.environ.get('UPTIME_KUMA_JWT_TOKEN', ''),
