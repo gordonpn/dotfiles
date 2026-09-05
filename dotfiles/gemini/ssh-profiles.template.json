@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "server-example": {
+      "host": "server.tailnet.example.ts.net",
+      "username": "username",
+      "port": 22,
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  }
+}

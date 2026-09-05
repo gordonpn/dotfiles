@@ -1,0 +1,14 @@
+{
+  "default": "local",
+  "profiles": {
+    "local": {
+      "mode": "local"
+    },
+    "master": {
+      "host": "master.tailnet.example.ts.net",
+      "username": "username",
+      "port": 22,
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  }
+}
