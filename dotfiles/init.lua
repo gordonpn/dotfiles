@@ -473,7 +473,21 @@ local plugin_specs = {
     "williamboman/mason-lspconfig.nvim",
     cond = not vim.g.vscode,
     opts = function()
-      local servers = { "pyright", "ts_ls", "bashls", "yamlls", "jsonls", "dockerls", "lua_ls" }
+      local servers = {
+        "pyright",
+        "ts_ls",
+        "bashls",
+        "yamlls",
+        "jsonls",
+        "dockerls",
+        "lua_ls",
+        "astro",
+        "terraformls",
+        "marksman",
+        "taplo",
+        "jdtls",
+        "tailwindcss",
+      }
       if vim.fn.executable("go") == 1 then table.insert(servers, "gopls") end
       return { ensure_installed = servers }
     end,
