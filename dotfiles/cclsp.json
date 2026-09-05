@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ktnyt/cclsp/main/schema.json",
+  "servers": [
+    {
+      "extensions": ["ts", "tsx", "js", "jsx", "mjs", "cjs"],
+      "command": ["typescript-language-server", "--stdio"]
+    },
+    {
+      "extensions": ["py", "pyi"],
+      "command": ["pyright-langserver", "--stdio"]
+    },
+    {
+      "extensions": ["go"],
+      "command": ["gopls"]
+    },
+    {
+      "extensions": ["sh", "bash", "zsh"],
+      "command": ["bash-language-server", "start"]
+    },
+    {
+      "extensions": ["lua"],
+      "command": ["lua-language-server"]
+    },
+    {
+      "extensions": ["yaml", "yml"],
+      "command": ["yaml-language-server", "--stdio"]
+    },
+    {
+      "extensions": ["json", "jsonc"],
+      "command": ["vscode-json-language-server", "--stdio"]
+    },
+    {
+      "extensions": ["dockerfile", "Dockerfile"],
+      "command": ["docker-langserver", "--stdio"]
+    }
+  ]
+}
