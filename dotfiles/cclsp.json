@@ -32,6 +32,30 @@
     {
       "extensions": ["dockerfile", "Dockerfile"],
       "command": ["docker-langserver", "--stdio"]
+    },
+    {
+      "extensions": ["astro"],
+      "command": ["astro-ls", "--stdio"]
+    },
+    {
+      "extensions": ["tf", "tfvars"],
+      "command": ["terraform-ls", "serve"]
+    },
+    {
+      "extensions": ["md", "markdown", "mdx"],
+      "command": ["marksman", "server"]
+    },
+    {
+      "extensions": ["toml"],
+      "command": ["taplo", "lsp", "stdio"]
+    },
+    {
+      "extensions": ["java"],
+      "command": ["jdtls"]
+    },
+    {
+      "extensions": ["css", "scss", "sass"],
+      "command": ["tailwindcss-language-server", "--stdio"]
     }
   ]
 }
