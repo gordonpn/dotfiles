@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+# mcp-sync: Synchronize, hydrate, or verify local Antigravity MCP servers and profiles
+# Pulls sensitive tokens from OS Keychain / secret store or environment variables.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TEMPLATE_DIR="${REPO_DIR}/dotfiles/gemini"
+GEMINI_DIR="${HOME}/.gemini"
+GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
+KUBE_DIR="${HOME}/.kube"
+
+mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${KUBE_DIR}"
+
+get_secret() {
+  local service_name="$1"
+  local env_var_name="$2"
+  local value="${!env_var_name:-}"
+
+  if [[ -n "${value}" ]]; then
+    echo "${value}"
+    return 0
+  fi
+
+  if [[ "${OSTYPE:-}" == "darwin"* ]] && command -v security >/dev/null 2>&1; then
+    value="$(security find-generic-password -a "${USER}" -s "${service_name}" -w 2>/dev/null || true)"
+  elif command -v secret-tool >/dev/null 2>&1; then
+    value="$(secret-tool lookup service "${service_name}" 2>/dev/null || true)"
+  fi
+
+  echo "${value}"
+}
+
+sync_ssh_profiles() {
+  local ssh_config="${HOME}/.ssh/config"
+  local target_file="${GEMINI_DIR}/ssh-profiles.json"
+
+  if [[ ! -f "${ssh_config}" ]]; then
+    echo "Notice: ${ssh_config} not found, skipping SSH profiles generation."
+    return 0
+  fi
+
+  python3 -c "
+import json, re, os
+
+ssh_config = os.path.expanduser('~/.ssh/config')
+profiles = {}
+
+current_host = None
+host_data = {}
+
+with open(ssh_config, 'r') as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) < 2:
+            continue
+        key, val = parts[0].lower(), parts[1].strip()
+
+        if key == 'host':
+            if current_host and 'hostname' in host_data:
+                profiles[current_host] = {
+                    'host': host_data['hostname'],
+                    'username': host_data.get('user', os.environ.get('USER', 'root')),
+                    'port': int(host_data.get('port', 22)),
+                    'privateKeyPath': host_data.get('identityfile', '~/.ssh/id_ed25519')
+                }
+            # Skip wildcards and github
+            if '*' in val or val == 'github.com':
+                current_host = None
+                host_data = {}
+            else:
+                current_host = val
+                host_data = {}
+        elif current_host:
+            host_data[key] = val
+
+if current_host and 'hostname' in host_data:
+    profiles[current_host] = {
+        'host': host_data['hostname'],
+        'username': host_data.get('user', os.environ.get('USER', 'root')),
+        'port': int(host_data.get('port', 22)),
+        'privateKeyPath': host_data.get('identityfile', '~/.ssh/id_ed25519')
+    }
+
+output = {'profiles': profiles}
+with open('${target_file}', 'w') as out:
+    json.dump(output, out, indent=2)
+print(f'Generated {len(profiles)} SSH profiles in ${target_file}')
+"
+}
+
+sync_docker_profiles() {
+  local ssh_profiles="${GEMINI_DIR}/ssh-profiles.json"
+  local target_file="${GEMINI_DIR}/docker-profiles.json"
+
+  python3 -c "
+import json, os
+
+ssh_file = os.path.expanduser('${ssh_profiles}')
+docker_profiles = {
+    'default': 'local',
+    'profiles': {
+        'local': {'mode': 'local'}
+    }
+}
+
+if os.path.exists(ssh_file):
+    with open(ssh_file, 'r') as f:
+        data = json.load(f)
+    for name, p in data.get('profiles', {}).items():
+        # Add server targets (master, pis, vps)
+        if any(keyword in name for keyword in ['master', 'pi', 'vps', 'racknerd', 'server']):
+            docker_profiles['profiles'][name] = p
+
+with open('${target_file}', 'w') as out:
+    json.dump(docker_profiles, out, indent=2)
+print(f'Generated Docker profiles (default: local, {len(docker_profiles[\"profiles\"]) - 1} remote) in ${target_file}')
+"
+}
+
+sync_k3s_cluster() {
+  local kube_config="${KUBE_DIR}/config"
+  echo "Checking remote K3s connectivity on master..."
+  if ssh -o BatchMode=yes -o ConnectTimeout=3 master "true" 2>/dev/null; then
+    python3 -c "
+import subprocess, os, re
+
+try:
+    raw = subprocess.check_output(['ssh', 'master', 'cat /etc/rancher/k3s/k3s.yaml 2>/dev/null || sudo -n cat /etc/rancher/k3s/k3s.yaml 2>/dev/null']).decode('utf-8')
+    raw = raw.replace('name: default', 'name: k3s-master')
+    raw = raw.replace('cluster: default', 'cluster: k3s-master')
+    raw = raw.replace('user: default', 'user: k3s-master-user')
+    raw = raw.replace('server: https://127.0.0.1:6443', 'server: https://master:6443')
+    
+    tmp_path = os.path.expanduser('~/.kube/k3s-master-tmp.yaml')
+    with open(tmp_path, 'w') as f:
+        f.write(raw)
+    
+    # Merge using kubectl flatten
+    kube_cfg = os.path.expanduser('~/.kube/config')
+    merged_cfg = os.path.expanduser('~/.kube/config.merged')
+    cmd = f'KUBECONFIG=\"{kube_cfg}:{tmp_path}\" kubectl config view --flatten > \"{merged_cfg}\" && mv \"{merged_cfg}\" \"{kube_cfg}\"'
+    subprocess.check_call(cmd, shell=True)
+    os.remove(tmp_path)
+    print('K3s cluster context k3s-master synchronized in ~/.kube/config')
+except Exception as e:
+    print(f'Notice: K3s sync skipped ({e})')
+"
+  else
+    echo "Notice: master host not reachable via SSH, skipping K3s cluster kubeconfig refresh."
+  fi
+}
+
+sync_mcp_config() {
+  local template_file="${TEMPLATE_DIR}/mcp_config.template.json"
+  local target_file="${GEMINI_CONFIG_DIR}/mcp_config.json"
+
+  if [[ ! -f "${template_file}" ]]; then
+    echo "Error: Template ${template_file} not found." >&2
+    exit 1
+  fi
+
+  # Resolve tokens
+  local gh_token
+  gh_token="$(get_secret "github_token" "GITHUB_PERSONAL_ACCESS_TOKEN")"
+  if [[ -z "${gh_token}" ]] && command -v gh >/dev/null 2>&1; then
+    gh_token="$(gh auth token 2>/dev/null || true)"
+  fi
+
+  local brave_key
+  brave_key="$(get_secret "brave_api_key" "BRAVE_API_KEY")"
+
+  local ts_key
+  ts_key="$(get_secret "tailscale_api_key" "TAILSCALE_API_KEY")"
+
+  local kuma_jwt
+  kuma_jwt="$(get_secret "uptime_kuma_jwt" "UPTIME_KUMA_JWT_TOKEN")"
+
+  local hc_key
+  hc_key="$(get_secret "healthchecks_api_key" "HEALTHCHECKS_API_KEY")"
+
+  local cf_account
+  cf_account="${CLOUDFLARE_ACCOUNT_ID:-75520e73ba21df12b124d81e80ad29c1}"
+
+  local prom_url
+  prom_url="${PROMETHEUS_URL:-http://master.tailb65f8c.ts.net:30090}"
+
+  local kuma_url
+  kuma_url="${UPTIME_KUMA_URL:-https://p01--uptime-kuma--m5z2j5q8x7zn.code.run}"
+
+  local sqlite_db
+  sqlite_db="${SQLITE_DB_PATH:-${HOME}/workspace/anime-recommendation/anime.db}"
+
+  export GITHUB_PERSONAL_ACCESS_TOKEN="${gh_token}"
+  export BRAVE_API_KEY="${brave_key}"
+  export TAILSCALE_API_KEY="${ts_key}"
+  export UPTIME_KUMA_JWT_TOKEN="${kuma_jwt}"
+  export HEALTHCHECKS_API_KEY="${hc_key}"
+  export CLOUDFLARE_ACCOUNT_ID="${cf_account}"
+  export PROMETHEUS_URL="${prom_url}"
+  export UPTIME_KUMA_URL="${kuma_url}"
+  export SQLITE_DB_PATH="${sqlite_db}"
+
+  python3 -c "
+import json, os
+
+template_file = '${template_file}'
+target_file = '${target_file}'
+
+with open(template_file, 'r') as f:
+    content = f.read()
+
+# Replace placeholders
+replacements = {
+    '\${HOME}': os.environ.get('HOME', ''),
+    '\${GITHUB_PERSONAL_ACCESS_TOKEN}': os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN', ''),
+    '\${BRAVE_API_KEY}': os.environ.get('BRAVE_API_KEY', ''),
+    '\${SQLITE_DB_PATH}': os.environ.get('SQLITE_DB_PATH', ''),
+    '\${CLOUDFLARE_ACCOUNT_ID}': os.environ.get('CLOUDFLARE_ACCOUNT_ID', ''),
+    '\${PROMETHEUS_URL}': os.environ.get('PROMETHEUS_URL', ''),
+    '\${TAILSCALE_API_KEY}': os.environ.get('TAILSCALE_API_KEY', ''),
+    '\${UPTIME_KUMA_URL}': os.environ.get('UPTIME_KUMA_URL', ''),
+    '\${UPTIME_KUMA_JWT_TOKEN}': os.environ.get('UPTIME_KUMA_JWT_TOKEN', ''),
+    '\${HEALTHCHECKS_API_KEY}': os.environ.get('HEALTHCHECKS_API_KEY', '')
+}
+
+for k, v in replacements.items():
+    content = content.replace(k, v)
+
+data = json.loads(content)
+with open(target_file, 'w') as out:
+    json.dump(data, out, indent=2)
+
+print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_file}')
+"
+}
+
+main() {
+  echo "==> Synchronizing Antigravity MCP environment..."
+  sync_ssh_profiles
+  sync_docker_profiles
+  sync_k3s_cluster
+  sync_mcp_config
+  echo "==> Done. MCP configuration is ready and hydrated."
+}
+
+main "$@"
