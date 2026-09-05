@@ -68,7 +68,6 @@ with open(ssh_config, 'r') as f:
                     'port': int(host_data.get('port', 22)),
                     'privateKeyPath': host_data.get('identityfile', '~/.ssh/id_ed25519')
                 }
-            # Skip wildcards and github
             if '*' in val or val == 'github.com':
                 current_host = None
                 host_data = {}
@@ -112,7 +111,6 @@ if os.path.exists(ssh_file):
     with open(ssh_file, 'r') as f:
         data = json.load(f)
     for name, p in data.get('profiles', {}).items():
-        # Add server targets (master, pis, vps)
         if any(keyword in name for keyword in ['master', 'pi', 'vps', 'racknerd', 'server']):
             docker_profiles['profiles'][name] = p
 
@@ -140,7 +138,6 @@ try:
     with open(tmp_path, 'w') as f:
         f.write(raw)
     
-    # Merge using kubectl flatten
     kube_cfg = os.path.expanduser('~/.kube/config')
     merged_cfg = os.path.expanduser('~/.kube/config.merged')
     cmd = f'KUBECONFIG=\"{kube_cfg}:{tmp_path}\" kubectl config view --flatten > \"{merged_cfg}\" && mv \"{merged_cfg}\" \"{kube_cfg}\"'
@@ -164,7 +161,7 @@ sync_mcp_config() {
     exit 1
   fi
 
-  # Resolve tokens
+  # Resolve tokens and URLs
   local gh_token
   gh_token="$(get_secret "github_token" "GITHUB_PERSONAL_ACCESS_TOKEN")"
   if [[ -z "${gh_token}" ]] && command -v gh >/dev/null 2>&1; then
@@ -195,6 +192,30 @@ sync_mcp_config() {
   local sqlite_db
   sqlite_db="${SQLITE_DB_PATH:-${HOME}/workspace/anime-recommendation/anime.db}"
 
+  local caddy_url
+  caddy_url="${CADDY_ADMIN_URL:-http://master.tailb65f8c.ts.net:2019}"
+
+  local postgres_url
+  postgres_url="${POSTGRES_URL:-postgresql://postgres:postgres@localhost:5432/postgres}"
+
+  local redis_url
+  redis_url="${REDIS_URL:-redis://localhost:6379}"
+
+  local vault_addr
+  vault_addr="${VAULT_ADDR:-http://master.tailb65f8c.ts.net:8200}"
+
+  local vault_token
+  vault_token="$(get_secret "vault_token" "VAULT_TOKEN")"
+
+  local slack_token
+  slack_token="$(get_secret "slack_bot_token" "SLACK_BOT_TOKEN")"
+
+  local slack_team
+  slack_team="${SLACK_TEAM_ID:-}"
+
+  local discord_token
+  discord_token="$(get_secret "discord_token" "DISCORD_TOKEN")"
+
   export GITHUB_PERSONAL_ACCESS_TOKEN="${gh_token}"
   export BRAVE_API_KEY="${brave_key}"
   export TAILSCALE_API_KEY="${ts_key}"
@@ -204,6 +225,14 @@ sync_mcp_config() {
   export PROMETHEUS_URL="${prom_url}"
   export UPTIME_KUMA_URL="${kuma_url}"
   export SQLITE_DB_PATH="${sqlite_db}"
+  export CADDY_ADMIN_URL="${caddy_url}"
+  export POSTGRES_URL="${postgres_url}"
+  export REDIS_URL="${redis_url}"
+  export VAULT_ADDR="${vault_addr}"
+  export VAULT_TOKEN="${vault_token}"
+  export SLACK_BOT_TOKEN="${slack_token}"
+  export SLACK_TEAM_ID="${slack_team}"
+  export DISCORD_TOKEN="${discord_token}"
 
   python3 -c "
 import json, os
@@ -214,7 +243,6 @@ target_file = '${target_file}'
 with open(template_file, 'r') as f:
     content = f.read()
 
-# Replace placeholders
 replacements = {
     '\${HOME}': os.environ.get('HOME', ''),
     '\${GITHUB_PERSONAL_ACCESS_TOKEN}': os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN', ''),
@@ -225,7 +253,15 @@ replacements = {
     '\${TAILSCALE_API_KEY}': os.environ.get('TAILSCALE_API_KEY', ''),
     '\${UPTIME_KUMA_URL}': os.environ.get('UPTIME_KUMA_URL', ''),
     '\${UPTIME_KUMA_JWT_TOKEN}': os.environ.get('UPTIME_KUMA_JWT_TOKEN', ''),
-    '\${HEALTHCHECKS_API_KEY}': os.environ.get('HEALTHCHECKS_API_KEY', '')
+    '\${HEALTHCHECKS_API_KEY}': os.environ.get('HEALTHCHECKS_API_KEY', ''),
+    '\${CADDY_ADMIN_URL}': os.environ.get('CADDY_ADMIN_URL', ''),
+    '\${POSTGRES_URL}': os.environ.get('POSTGRES_URL', ''),
+    '\${REDIS_URL}': os.environ.get('REDIS_URL', ''),
+    '\${VAULT_ADDR}': os.environ.get('VAULT_ADDR', ''),
+    '\${VAULT_TOKEN}': os.environ.get('VAULT_TOKEN', ''),
+    '\${SLACK_BOT_TOKEN}': os.environ.get('SLACK_BOT_TOKEN', ''),
+    '\${SLACK_TEAM_ID}': os.environ.get('SLACK_TEAM_ID', ''),
+    '\${DISCORD_TOKEN}': os.environ.get('DISCORD_TOKEN', '')
 }
 
 for k, v in replacements.items():

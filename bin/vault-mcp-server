@@ -1,0 +1,495 @@
+#!/usr/bin/env python3
+"""
+Simple HashiCorp Vault MCP Server - Secure credential and TOTP management
+"""
+import os
+import sys
+import logging
+from datetime import datetime, timezone
+import httpx
+from mcp.server.fastmcp import FastMCP
+import json
+import base64
+
+# Configure logging to stderr
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stderr
+)
+logger = logging.getLogger("vault-server")
+
+# Initialize MCP server - NO PROMPT PARAMETER!
+mcp = FastMCP("vault")
+
+# Configuration
+VAULT_ADDR = os.environ.get("VAULT_ADDR", "http://127.0.0.1:8200")
+VAULT_TOKEN = os.environ.get("VAULT_TOKEN", "")
+VAULT_NAMESPACE = os.environ.get("VAULT_NAMESPACE", "")
+
+# === UTILITY FUNCTIONS ===
+
+def get_headers():
+    """Build headers for Vault API requests."""
+    headers = {
+        "X-Vault-Token": VAULT_TOKEN,
+        "Content-Type": "application/json"
+    }
+    if VAULT_NAMESPACE:
+        headers["X-Vault-Namespace"] = VAULT_NAMESPACE
+    return headers
+
+async def make_vault_request(method: str, path: str, data: dict = None):
+    """Make a request to Vault API."""
+    url = f"{VAULT_ADDR}/{path}"
+    headers = get_headers()
+    
+    async with httpx.AsyncClient(verify=False) as client:
+        if method == "GET":
+            response = await client.get(url, headers=headers, timeout=10)
+        elif method == "POST":
+            response = await client.post(url, headers=headers, json=data, timeout=10)
+        elif method == "PUT":
+            response = await client.put(url, headers=headers, json=data, timeout=10)
+        elif method == "DELETE":
+            response = await client.delete(url, headers=headers, timeout=10)
+        elif method == "LIST":
+            response = await client.request("LIST", url, headers=headers, timeout=10)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+        
+        return response
+
+# === MCP TOOLS ===
+
+@mcp.tool()
+async def check_vault_status() -> str:
+    """Check the health and seal status of the Vault server."""
+    logger.info("Checking Vault server status")
+    
+    try:
+        async with httpx.AsyncClient(verify=False) as client:
+            response = await client.get(f"{VAULT_ADDR}/v1/sys/health", timeout=10)
+            data = response.json()
+            
+            status = []
+            status.append(f"Vault Status")
+            status.append(f"- Initialized: {'true' if data.get('initialized') else 'false'}")
+            status.append(f"- Sealed: {'true' if data.get('sealed') else 'false'}")
+            status.append(f"- Version: {data.get('version', 'unknown')}")
+            status.append(f"- Cluster: {data.get('cluster_name', 'unknown')}")
+            
+            if data.get('sealed'):
+                return "\n".join(status) + "\n\nWarning: Vault is sealed and cannot process requests"
+            
+            return "\n".join(status)
+    except Exception as e:
+        logger.error(f"Error checking status: {e}")
+        return f"Error checking Vault status: {str(e)}"
+
+@mcp.tool()
+async def read_secret(path: str = "", mount: str = "secret", version: str = "") -> str:
+    """Read a secret from KV v2 secrets engine at the specified path."""
+    logger.info(f"Reading secret from {mount}/{path}")
+    
+    if not path.strip():
+        return "Error: Path is required"
+    
+    try:
+        # For KV v2, we need to insert "data" in the path
+        api_path = f"v1/{mount}/data/{path}"
+        if version.strip():
+            api_path += f"?version={version}"
+        
+        response = await make_vault_request("GET", api_path)
+        
+        if response.status_code == 404:
+            return f"Secret not found at path: {mount}/{path}"
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        secret_data = data.get("data", {}).get("data", {})
+        metadata = data.get("data", {}).get("metadata", {})
+        
+        result = [f"Secret: {mount}/{path}"]
+        result.append(f"Version: {metadata.get('version', 'unknown')}")
+        result.append(f"Data:")
+        
+        for key, value in secret_data.items():
+            # Mask sensitive values partially
+            if len(str(value)) > 8:
+                masked = str(value)[:3] + "*" * (len(str(value)) - 6) + str(value)[-3:]
+            else:
+                masked = "*" * len(str(value))
+            result.append(f"  - {key}: {masked}")
+        
+        return "\n".join(result)
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error reading secret: {e}")
+        return f"Error reading secret: {str(e)}"
+
+@mcp.tool()
+async def write_secret(path: str = "", mount: str = "secret", data_json: str = "") -> str:
+    """Write a secret to KV v2 secrets engine. Provide data as JSON string."""
+    logger.info(f"Writing secret to {mount}/{path}")
+    
+    if not path.strip():
+        return "Error: Path is required"
+    
+    if not data_json.strip():
+        return "Error: Data is required (provide as JSON string)"
+    
+    try:
+        # Parse the JSON data
+        secret_data = json.loads(data_json)
+        
+        # For KV v2, wrap the data
+        payload = {"data": secret_data}
+        
+        # For KV v2, we need to insert "data" in the path
+        api_path = f"v1/{mount}/data/{path}"
+        
+        response = await make_vault_request("POST", api_path, payload)
+        response.raise_for_status()
+        
+        result_data = response.json()
+        version = result_data.get("data", {}).get("version", "unknown")
+        
+        return f"Secret written successfully to {mount}/{path}\nVersion: {version}"
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON format for data"
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error writing secret: {e}")
+        return f"Error writing secret: {str(e)}"
+
+@mcp.tool()
+async def delete_secret(path: str = "", mount: str = "secret", versions: str = "") -> str:
+    """Delete specific versions of a secret or all versions if no version specified."""
+    logger.info(f"Deleting secret at {mount}/{path}")
+    
+    if not path.strip():
+        return "Error: Path is required"
+    
+    try:
+        if versions.strip():
+            # Delete specific versions
+            version_list = [int(v.strip()) for v in versions.split(",")]
+            api_path = f"v1/{mount}/delete/{path}"
+            payload = {"versions": version_list}
+            
+            response = await make_vault_request("POST", api_path, payload)
+            response.raise_for_status()
+            
+            return f"Deleted versions {versions} of secret at {mount}/{path}"
+        else:
+            # Delete all versions (metadata)
+            api_path = f"v1/{mount}/metadata/{path}"
+            
+            response = await make_vault_request("DELETE", api_path)
+            response.raise_for_status()
+            
+            return f"Permanently deleted all versions of secret at {mount}/{path}"
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error deleting secret: {e}")
+        return f"Error deleting secret: {str(e)}"
+
+@mcp.tool()
+async def list_secrets(mount: str = "secret", path: str = "") -> str:
+    """List all secrets at a given path in the KV secrets engine."""
+    logger.info(f"Listing secrets in {mount}/{path}")
+    
+    try:
+        # For KV v2, we need to use metadata path for listing
+        api_path = f"v1/{mount}/metadata/{path}"
+        
+        response = await make_vault_request("LIST", api_path)
+        
+        if response.status_code == 404:
+            return f"Path not found: {mount}/{path}"
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        keys = data.get("data", {}).get("keys", [])
+        
+        if not keys:
+            return f"No secrets found at {mount}/{path}"
+        
+        result = [f"Secrets at {mount}/{path}:"]
+        for key in keys:
+            if key.endswith("/"):
+                result.append(f"  [dir] {key}")
+            else:
+                result.append(f"  [secret] {key}")
+        
+        return "\n".join(result)
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error listing secrets: {e}")
+        return f"Error listing secrets: {str(e)}"
+
+@mcp.tool()
+async def create_totp_key(name: str = "", issuer: str = "Vault", account_name: str = "") -> str:
+    """Generate a new TOTP key in Vault and return QR code URL."""
+    logger.info(f"Creating TOTP key: {name}")
+    
+    if not name.strip():
+        return "Error: Key name is required"
+    
+    if not account_name.strip():
+        return "Error: Account name is required"
+    
+    try:
+        payload = {
+            "generate": True,
+            "issuer": issuer,
+            "account_name": account_name,
+            "exported": True
+        }
+        
+        response = await make_vault_request("POST", f"v1/totp/keys/{name}", payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        result = [f"TOTP key created: {name}"]
+        result.append(f"Issuer: {issuer}")
+        result.append(f"Account: {account_name}")
+        
+        if "data" in data:
+            if "url" in data["data"]:
+                result.append(f"URL: {data['data']['url']}")
+            if "barcode" in data["data"]:
+                result.append("QR Code: Generated (use URL in authenticator app)")
+        
+        return "\n".join(result)
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error creating TOTP key: {e}")
+        return f"Error creating TOTP key: {str(e)}"
+
+@mcp.tool()
+async def import_totp_key(name: str = "", url: str = "", key: str = "") -> str:
+    """Import an existing TOTP key into Vault using URL or raw key."""
+    logger.info(f"Importing TOTP key: {name}")
+    
+    if not name.strip():
+        return "Error: Key name is required"
+    
+    if not url.strip() and not key.strip():
+        return "Error: Either URL or key is required"
+    
+    try:
+        payload = {}
+        
+        if url.strip():
+            payload["url"] = url
+        else:
+            payload["key"] = key
+            payload["generate"] = False
+        
+        response = await make_vault_request("POST", f"v1/totp/keys/{name}", payload)
+        response.raise_for_status()
+        
+        return f"TOTP key '{name}' imported successfully"
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error importing TOTP key: {e}")
+        return f"Error importing TOTP key: {str(e)}"
+
+@mcp.tool()
+async def get_totp_code(name: str = "") -> str:
+    """Generate a TOTP code for the specified key."""
+    logger.info(f"Getting TOTP code for: {name}")
+    
+    if not name.strip():
+        return "Error: Key name is required"
+    
+    try:
+        response = await make_vault_request("GET", f"v1/totp/code/{name}")
+        
+        if response.status_code == 404:
+            return f"TOTP key not found: {name}"
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        code = data.get("data", {}).get("code", "")
+        
+        if code:
+            return f"TOTP Code for '{name}': {code}\nValid for ~30 seconds"
+        else:
+            return f"Could not generate TOTP code for '{name}'"
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error getting TOTP code: {e}")
+        return f"Error getting TOTP code: {str(e)}"
+
+@mcp.tool()
+async def validate_totp_code(name: str = "", code: str = "") -> str:
+    """Validate a TOTP code against a stored key."""
+    logger.info(f"Validating TOTP code for: {name}")
+    
+    if not name.strip():
+        return "Error: Key name is required"
+    
+    if not code.strip():
+        return "Error: TOTP code is required"
+    
+    try:
+        payload = {"code": code}
+        
+        response = await make_vault_request("POST", f"v1/totp/code/{name}", payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        is_valid = data.get("data", {}).get("valid", False)
+        
+        if is_valid:
+            return f"TOTP code is VALID for key '{name}'"
+        else:
+            return f"TOTP code is INVALID for key '{name}'"
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error validating TOTP code: {e}")
+        return f"Error validating TOTP code: {str(e)}"
+
+@mcp.tool()
+async def list_totp_keys() -> str:
+    """List all TOTP keys configured in Vault."""
+    logger.info("Listing TOTP keys")
+    
+    try:
+        response = await make_vault_request("LIST", "v1/totp/keys")
+        
+        if response.status_code == 404:
+            return "No TOTP keys configured"
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        keys = data.get("data", {}).get("keys", [])
+        
+        if not keys:
+            return "No TOTP keys configured"
+        
+        result = ["TOTP Keys:"]
+        for key in keys:
+            result.append(f"  {key}")
+        
+        return "\n".join(result)
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error listing TOTP keys: {e}")
+        return f"Error listing TOTP keys: {str(e)}"
+
+@mcp.tool()
+async def delete_totp_key(name: str = "") -> str:
+    """Delete a TOTP key from Vault."""
+    logger.info(f"Deleting TOTP key: {name}")
+    
+    if not name.strip():
+        return "Error: Key name is required"
+    
+    try:
+        response = await make_vault_request("DELETE", f"v1/totp/keys/{name}")
+        response.raise_for_status()
+        
+        return f"TOTP key '{name}' deleted successfully"
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error deleting TOTP key: {e}")
+        return f"Error deleting TOTP key: {str(e)}"
+
+@mcp.tool()
+async def enable_secrets_engine(path: str = "", engine_type: str = "kv-v2") -> str:
+    """Enable a new secrets engine at the specified path."""
+    logger.info(f"Enabling {engine_type} engine at {path}")
+    
+    if not path.strip():
+        return "Error: Path is required"
+    
+    try:
+        payload = {"type": engine_type}
+        
+        if engine_type == "kv-v2":
+            payload["options"] = {"version": "2"}
+        
+        response = await make_vault_request("POST", f"v1/sys/mounts/{path}", payload)
+        
+        if response.status_code == 204:
+            return f"Secrets engine '{engine_type}' enabled at path '{path}'"
+        
+        response.raise_for_status()
+        return f"Secrets engine '{engine_type}' enabled at path '{path}'"
+    except httpx.HTTPStatusError as e:
+        if "path is already in use" in str(e.response.text):
+            return f"Secrets engine already exists at path '{path}'"
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error enabling secrets engine: {e}")
+        return f"Error enabling secrets engine: {str(e)}"
+
+@mcp.tool()
+async def list_secrets_engines() -> str:
+    """List all enabled secrets engines in Vault."""
+    logger.info("Listing secrets engines")
+    
+    try:
+        response = await make_vault_request("GET", "v1/sys/mounts")
+        response.raise_for_status()
+        data = response.json()
+        
+        mounts = data.get("data", {})
+        
+        if not mounts:
+            return "No secrets engines enabled"
+        
+        result = ["Enabled Secrets Engines:"]
+        for path, config in mounts.items():
+            engine_type = config.get("type", "unknown")
+            description = config.get("description", "")
+            result.append(f"  {path} ({engine_type})")
+            if description:
+                result.append(f"      {description}")
+        
+        return "\n".join(result)
+    except httpx.HTTPStatusError as e:
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except Exception as e:
+        logger.error(f"Error listing secrets engines: {e}")
+        return f"Error listing secrets engines: {str(e)}"
+
+# === SERVER STARTUP ===
+if __name__ == "__main__":
+    logger.info("Starting HashiCorp Vault MCP server...")
+    
+    # Startup checks
+    if not VAULT_TOKEN:
+        logger.warning("VAULT_TOKEN not set - authentication will fail")
+    
+    if not VAULT_ADDR:
+        logger.warning("VAULT_ADDR not set - using default http://127.0.0.1:8200")
+    
+    logger.info(f"Vault server: {VAULT_ADDR}")
+    if VAULT_NAMESPACE:
+        logger.info(f"Vault namespace: {VAULT_NAMESPACE}")
+    
+    try:
+        mcp.run(transport='stdio')
+    except Exception as e:
+        logger.error(f"Server error: {e}", exc_info=True)
+        sys.exit(1)
