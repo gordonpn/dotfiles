@@ -13,7 +13,8 @@ The architecture separates version-controlled templates from machine-local confi
 ```
 dotfiles/ (Public Repository)
 ├── bin/
-│   └── mcp-sync                     # Hydration and synchronization utility
+│   ├── mcp-sync                     # Hydration and synchronization utility
+│   └── vault-mcp-server             # FastMCP runner for HashiCorp Vault KV & TOTP
 ├── dotfiles/
 │   ├── cclsp.json                   # LSP server extension mappings
 │   └── gemini/
@@ -32,6 +33,8 @@ dotfiles/ (Public Repository)
 OS Keychain / Secret Storage
 ├── macOS Keychain: security find-generic-password -a "$USER" -s <service>
 └── Linux Libsecret: secret-tool lookup service <service>
+Services: brave_api_key, tailscale_api_key, uptime_kuma_jwt, healthchecks_api_key,
+          github_token, vault_token, slack_bot_token, discord_token
 ```
 
 ---
@@ -46,11 +49,11 @@ mcp-sync
 ```
 
 ### What It Does
-1. **Pulls Secrets:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`).
+1. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`).
 2. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 3. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 4. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
-5. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json`.
+5. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (22 total servers).
 
 ---
 
@@ -72,6 +75,14 @@ mcp-sync
 | **`tailscale`** | stdio | `npx -y @yawlabs/tailscale-mcp` | Tailnet management: devices, ACLs, routes, and DNS |
 | **`uptime-kuma`** | stdio | `npx -y @davidfuchs/mcp-uptime-kuma` | Monitor healthchecks, status pages, and heartbeats |
 | **`healthchecks`**| stdio | `npx -y healthchecks-mcp` | Dead man's switch and scheduled cron task inspection |
+| **`server-services-configs`** | stdio | `@modelcontextprotocol/server-filesystem` | Scoped filesystem access to service configurations |
+| **`caddy`** | stdio | `@yawlabs/caddy-mcp` | Caddy reverse proxy admin API for dynamic route inspection |
+| **`context7`** | stdio | `@upstash/context7-mcp` | Real-time library documentation and code reference search |
+| **`postgres`** | stdio | `@modelcontextprotocol/server-postgres` | PostgreSQL schema introspection and read queries |
+| **`redis`** | stdio | `@yawlabs/redis-mcp` | Redis key inspection, TTLs, and metrics via SCAN |
+| **`vault`** | stdio | `uv run --with "mcp<2" --with "httpx"` | HashiCorp Vault KV v2 secret reads/writes and TOTP management |
+| **`slack`** | stdio | `@modelcontextprotocol/server-slack` | Slack workspace channels, threads, and bot communication |
+| **`discord`** | stdio | `@pasympa/discord-mcp` | Discord guild channels, messages, and role queries |
 
 ---
 
@@ -88,3 +99,15 @@ The K3s API server certificate on `master` generates TLS Subject Alternative Nam
 
 ### 4. Cloudflare Wrangler OAuth
 Rather than requiring API tokens that expire or have restricted scopes, the Cloudflare server binds directly to the local Wrangler OAuth session initiated via `npx wrangler login`.
+
+### 5. HashiCorp Vault FastMCP SDK Pinning
+FastMCP in `mcp` SDK v2.x restructured internal classes (`FastMCP` -> `MCPServer`). Running `bin/vault-mcp-server` with `uv run --with "mcp<2" --with "httpx"` ensures clean FastMCP compatibility and avoids virtual environment pollution.
+
+### 6. Redis Cursor-Based SCAN Traversal
+The `@yawlabs/redis-mcp` integration defaults to read-only mode and uses cursor-based `SCAN` rather than `KEYS *`, preventing long-running blocking operations on active databases.
+
+### 7. Caddy Admin API
+`@yawlabs/caddy-mcp` connects to Caddy's HTTP admin endpoint (defaults to `http://master.tailb65f8c.ts.net:2019`). It allows querying active reverse proxy routes and server configurations.
+
+### 8. Context7 Documentation
+`@upstash/context7-mcp` provides current API and framework documentation without requiring an API key for baseline usage.
