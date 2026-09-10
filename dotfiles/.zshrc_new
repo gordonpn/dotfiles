@@ -189,6 +189,28 @@ zstyle ':completion:*' matcher-list \
   'r:|[._-]=* r:|=*' \
   'l:|=* r:|=*'
 
+# Collapse runs of spaces/tabs down to one, but only outside quotes and escapes,
+# so `-m "two  spaces"` and `a\ b` survive while alignment padding does not.
+_hist_squeeze_blanks() {
+  local in=$1 out= ch quote=
+  local -i i
+  for (( i = 1; i <= $#in; i++ )); do
+    ch=$in[i]
+    if [[ -n $quote ]]; then
+      out+=$ch
+      [[ $ch == $quote ]] && quote=
+      continue
+    fi
+    case $ch in
+      \'|\") quote=$ch; out+=$ch ;;
+      \\) out+=$ch; (( i++ )); out+=$in[i] ;;
+      ' '|$'\t') [[ $out[-1] == ' ' ]] || out+=' ' ;;
+      *) out+=$ch ;;
+    esac
+  done
+  print -r -- $out
+}
+
 zshaddhistory() {
   setopt LOCAL_OPTIONS
   setopt EXTENDED_GLOB
@@ -198,14 +220,18 @@ zshaddhistory() {
   # 1. Flatten lines explicitly split with a backslash \
   cmd="${cmd//\\$'\n'/ }"
 
-  # 2. Trim leading (left) and trailing (right) whitespace/newlines
+  # 2. Squeeze whitespace between arguments. Skipped for heredocs, where the
+  #    body is data and its spacing is significant.
+  [[ $cmd != *'<<'* ]] && cmd="$(_hist_squeeze_blanks "$cmd")"
+
+  # 3. Trim leading (left) and trailing (right) whitespace/newlines
   cmd="${cmd##[[:space:]]#}"
   cmd="${cmd%%[[:space:]]#}"
 
   # If the command is completely empty after cleaning, drop it
   [[ -z "$cmd" ]] && return 1
 
-  # 3. Save your clean command using your raw (-r) print setup
+  # 4. Save your clean command using your raw (-r) print setup
   print -sr -- "$cmd"
   fc -p "$HISTFILE"
   
