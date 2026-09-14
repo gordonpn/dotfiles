@@ -30,6 +30,9 @@ dotfiles/ (Public Repository)
 ├── docker-profiles.json             # Local daemon + remote SSH Docker profiles
 └── ssh-profiles.json                # Host profiles derived from ~/.ssh/config
 
+~/.local/bin/ (Machine-Local Binaries, Not Committed)
+└── github-mcp-server                # Pinned release binary, installed by mcp-sync
+
 OS Keychain / Secret Storage
 ├── macOS Keychain: security find-generic-password -a "$USER" -s <service>
 └── Linux Libsecret: secret-tool lookup service <service>
@@ -49,11 +52,12 @@ mcp-sync
 ```
 
 ### What It Does
-1. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`).
-2. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
-3. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
-4. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
-5. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (23 total servers).
+1. **Installs `github-mcp-server`:** Downloads the pinned release tarball for the host OS/arch, verifies its SHA-256 against the published checksums file, and installs the binary to `~/.local/bin`. Skipped when the version stamp already matches. Override the version with `GITHUB_MCP_SERVER_VERSION`.
+2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`).
+3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
+4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
+5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
+6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (23 total servers).
 
 ---
 
@@ -64,7 +68,7 @@ mcp-sync
 | **`cclsp`** | stdio | `@ktnyt/cclsp` | Multi-language LSP router for 14 local language servers |
 | **`fetch`** | stdio | `uvx mcp-server-fetch` | HTTP web requests and HTML-to-markdown conversion |
 | **`puppeteer`** | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
-| **`github`** | stdio | `npx -y @modelcontextprotocol/server-github` | Issues, PRs, commits, repository search via GitHub API |
+| **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
 | **`sqlite`** | stdio | `uvx --with mcp==1.1.2 mcp-server-sqlite` | Local SQLite database queries and schema introspection |
 | **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages |
@@ -115,3 +119,8 @@ The `@yawlabs/redis-mcp` integration defaults to read-only mode and uses cursor-
 
 ### 9. Loki Discovery-First Granular Tools
 The `incu6us/loki-mcp-server` implementation provides 5 granular tools (`labels`, `label_values`, `series`, `query`, `query_range`). This allows the agent to inspect the label taxonomy (e.g. apps, namespaces, containers) before formulating LogQL expressions, preventing blind query errors.
+
+### 10. GitHub MCP Server Binary Distribution
+`github/github-mcp-server` is a Go binary published only to GitHub releases and `ghcr.io`, with no npm or PyPI entry point, so it cannot be run through `npx`/`uvx` like every other server here. `mcp-sync` downloads the pinned release for the host OS/arch and verifies its SHA-256 against the published checksums file before installing; an unverifiable download is skipped rather than installed. Installed version is tracked in `~/.local/bin/.github-mcp-server.version` instead of parsing `--version`, whose output format is not a stability contract. The Docker image was rejected to avoid making the GitHub tools depend on a running daemon.
+
+It replaces `@modelcontextprotocol/server-github`, which npm marks "package no longer supported".

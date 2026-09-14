@@ -10,8 +10,13 @@ TEMPLATE_DIR="${REPO_DIR}/dotfiles/gemini"
 GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
 KUBE_DIR="${HOME}/.kube"
+LOCAL_BIN_DIR="${HOME}/.local/bin"
 
-mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${KUBE_DIR}"
+# github-mcp-server ships as a Go binary, not on npm or PyPI, so it is fetched
+# from GitHub releases. Pinned for reproducibility; override to bump.
+GITHUB_MCP_SERVER_VERSION="${GITHUB_MCP_SERVER_VERSION:-1.12.1}"
+
+mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
 
 get_secret() {
   local service_name="$1"
@@ -30,6 +35,69 @@ get_secret() {
   fi
 
   echo "${value}"
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+install_github_mcp_server() {
+  local bin_path="${LOCAL_BIN_DIR}/github-mcp-server"
+  # Stamp file rather than `--version`: the release binary's flag output format
+  # is not part of its contract, the stamp is ours.
+  local stamp_file="${LOCAL_BIN_DIR}/.github-mcp-server.version"
+  local want="${GITHUB_MCP_SERVER_VERSION}"
+
+  if [[ -x "${bin_path}" && -f "${stamp_file}" ]] && [[ "$(cat "${stamp_file}")" == "${want}" ]]; then
+    echo "github-mcp-server ${want} already present at ${bin_path}"
+    return 0
+  fi
+
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os="Darwin" ;;
+    Linux) os="Linux" ;;
+    *) echo "Notice: unsupported OS $(uname -s), skipping github-mcp-server install."; return 0 ;;
+  esac
+  case "$(uname -m)" in
+    x86_64 | amd64) arch="x86_64" ;;
+    arm64 | aarch64) arch="arm64" ;;
+    *) echo "Notice: unsupported arch $(uname -m), skipping github-mcp-server install."; return 0 ;;
+  esac
+
+  local asset="github-mcp-server_${os}_${arch}.tar.gz"
+  local base="https://github.com/github/github-mcp-server/releases/download/v${want}"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '${tmp_dir}'" RETURN
+
+  echo "Downloading github-mcp-server ${want} (${os}/${arch})..."
+  if ! curl -fsSL -o "${tmp_dir}/${asset}" "${base}/${asset}"; then
+    echo "Notice: download of ${asset} failed, leaving github-mcp-server unchanged." >&2
+    return 0
+  fi
+  if ! curl -fsSL -o "${tmp_dir}/checksums.txt" "${base}/github-mcp-server_${want}_checksums.txt"; then
+    echo "Notice: checksum file unavailable, refusing to install unverified binary." >&2
+    return 0
+  fi
+
+  local expected actual
+  expected="$(awk -v a="${asset}" '$2 == a {print $1}' "${tmp_dir}/checksums.txt")"
+  actual="$(sha256_of "${tmp_dir}/${asset}")"
+  if [[ -z "${expected}" || "${expected}" != "${actual}" ]]; then
+    echo "Error: checksum mismatch for ${asset} (expected '${expected}', got '${actual}')." >&2
+    return 1
+  fi
+
+  tar -xzf "${tmp_dir}/${asset}" -C "${tmp_dir}" github-mcp-server
+  install -m 755 "${tmp_dir}/github-mcp-server" "${bin_path}"
+  echo "${want}" >"${stamp_file}"
+  echo "Installed github-mcp-server ${want} to ${bin_path}"
 }
 
 sync_ssh_profiles() {
@@ -282,6 +350,7 @@ print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_
 
 main() {
   echo "==> Synchronizing Antigravity MCP environment..."
+  install_github_mcp_server
   sync_ssh_profiles
   sync_docker_profiles
   sync_k3s_cluster
