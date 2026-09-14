@@ -57,7 +57,7 @@ mcp-sync
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
-6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (25 total servers).
+6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (27 total servers).
 
 ---
 
@@ -70,6 +70,8 @@ mcp-sync
 | **`playwright`** | stdio | `npx -y @playwright/mcp@latest` | Accessibility-tree browser automation and interaction |
 | **`chrome-devtools`** | stdio | `npx -y chrome-devtools-mcp@latest` | Performance traces, network inspection, and console access |
 | **`puppeteer`** | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
+| **`memory`** | stdio | `npx -y @modelcontextprotocol/server-memory` | Persistent knowledge graph in `~/.gemini/memory.json` |
+| **`sequentialthinking`** | stdio | `npx -y @modelcontextprotocol/server-sequential-thinking` | Structured multi-step reasoning scratchpad |
 | **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
 | **`sqlite`** | stdio | `uvx --with mcp==1.1.2 mcp-server-sqlite` | Local SQLite database queries and schema introspection |

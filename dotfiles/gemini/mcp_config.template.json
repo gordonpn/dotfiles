@@ -23,6 +23,17 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
     },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "MEMORY_FILE_PATH": "${HOME}/.gemini/memory.json"
+      }
+    },
+    "sequentialthinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
     "github": {
       "command": "${HOME}/.local/bin/github-mcp-server",
       "args": ["stdio"],
