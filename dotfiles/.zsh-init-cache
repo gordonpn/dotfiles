@@ -12,17 +12,41 @@
 
 # _zcache_source <cache-name> <binary> <command to run...>
 #
-# Rebuilds whenever <binary> is newer than the cache, so a tool upgrade
-# (`brew upgrade zoxide`, `mise self-update`) is picked up without manual
-# intervention. Delete ~/.cache/zsh/init to force a rebuild.
+# Rebuilds whenever the tool's identity changes, so an upgrade (`brew upgrade
+# zoxide`, `mise self-update`) is picked up without manual intervention. Delete
+# ~/.cache/zsh/init to force a rebuild.
 #
 # <binary> is either a bare command name, resolved through $commands, or a path
 # containing a slash, for tools not yet on PATH at the point of the call. A
 # binary that resolves to nothing is not an error: the call becomes a no-op, so
 # the same line is safe on a host that does not have the tool installed.
 #
-# The cache is written with >| and removed if the generating command fails, so a
-# broken tool cannot leave a half-written file that gets sourced forever.
+# Invalidation. The cache's first line is an identity stamp, compared on every
+# startup. It deliberately avoids running `<tool> --version`: that would cost a
+# fork per tool per shell, which is the exact cost this cache exists to avoid.
+# Instead the stamp is built from three things, all obtainable without forking:
+#
+#   1. The fully resolved binary path. This is what actually catches upgrades.
+#      Both Homebrew and mise encode the version in the real path
+#      (/opt/homebrew/Cellar/zoxide/0.10.0/bin/zoxide), so an upgrade changes it
+#      even when the symlink on PATH does not move.
+#   2. Its size and mtime, which cover a binary replaced in place, where the
+#      path stays constant — mise self-update, or a hand-installed build.
+#   3. The command line itself, so editing the arguments (say `zoxide init zsh
+#      --cmd cd` to `--cmd z`) rebuilds rather than silently serving the old
+#      output.
+#
+# mtime alone was not enough: Homebrew bottles can carry a build timestamp older
+# than the cache, so an upgraded tool could look unchanged and leave a stale init
+# sourced indefinitely. That fails silently and looks like the tool is broken.
+#
+# Known gap: output that depends on the environment rather than the binary or the
+# arguments is not detected. CARAPACE_EXCLUDES is the live example — change it
+# and the cached completion set is stale until you delete the cache.
+#
+# The cache is written to a temporary file and moved into place, so an
+# interrupted or failing generator cannot leave a half-written file that gets
+# sourced forever.
 _zcache_source() {
   local name=$1 bin=$2; shift 2
   local binpath cache="$HOME/.cache/zsh/init/$name.zsh"
@@ -35,9 +59,27 @@ _zcache_source() {
     [[ -n $binpath ]] || return 0
   fi
 
-  if [[ ! -f $cache || $binpath -nt $cache ]]; then
+  local real=${binpath:A} stamp
+  local -A st
+  zmodload -F zsh/stat b:zstat 2>/dev/null
+  if zstat -H st -- $real 2>/dev/null; then
+    stamp="# zcache $real ${st[size]} ${st[mtime]} $*"
+  else
+    # No zsh/stat: the resolved path and argv still cover the common upgrade.
+    stamp="# zcache $real - - $*"
+  fi
+
+  local first=
+  [[ -f $cache ]] && IFS= read -r first < $cache
+
+  if [[ $first != $stamp ]]; then
     [[ -d ${cache:h} ]] || mkdir -p ${cache:h}
-    "$@" >| $cache 2>/dev/null || { rm -f $cache; return 1 }
+    if { print -r -- $stamp; "$@" } >| $cache.new 2>/dev/null; then
+      mv -f $cache.new $cache
+    else
+      rm -f $cache.new
+      return 1
+    fi
   fi
   source $cache
 }
