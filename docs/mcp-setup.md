@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository configures Model Context Protocol (MCP) servers for the Antigravity AI coding agent (`agy`) and terminal coding agents on macOS and Linux.
+This repository configures Model Context Protocol (MCP) servers for the Antigravity AI coding agent (`agy`) on macOS and Linux. `agy` is the only consumer: `bin/mcp-sync` writes `~/.gemini/config/mcp_config.json` and nothing else. The other agents in use read their own machine-local registries, deliberately untracked here because their contents are environment-specific: `~/.kiro/settings/mcp.json` for kiro-cli and `~/.claude.json` for Claude Code, both of which carry work-only servers.
 
 The architecture separates version-controlled templates from machine-local configuration and secrets. Because this repository is public, credentials and cluster private keys are kept in the OS Keychain or environment variables and hydrated onto the local machine via `bin/mcp-sync`.
 
