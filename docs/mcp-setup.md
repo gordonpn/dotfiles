@@ -57,7 +57,7 @@ mcp-sync
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
-6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (29 total servers).
+6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (30 total servers).
 
 ---
 
@@ -67,6 +67,7 @@ mcp-sync
 | :--- | :--- | :--- | :--- |
 | **`cclsp`** | stdio | `@ktnyt/cclsp` | Multi-language LSP router for 14 local language servers |
 | **`fetch`** | stdio | `uvx mcp-server-fetch` | HTTP web requests and HTML-to-markdown conversion |
+| **`git`** | stdio | `uvx mcp-server-git` | Structured status, diff, log, branch, and commit operations on local repos |
 | **`playwright`** | stdio | `npx -y @playwright/mcp@latest` | Accessibility-tree browser automation and interaction |
 | **`chrome-devtools`** | stdio | `npx -y chrome-devtools-mcp@latest` | Performance traces, network inspection, and console access |
 | **`puppeteer`** | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
@@ -133,3 +134,6 @@ It replaces `@modelcontextprotocol/server-github`, which npm marks "package no l
 
 ### 11. AWS API MCP Read-Only Posture
 `awslabs.aws-api-mcp-server` executes real AWS CLI commands, so it runs with both `READ_OPERATIONS_ONLY=true` and `REQUIRE_MUTATION_CONSENT=true`. IAM remains the actual boundary; these are defence in depth. `AWS_API_MCP_WORKING_DIR` points at `~/.cache/aws-api-mcp/workdir` rather than the server's default under `~/.aws`, because some agent sandboxes deny that path outright and a scratch directory has no reason to sit next to credentials. Credentials follow boto3's default resolution order; set `AWS_API_MCP_PROFILE_NAME` to pin a profile.
+
+### 12. Git MCP Without a Pinned Repository
+`mcp-server-git` accepts a `--repository` argument that scopes it to one checkout. It is intentionally omitted so the `repo_path` tool parameter stays free, letting one server instance serve every repository on the machine.

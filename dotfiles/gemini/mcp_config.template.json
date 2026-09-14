@@ -11,6 +11,10 @@
       "command": "uvx",
       "args": ["mcp-server-fetch"]
     },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"]
+    },
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest"]
