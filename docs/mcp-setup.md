@@ -96,6 +96,10 @@ mcp-sync
 | **`slack`** | stdio | `@modelcontextprotocol/server-slack` | Slack workspace channels, threads, and bot communication |
 | **`discord`** | stdio | `@pasympa/discord-mcp` | Discord guild channels, messages, and role queries |
 
+### Deprecated Upstream, Retained Here
+
+`puppeteer`, `brave-search`, `postgres`, and `slack` come from `modelcontextprotocol/servers`, whose npm packages are marked "package no longer supported" and frozen at 2025 releases. They still work; expect no fixes. Maintained alternatives if one breaks: `@playwright/mcp` (already registered) for `puppeteer`, `@brave/brave-search-mcp-server`, `crystaldba/postgres-mcp`, and `korotovsky/slack-mcp-server`.
+
 ---
 
 ## Quirks & Technical Decisions
