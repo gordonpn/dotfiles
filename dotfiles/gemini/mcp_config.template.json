@@ -71,25 +71,6 @@
         "${CLOUDFLARE_ACCOUNT_ID}"
       ]
     },
-    "aws-api": {
-      "command": "uvx",
-      "args": ["awslabs.aws-api-mcp-server@latest"],
-      "env": {
-        "AWS_REGION": "${AWS_REGION}",
-        "AWS_API_MCP_WORKING_DIR": "${AWS_API_MCP_WORKING_DIR}",
-        "READ_OPERATIONS_ONLY": "true",
-        "REQUIRE_MUTATION_CONSENT": "true",
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      }
-    },
-    "aws-documentation": {
-      "command": "uvx",
-      "args": ["awslabs.aws-documentation-mcp-server@latest"],
-      "env": {
-        "AWS_DOCUMENTATION_PARTITION": "aws",
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      }
-    },
     "prometheus": {
       "command": "npx",
       "args": ["-y", "prometheus-mcp@latest", "stdio"],

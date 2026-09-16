@@ -53,11 +53,11 @@ mcp-sync
 
 ### What It Does
 1. **Installs `github-mcp-server`:** Downloads the pinned release tarball for the host OS/arch, verifies its SHA-256 against the published checksums file, and installs the binary to `~/.local/bin`. Skipped when the version stamp already matches. Override the version with `GITHUB_MCP_SERVER_VERSION`.
-2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`, `AWS_REGION`).
+2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`).
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
-6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (30 total servers).
+6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (28 total servers).
 
 ---
 
@@ -77,8 +77,6 @@ mcp-sync
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
 | **`sqlite`** | stdio | `uvx --with mcp==1.1.2 mcp-server-sqlite` | Local SQLite database queries and schema introspection |
 | **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages |
-| **`aws-api`** | stdio | `uvx awslabs.aws-api-mcp-server@latest` | AWS CLI command generation and execution, read-only by default |
-| **`aws-documentation`** | stdio | `uvx awslabs.aws-documentation-mcp-server@latest` | AWS docs search, page reads, and content recommendations |
 | **`prometheus`** | stdio | `npx -y prometheus-mcp@latest stdio` | Metrics discovery and PromQL instant/range queries |
 | **`loki`** | stdio | `loki-mcp-server` | Grafana Loki log search, labels/series discovery, and LogQL queries |
 | **`docker`** | stdio | `npx -y @hypnosis/docker-mcp-server` | Local daemon & remote Swarm containers, logs, and Compose |
@@ -136,8 +134,5 @@ The `incu6us/loki-mcp-server` implementation provides 5 granular tools (`labels`
 
 It replaces `@modelcontextprotocol/server-github`, which npm marks "package no longer supported".
 
-### 11. AWS API MCP Read-Only Posture
-`awslabs.aws-api-mcp-server` executes real AWS CLI commands, so it runs with both `READ_OPERATIONS_ONLY=true` and `REQUIRE_MUTATION_CONSENT=true`. IAM remains the actual boundary; these are defence in depth. `AWS_API_MCP_WORKING_DIR` points at `~/.cache/aws-api-mcp/workdir` rather than the server's default under `~/.aws`, because some agent sandboxes deny that path outright and a scratch directory has no reason to sit next to credentials. Credentials follow boto3's default resolution order; set `AWS_API_MCP_PROFILE_NAME` to pin a profile.
-
-### 12. Git MCP Without a Pinned Repository
+### 11. Git MCP Without a Pinned Repository
 `mcp-server-git` accepts a `--repository` argument that scopes it to one checkout. It is intentionally omitted so the `repo_path` tool parameter stays free, letting one server instance serve every repository on the machine.

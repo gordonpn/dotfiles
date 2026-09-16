@@ -269,15 +269,6 @@ sync_mcp_config() {
   local postgres_url
   postgres_url="${POSTGRES_URL:-postgresql://postgres:postgres@localhost:5432/postgres}"
 
-  local aws_region
-  aws_region="${AWS_REGION:-us-east-1}"
-
-  # Deliberately outside ~/.aws: agent sandboxes here can deny that path, and a
-  # scratch workdir has no reason to live next to credentials.
-  local aws_api_workdir
-  aws_api_workdir="${AWS_API_MCP_WORKING_DIR:-${HOME}/.cache/aws-api-mcp/workdir}"
-  mkdir -p "${aws_api_workdir}"
-
   local redis_url
   redis_url="${REDIS_URL:-redis://localhost:6379}"
 
@@ -308,8 +299,6 @@ sync_mcp_config() {
   export SQLITE_DB_PATH="${sqlite_db}"
   export CADDY_ADMIN_URL="${caddy_url}"
   export POSTGRES_URL="${postgres_url}"
-  export AWS_REGION="${aws_region}"
-  export AWS_API_MCP_WORKING_DIR="${aws_api_workdir}"
   export REDIS_URL="${redis_url}"
   export VAULT_ADDR="${vault_addr}"
   export VAULT_TOKEN="${vault_token}"
@@ -340,8 +329,6 @@ replacements = {
     '\${HEALTHCHECKS_API_KEY}': os.environ.get('HEALTHCHECKS_API_KEY', ''),
     '\${CADDY_ADMIN_URL}': os.environ.get('CADDY_ADMIN_URL', ''),
     '\${POSTGRES_URL}': os.environ.get('POSTGRES_URL', ''),
-    '\${AWS_REGION}': os.environ.get('AWS_REGION', ''),
-    '\${AWS_API_MCP_WORKING_DIR}': os.environ.get('AWS_API_MCP_WORKING_DIR', ''),
     '\${REDIS_URL}': os.environ.get('REDIS_URL', ''),
     '\${VAULT_ADDR}': os.environ.get('VAULT_ADDR', ''),
     '\${VAULT_TOKEN}': os.environ.get('VAULT_TOKEN', ''),
