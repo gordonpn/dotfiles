@@ -447,6 +447,6 @@ take() {
 
 # Syntax highlighting via zsh-patina (Rust daemon, replaces
 # fast-syntax-highlighting). Must be activated last so it hooks ZLE after
-# every other plugin. Guarded because this config is shared with hosts where
-# patina isn't installed. It needs zsh >= 5.9.
-(( $+commands[zsh-patina] )) && _zcache_source zsh-patina zsh-patina zsh-patina activate
+# every other plugin. Evaluated directly because activate manages the
+# background daemon lifecycle and socket path across reboots.
+(( $+commands[zsh-patina] )) && eval "$(zsh-patina activate)"
