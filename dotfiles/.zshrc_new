@@ -427,6 +427,7 @@ export PATH="/Users/gordonpn/.local/bin:$PATH"
 # understand git aliases and ssh config Include directives respectively.
 # Must run after compinit, which the antidote bundle handles.
 if (( $+commands[carapace] )); then
+  export CARAPACE_MATCH=1
   export CARAPACE_EXCLUDES='bat,eza,fd,gh,git,lazygit,npm,rg,ssh,starship,zoxide'
   _zcache_source carapace carapace carapace _carapace zsh
 fi
