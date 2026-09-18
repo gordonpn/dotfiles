@@ -192,3 +192,65 @@ alias gupod='git pull --autostash --rebase origin develop'
 alias gupv='git pull --rebase -v'
 alias gwch='git whatchanged -p --abbrev-commit --pretty=medium'
 alias gwip='git add -A; git rm $(git ls-files --deleted) 2> /dev/null; git commit --no-verify --no-gpg-sign -m "--wip-- [skip ci]"'
+
+# Browse changed files in fzf with a preview of each file's diff.
+#   gdf     delta preview: side-by-side, syntax highlighted
+#   gdfp    plain git diff preview, no delta
+# Both take no argument (unstaged worktree changes), a commit (that commit
+# alone), or a range: a..b, a.., ..b, or the a...b merge-base form.
+_gdf_pick() {
+    emulate -L zsh
+    # $render is appended to the preview command and must arrive unexpanded, so
+    # the preview shell is what resolves FZF_PREVIEW_COLUMNS.
+    local render=$1 window=$2
+    shift 2
+    git rev-parse --git-dir >/dev/null || return
+    # fzf runs the preview in a fresh $SHELL -c, so the command has to be a
+    # self-contained string: shell functions do not survive into it.
+    local -a files
+    local diff rev
+    if [[ $1 == *..* ]]; then
+        # git diff reads every range form itself, so no rev parsing here.
+        files=(git diff --name-only "$1")
+        diff="git diff --color=always ${(q)1} -- {}"
+    elif [[ -n $1 ]]; then
+        # ^! is the commit against its parents, which a range cannot express.
+        # --root is what makes a root commit list its files instead of nothing.
+        rev="$1^!"
+        files=(git diff-tree --no-commit-id --name-only -r --root "$1")
+        diff="git diff --color=always ${(q)rev} -- {}"
+    else
+        files=(git diff --name-only)
+        diff='git diff --color=always -- {}'
+    fi
+    # Collected rather than piped so a bad rev surfaces git's own message and
+    # exit status instead of fzf opening on an empty list.
+    local list
+    list=$("${files[@]}") || return
+    [[ -n $list ]] || return 0
+    # Preview scrolling, both tiers explicit: shift-up/down is fzf's default for
+    # preview-up/down (one line) and is overridden here to half a page, with the
+    # line-at-a-time step moved to alt. The wheel still scrolls a line at a time.
+    # delta's navigate=true does not apply here, it needs less and the preview
+    # has no pager.
+    print -r -- "$list" | fzf \
+        --preview "$diff$render" \
+        --preview-window="$window" \
+        --bind='shift-up:preview-half-page-up,shift-down:preview-half-page-down' \
+        --bind='alt-up:preview-up,alt-down:preview-down'
+}
+
+# delta is named explicitly because git suppresses core.pager off a terminal.
+# --width keeps the global side-by-side setting inside the pane rather than the
+# full terminal, which would misalign the columns; delta wraps to that width
+# itself, so the pane must not wrap on top of it.
+gdf() {
+    _gdf_pick ' | delta --paging=never ${FZF_PREVIEW_COLUMNS:+--width=$FZF_PREVIEW_COLUMNS}' \
+        'right,70%' "$@"
+}
+
+# Raw git diff emits unwrapped lines and fzf truncates them at the pane edge, so
+# this one needs the pane's own wrapping to avoid hiding content.
+gdfp() {
+    _gdf_pick '' 'right,70%,wrap' "$@"
+}
