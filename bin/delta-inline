@@ -1,0 +1,13 @@
+#!/bin/sh
+# delta, forced to unified/inline rendering.
+#
+# delta.side-by-side is true globally, and delta's --side-by-side is a valueless
+# boolean, so there is no CLI flag that turns it off. A feature cannot do it
+# either: the main [delta] section outranks any feature. Overriding it via
+# GIT_CONFIG_PARAMETERS is the only route, because that is how git itself hands
+# config to delta.
+#
+# Exists as a script rather than an inline env prefix so it works whether the
+# caller runs it through a shell or execs it directly (lazygit's diffRenderers
+# does not document which).
+exec env GIT_CONFIG_PARAMETERS="'delta.side-by-side=false'" delta "$@"

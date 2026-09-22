@@ -2,9 +2,15 @@
 # Reference: https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md
 
 git:
+  # Cycled with '|' (reverse '\'). 'name' is what the cycle notification shows.
+  # side-by-side stays first so the default rendering is unchanged.
   diffRenderers:
-    - colorArg: always
+    - name: side-by-side
+      colorArg: always
       command: delta --dark --paging=never --line-numbers
+    - name: inline
+      colorArg: always
+      command: delta-inline --dark --paging=never --line-numbers
 gui:
   mainPanelSplitMode: "flexible"
   sideBySideView: auto
