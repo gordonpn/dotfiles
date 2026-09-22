@@ -34,7 +34,7 @@ window-padding-y = 12
 
 # Cosmetics & Layout (Enables clean native title bar tabs)
 window-theme = "dark"
-macos-titlebar-style = tabs
+macos-titlebar-style = native
 
 # Unified background safety lock to completely wipe out any Neovim margins
 background = #181616
