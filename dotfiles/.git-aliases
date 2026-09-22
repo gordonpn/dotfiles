@@ -234,6 +234,7 @@ _gdf_pick() {
     # delta's navigate=true does not apply here, it needs less and the preview
     # has no pager.
     print -r -- "$list" | fzf \
+        --height=100% \
         --preview "$diff$render" \
         --preview-window="$window" \
         --bind='shift-up:preview-half-page-up,shift-down:preview-half-page-down' \
