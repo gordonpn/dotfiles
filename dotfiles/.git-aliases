@@ -195,7 +195,7 @@ alias gwip='git add -A; git rm $(git ls-files --deleted) 2> /dev/null; git commi
 
 # Browse changed files in fzf with a preview of each file's diff.
 #   gdf     delta preview: side-by-side, syntax highlighted
-#   gdfp    plain git diff preview, no delta
+#   gdfp    delta preview: inline, syntax highlighted
 # Both take no argument (unstaged worktree changes), a commit (that commit
 # alone), or a range: a..b, a.., ..b, or the a...b merge-base form.
 _gdf_pick() {
@@ -249,8 +249,10 @@ gdf() {
         'right,70%' "$@"
 }
 
-# Raw git diff emits unwrapped lines and fzf truncates them at the pane edge, so
-# this one needs the pane's own wrapping to avoid hiding content.
+# Override side-by-side via git config parameter to render unified inline diffs
+# with delta styling. Unlike side-by-side, inline diffs do not wrap internally,
+# so fzf wrap is kept to prevent long lines from being truncated.
 gdfp() {
-    _gdf_pick '' 'right,70%,wrap' "$@"
+    _gdf_pick ' | GIT_CONFIG_PARAMETERS="'\''delta.side-by-side=false'\''" delta --paging=never ${FZF_PREVIEW_COLUMNS:+--width=$FZF_PREVIEW_COLUMNS}' \
+        'right,70%,wrap' "$@"
 }
