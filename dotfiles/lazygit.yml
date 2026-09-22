@@ -28,3 +28,12 @@ gui:
       - "#2A2A37"
     optionsTextColor:
       - "#7E9CD8"
+keybinding:
+  universal:
+    # Transposes the defaults: PgUp/PgDn page the list, ',' and '.' scroll the
+    # main panel. The -alt1 (K/J) and -alt2 (ctrl+u/ctrl+d) main-panel bindings
+    # are separate keys and still apply.
+    prevPage: "<pgup>"
+    nextPage: "<pgdown>"
+    scrollUpMain: ","
+    scrollDownMain: "."
