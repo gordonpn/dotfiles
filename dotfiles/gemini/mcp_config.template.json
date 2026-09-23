@@ -105,6 +105,14 @@
         "KUBECONFIG": "${HOME}/.kube/config"
       }
     },
+    "terraform": {
+      "command": "terraform-mcp-server",
+      "args": ["stdio"],
+      "env": {
+        "TFE_TOKEN": "${TFE_TOKEN}",
+        "TFE_ADDRESS": "${TFE_ADDRESS}"
+      }
+    },
     "ssh": {
       "command": "npx",
       "args": ["-y", "@hypnosis/ssh-mcp-server"],

@@ -100,6 +100,34 @@ install_github_mcp_server() {
   echo "Installed github-mcp-server ${want} to ${bin_path}"
 }
 
+install_terraform_mcp_server() {
+  local bin_path="${LOCAL_BIN_DIR}/terraform-mcp-server"
+
+  if command -v terraform-mcp-server >/dev/null 2>&1; then
+    local installed_path
+    installed_path="$(command -v terraform-mcp-server)"
+    if [[ "${installed_path}" != "${bin_path}" && ! -e "${bin_path}" ]]; then
+      ln -sf "${installed_path}" "${bin_path}"
+    fi
+    return 0
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    echo "Installing terraform-mcp-server via Homebrew..."
+    brew install terraform-mcp-server
+    ln -sf "$(command -v terraform-mcp-server)" "${bin_path}"
+    return 0
+  fi
+
+  if command -v go >/dev/null 2>&1; then
+    echo "Installing terraform-mcp-server via go install..."
+    GOBIN="${LOCAL_BIN_DIR}" go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@latest
+    return 0
+  fi
+
+  echo "Notice: terraform-mcp-server not found and neither brew nor go is available to install it." >&2
+}
+
 sync_ssh_profiles() {
   local ssh_config="${HOME}/.ssh/config"
   local target_file="${GEMINI_DIR}/ssh-profiles.json"
@@ -290,6 +318,15 @@ sync_mcp_config() {
   local discord_token
   discord_token="$(get_secret "discord_token" "DISCORD_TOKEN")"
 
+  local tfe_token
+  tfe_token="$(get_secret "tfe_token" "TFE_TOKEN")"
+  if [[ -z "${tfe_token}" ]]; then
+    tfe_token="$(get_secret "terraform_token" "TERRAFORM_TOKEN")"
+  fi
+
+  local tfe_address
+  tfe_address="${TFE_ADDRESS:-https://app.terraform.io}"
+
   export GITHUB_PERSONAL_ACCESS_TOKEN="${gh_token}"
   export BRAVE_API_KEY="${brave_key}"
   export EXA_API_KEY="${exa_key}"
@@ -309,6 +346,8 @@ sync_mcp_config() {
   export SLACK_BOT_TOKEN="${slack_token}"
   export SLACK_TEAM_ID="${slack_team}"
   export DISCORD_TOKEN="${discord_token}"
+  export TFE_TOKEN="${tfe_token}"
+  export TFE_ADDRESS="${tfe_address}"
 
   python3 -c "
 import json, os
@@ -339,7 +378,9 @@ replacements = {
     '\${VAULT_TOKEN}': os.environ.get('VAULT_TOKEN', ''),
     '\${SLACK_BOT_TOKEN}': os.environ.get('SLACK_BOT_TOKEN', ''),
     '\${SLACK_TEAM_ID}': os.environ.get('SLACK_TEAM_ID', ''),
-    '\${DISCORD_TOKEN}': os.environ.get('DISCORD_TOKEN', '')
+    '\${DISCORD_TOKEN}': os.environ.get('DISCORD_TOKEN', ''),
+    '\${TFE_TOKEN}': os.environ.get('TFE_TOKEN', ''),
+    '\${TFE_ADDRESS}': os.environ.get('TFE_ADDRESS', '')
 }
 
 for k, v in replacements.items():
@@ -356,6 +397,7 @@ print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_
 main() {
   echo "==> Synchronizing Antigravity MCP environment..."
   install_github_mcp_server
+  install_terraform_mcp_server
   sync_ssh_profiles
   sync_docker_profiles
   sync_k3s_cluster
