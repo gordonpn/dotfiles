@@ -362,6 +362,53 @@ pnpx() {
   fi
 }
 
+# Parallel agent sessions, one isolated worktree each via worktrunk (wt).
+# agy resumes in place; agyw starts a fresh session in a new worktree on a new branch.
+#
+# Names are zellij-style: lowercase adjective-noun, like polite-accordion.
+# Zellij's own word lists are not recoverable from its binary, so these are
+# comparable lists rather than identical ones.
+_wt_trunk_name() {
+    emulate -L zsh
+    local -a adj noun
+    adj=(amber azure brave calm clever crimson curious daring eager gentle
+         golden honest ivory jade jolly keen lively merry nimble opal
+         patient polite proud quaint quiet rapid russet saffron stellar
+         sturdy sunny teal tender upbeat violet vivid witty zesty)
+    noun=(accordion anchor aurora bamboo beacon bison canyon cedar cobalt
+          comet compass coral dahlia delta ember falcon fjord galleon garnet
+          harbor heron juniper kestrel lantern lichen marlin meadow nebula
+          orchid osprey pelican quartz quiver ravine sequoia thicket tundra
+          walrus zephyr)
+    print -r -- "${adj[RANDOM % ${#adj[@]} + 1]}-${noun[RANDOM % ${#noun[@]} + 1]}"
+}
+
+# Retry, so a name already taken as a branch does not make `wt switch -c` fail.
+_wt_new_trunk() {
+    emulate -L zsh
+    local name
+    repeat 50; do
+        name=$(_wt_trunk_name)
+        git show-ref --quiet --verify "refs/heads/$name" || { print -r -- "$name"; return 0 }
+    done
+    print -ru2 -- "wt: no unused trunk name after 50 attempts"
+    return 1
+}
+
+# $1 is the program for -x; anything after it (including --) is passed through.
+_wt_agent() {
+    emulate -L zsh
+    git rev-parse --git-dir >/dev/null 2>&1 || {
+        print -ru2 -- "wt: not inside a git repository"
+        return 1
+    }
+    local name
+    name=$(_wt_new_trunk) || return 1
+    wt switch --create "$name" -x "$@"
+}
+
+agyw() { _wt_agent agy -- --dangerously-skip-permissions "$@" }
+
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
@@ -386,6 +433,10 @@ fi
 # This forces zoxide to intercept the 'cd' command entirely
 if (( $+commands[zoxide] )); then
   _zcache_source zoxide zoxide zoxide init zsh --cmd cd
+fi
+
+if (( $+commands[wt] )); then
+  _zcache_source wt wt wt config shell init zsh
 fi
 # starship is initialized by starship-ftl (see .zsh_plugins.txt), which uses instant
 # prompt for local shells and falls back to standard starship init on SSH sessions.
