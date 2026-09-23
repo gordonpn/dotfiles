@@ -142,6 +142,14 @@
         "HEALTHCHECKS_API_KEY": "${HEALTHCHECKS_API_KEY}"
       }
     },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${HOME}"
+      ]
+    },
     "server-services-configs": {
       "command": "npx",
       "args": [
