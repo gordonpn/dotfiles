@@ -239,6 +239,9 @@ sync_mcp_config() {
   local brave_key
   brave_key="$(get_secret "brave_api_key" "BRAVE_API_KEY")"
 
+  local exa_key
+  exa_key="$(get_secret "exa_api_key" "EXA_API_KEY")"
+
   local ts_key
   ts_key="$(get_secret "tailscale_api_key" "TAILSCALE_API_KEY")"
 
@@ -289,6 +292,7 @@ sync_mcp_config() {
 
   export GITHUB_PERSONAL_ACCESS_TOKEN="${gh_token}"
   export BRAVE_API_KEY="${brave_key}"
+  export EXA_API_KEY="${exa_key}"
   export TAILSCALE_API_KEY="${ts_key}"
   export UPTIME_KUMA_JWT_TOKEN="${kuma_jwt}"
   export HEALTHCHECKS_API_KEY="${hc_key}"
@@ -319,6 +323,7 @@ replacements = {
     '\${HOME}': os.environ.get('HOME', ''),
     '\${GITHUB_PERSONAL_ACCESS_TOKEN}': os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN', ''),
     '\${BRAVE_API_KEY}': os.environ.get('BRAVE_API_KEY', ''),
+    '\${EXA_API_KEY}': os.environ.get('EXA_API_KEY', ''),
     '\${SQLITE_DB_PATH}': os.environ.get('SQLITE_DB_PATH', ''),
     '\${CLOUDFLARE_ACCOUNT_ID}': os.environ.get('CLOUDFLARE_ACCOUNT_ID', ''),
     '\${PROMETHEUS_URL}': os.environ.get('PROMETHEUS_URL', ''),

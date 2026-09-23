@@ -36,7 +36,7 @@ dotfiles/ (Public Repository)
 OS Keychain / Secret Storage
 ├── macOS Keychain: security find-generic-password -a "$USER" -s <service>
 └── Linux Libsecret: secret-tool lookup service <service>
-Services: brave_api_key, tailscale_api_key, uptime_kuma_jwt, healthchecks_api_key,
+Services: brave_api_key, exa_api_key, tailscale_api_key, uptime_kuma_jwt, healthchecks_api_key,
           github_token, vault_token, slack_bot_token, discord_token
 ```
 
@@ -53,11 +53,11 @@ mcp-sync
 
 ### What It Does
 1. **Installs `github-mcp-server`:** Downloads the pinned release tarball for the host OS/arch, verifies its SHA-256 against the published checksums file, and installs the binary to `~/.local/bin`. Skipped when the version stamp already matches. Override the version with `GITHUB_MCP_SERVER_VERSION`.
-2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`).
+2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `exa_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`).
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
-6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (28 total servers).
+6. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (29 total servers).
 
 ---
 
@@ -75,6 +75,7 @@ mcp-sync
 | **`sequentialthinking`** | stdio | `npx -y @modelcontextprotocol/server-sequential-thinking` | Structured multi-step reasoning scratchpad |
 | **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
+| **`exa`** | stdio | `npx -y exa-mcp-server` | Neural web search and webpage content extraction via Exa AI |
 | **`sqlite`** | stdio | `uvx --with mcp==1.1.2 mcp-server-sqlite` | Local SQLite database queries and schema introspection |
 | **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages |
 | **`prometheus`** | stdio | `npx -y prometheus-mcp@latest stdio` | Metrics discovery and PromQL instant/range queries |
