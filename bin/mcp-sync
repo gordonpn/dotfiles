@@ -128,6 +128,30 @@ install_terraform_mcp_server() {
   echo "Notice: terraform-mcp-server not found and neither brew nor go is available to install it." >&2
 }
 
+install_repomix() {
+  local bin_path="${LOCAL_BIN_DIR}/repomix"
+
+  if command -v repomix >/dev/null 2>&1; then
+    local installed_path
+    installed_path="$(command -v repomix)"
+    if [[ "${installed_path}" != "${bin_path}" && ! -e "${bin_path}" ]]; then
+      ln -sf "${installed_path}" "${bin_path}"
+    fi
+    return 0
+  fi
+
+  if command -v npm >/dev/null 2>&1; then
+    echo "Installing repomix via npm..."
+    npm install -g repomix
+    if command -v repomix >/dev/null 2>&1; then
+      ln -sf "$(command -v repomix)" "${bin_path}"
+    fi
+    return 0
+  fi
+
+  echo "Notice: repomix not found and npm is unavailable to install it." >&2
+}
+
 sync_ssh_profiles() {
   local ssh_config="${HOME}/.ssh/config"
   local target_file="${GEMINI_DIR}/ssh-profiles.json"
@@ -406,6 +430,7 @@ main() {
   echo "==> Synchronizing Antigravity MCP environment..."
   install_github_mcp_server
   install_terraform_mcp_server
+  install_repomix
   sync_ssh_profiles
   sync_docker_profiles
   sync_k3s_cluster

@@ -53,13 +53,13 @@ mcp-sync
 ```
 
 ### What It Does
-1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin`, and ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`).
+1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin`, ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`), and links or installs `repomix`.
 2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `exa_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `tfe_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`, `TFE_ADDRESS`).
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (31 total servers).
+7. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (32 total servers).
 
 ---
 
@@ -91,6 +91,7 @@ mcp-sync
 | **`healthchecks`**| stdio | `npx -y healthchecks-mcp` | Dead man's switch and scheduled cron task inspection |
 | **`filesystem`** | stdio | `npx -y @modelcontextprotocol/server-filesystem` | Scoped filesystem access for the user home directory |
 | **`server-services-configs`** | stdio | `@modelcontextprotocol/server-filesystem` | Scoped filesystem access to service configurations |
+| **`repomix`** | stdio | `repomix --mcp` | AI-optimized repository packing, remote git cloning, and output analysis |
 | **`caddy`** | stdio | `@yawlabs/caddy-mcp` | Caddy reverse proxy admin API for dynamic route inspection |
 | **`context7`** | stdio | `@upstash/context7-mcp` | Real-time library documentation and code reference search |
 | **`postgres`** | stdio | `@modelcontextprotocol/server-postgres` | PostgreSQL schema introspection and read queries |
