@@ -394,6 +394,14 @@ print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_
 "
 }
 
+sync_memory_file() {
+  local target_file="${GEMINI_DIR}/memory.json"
+  if [[ ! -f "${target_file}" ]]; then
+    echo '{"entities": [], "relations": []}' > "${target_file}"
+    echo "Initialized knowledge graph store in ${target_file}"
+  fi
+}
+
 main() {
   echo "==> Synchronizing Antigravity MCP environment..."
   install_github_mcp_server
@@ -401,6 +409,7 @@ main() {
   sync_ssh_profiles
   sync_docker_profiles
   sync_k3s_cluster
+  sync_memory_file
   sync_mcp_config
   echo "==> Done. MCP configuration is ready and hydrated."
 }
