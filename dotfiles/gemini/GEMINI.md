@@ -50,6 +50,8 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
 - **The Execution Sequence:** Execute work in a verifiable order: formulate checkable plan -> failing test/reproduction -> minimal implementation -> format/lint -> full test suite -> staged diff review -> atomic Conventional Commit -> draft PR.
 - **Draft PR Delivery:** Push changes on a dedicated branch or worktree and open a draft PR linking the root issue (`gh pr create --draft --issue <id> --fill`).
+- **Cognitively Small PRs:** Keep pull requests cognitively small and focused on a single objective so they are straightforward to review. Decompose larger features into sequential, independent PRs rather than delivering massive diffs.
+- **Refactoring Sessions:** Proactively offer dedicated refactoring sessions when identifying structural tech debt, code smells, or readability improvements. Keep refactoring work isolated in its own branch and PR to preserve maintainability without cluttering feature reviews.
 - **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux (like dotfiles), always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
 - **Clarifying Questions & Validation:** Challenge assumptions to identify root issues versus symptoms. Present options with trade-offs before implementing non-trivial changes.
 
