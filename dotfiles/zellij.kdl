@@ -6,8 +6,9 @@ options {
     pane_frames false
     // Use the default layout (custom default.kdl in layouts/ uses zjstatus)
     default_layout "default"
-    // Start in locked mode — Ctrl+g toggles. Prevents accidental keybind grabs.
-    default_mode "locked"
+    // Start in normal mode so Alt binds work without unlocking first. Ctrl+g
+    // still locks, for apps that need every key.
+    default_mode "normal"
     // Mouse interaction in panes (explicit; default is true)
     mouse_mode true
     // Automatically reflow panes when adding/removing (explicit; default is true)
