@@ -165,6 +165,17 @@ keybinds clear-defaults=true {
         bind "Alt l" { MoveFocusOrTab "right"; }
         bind "Alt n" { NewPane; }
         bind "Alt o" { MoveTab "right"; }
+        bind "Alt q" { GoToPreviousTab; }
+        bind "Alt e" { GoToNextTab; }
+        // Not Alt Tab: Raycast grabs it before it reaches the terminal.
+        bind "Alt `" { ToggleTab; }
+        bind "Alt 1" { GoToTab 1; }
+        bind "Alt 2" { GoToTab 2; }
+        bind "Alt 3" { GoToTab 3; }
+        bind "Alt 4" { GoToTab 4; }
+        bind "Alt 5" { GoToTab 5; }
+        bind "Alt t" { NewTab; }
+        bind "Alt r" { SwitchToMode "renametab"; TabNameInput 0; }
         bind "Alt Shift p" { SwitchToMode "pane"; }
         bind "Alt Shift t" { SwitchToMode "tab"; }
         bind "Alt Shift r" { SwitchToMode "resize"; }
@@ -201,7 +212,7 @@ keybinds clear-defaults=true {
         bind "enter" { SwitchToMode "search"; }
     }
     renametab {
-        bind "esc" { UndoRenameTab; SwitchToMode "tab"; }
+        bind "esc" { UndoRenameTab; SwitchToMode "normal"; }
     }
     shared_among "renametab" "renamepane" {
         bind "Ctrl c" { SwitchToMode "normal"; }
