@@ -8,6 +8,9 @@
 - **No Emojis & No Em Dashes:** Do not use emojis or em dashes in commit messages, code comments, or documentation.
 - **No AI Attribution:** Never add "AI assisted" or bot disclaimers to commits, PRs, comments, or documentation. Write in the first person for human engineering peers.
 - **Intent-Focused Comments:** Keep code comments succinct and focused on *why* (intent, trade-offs, non-obvious constraints), never restating *what* the code already makes clear.
+- **Flat Control Flow:** Prefer early returns and guard clauses over deeply nested `if`/`else` blocks to reduce cyclomatic complexity and indentation depth.
+- **Pure Functions & Explicit State:** Minimize hidden state mutations and side effects. Favor deterministic functions with clear input/output contracts so code can be understood and tested in isolation.
+- **Single Responsibility:** Keep individual functions and modules focused on a single conceptual task, avoiding multi-purpose routines that mix concerns.
 - **API Docs State the Contract Only:** Doc comments (godoc, docstrings, TSDoc, rustdoc) state what it does, what it accepts, what it returns, and what it raises. No implementation details, no design rationale, no claims about the rest of the codebase, no future plans. Those claims rot. Inline comments still explain *why*; this restriction applies to public API documentation.
 - **Type Docs Describe Responsibility:** A type, class, or module doc states its role and contract, not an enumeration of what each of its methods does. That is each method's own doc's job.
 - **No Planning References in Code:** Never reference ticket IDs, issue numbers, sprint goals, milestones, or timeline phases in code, comments, or documentation. Plain `TODO` and `FIXME` markers for genuine deferred work are fine.
