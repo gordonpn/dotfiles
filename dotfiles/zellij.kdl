@@ -176,6 +176,13 @@ keybinds clear-defaults=true {
         bind "Alt 5" { GoToTab 5; }
         bind "Alt t" { NewTab; }
         bind "Alt r" { SwitchToMode "renametab"; TabNameInput 0; }
+        // Fuzzy tab picker. Beyond ~5 tabs, typing a name beats counting.
+        bind "Alt /" {
+            Run "sh" "-c" "t=$(zellij action query-tab-names | fzf) && zellij action go-to-tab-name \"$t\"" {
+                close_on_exit true
+                floating true
+            }
+        }
         bind "Alt Shift p" { SwitchToMode "pane"; }
         bind "Alt Shift t" { SwitchToMode "tab"; }
         bind "Alt Shift r" { SwitchToMode "resize"; }
