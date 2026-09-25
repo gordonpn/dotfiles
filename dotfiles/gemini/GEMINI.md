@@ -82,6 +82,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Clarifying Questions & Validation:** Challenge assumptions to identify root issues versus symptoms. Present options with trade-offs before implementing non-trivial changes.
 
 ## Documentation & Infrastructure
+- **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
 - **Persistent Documentation:** Write durable architecture decisions, non-obvious quirks, and markdown artifacts under `/docs/` in the repository, not in temporary session folders.
 - **Operational Runbooks:** When introducing deployment steps, background daemons, or infrastructure components, document setup, execution commands, and diagnostics in `docs/RUNBOOK.md` or under `/docs/`.
 - **Infrastructure as Code (IaC):** Use Terraform variables for sensitive values (no hardcoded tokens) and ensure local state/lock files are in `.gitignore`.
