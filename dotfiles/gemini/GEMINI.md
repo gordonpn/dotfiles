@@ -17,7 +17,7 @@
 - **MCP Tool Prioritization:** When specialized MCP servers (such as `@modelcontextprotocol/server-github`, `kubernetes`, `prometheus`, or database servers) are configured, prioritize calling them directly instead of falling back to ad-hoc raw shell commands (`kubectl`, `curl`, etc.) via bash or zsh.
 - **Web Search Preference:** Prioritize the `brave-search` MCP server (`brave_web_search`, `brave_local_search`) for all web search, external documentation lookups, and research queries instead of built-in search tools.
 - **Task Runners:** Prefer modern task runners (`just` or `task`) over `make` for project workflows, build automation, and command orchestration.
-- **SQL Query Files:** Write raw SQL statements in external `.sql` files rather than embedding inline query strings in application code, ensuring editor syntax highlighting, formatting, and linting remain fully functional.
+- **No Inline Code (Dedicated Files):** Never embed code of one language inside another. Always write code in dedicated external files with proper file extensions (for example, raw SQL in external `.sql` files rather than inline strings in application code, JavaScript and CSS in external `.js`/`.ts` and `.css` files rather than inline `<script>`, `<style>`, or attribute handlers in HTML). This ensures that syntax highlighting, formatting, type checking, and linters remain fully functional across the entire codebase.
 - **Architecture & Dependency Hierarchy:**
   1. Reach for the standard library before third-party libraries.
   2. Use native platform and POSIX features before custom external scripts.
