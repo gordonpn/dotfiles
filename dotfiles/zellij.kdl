@@ -143,28 +143,12 @@ keybinds clear-defaults=true {
         bind "p" { Search "up"; }
         bind "w" { SearchToggleOption "Wrap"; }
     }
+    // Everyday actions are single Alt chords; modes are for rare actions. Only
+    // left Option is Alt (macos-option-as-alt = left), so tab switching stays on
+    // left-hand keys. Kept free for zsh: Alt b/f/d/w (word motions and kills)
+    // and Alt c (fzf cd widget).
     shared_except "locked" {
-        bind "Alt left" { MoveFocusOrTab "left"; }
-        bind "Alt down" { MoveFocus "down"; }
-        bind "Alt up" { MoveFocus "up"; }
-        bind "Alt right" { MoveFocusOrTab "right"; }
-        bind "Alt +" { Resize "Increase"; }
-        bind "Alt -" { Resize "Decrease"; }
-        bind "Alt =" { Resize "Increase"; }
-        bind "Alt g" {
-            Run "lazygit" {
-                close_on_exit true
-                floating true
-            }
-        }
-        bind "Ctrl g" { SwitchToMode "locked"; }
-        bind "Alt h" { MoveFocusOrTab "left"; }
-        bind "Alt i" { MoveTab "left"; }
-        bind "Alt j" { MoveFocus "down"; }
-        bind "Alt k" { MoveFocus "up"; }
-        bind "Alt l" { MoveFocusOrTab "right"; }
-        bind "Alt n" { NewPane; }
-        bind "Alt o" { MoveTab "right"; }
+        // Tabs
         bind "Alt q" { GoToPreviousTab; }
         bind "Alt e" { GoToNextTab; }
         // Not Alt Tab: Raycast grabs it before it reaches the terminal.
@@ -183,6 +167,32 @@ keybinds clear-defaults=true {
                 floating true
             }
         }
+        bind "Alt i" { MoveTab "left"; }
+        bind "Alt o" { MoveTab "right"; }
+
+        // Panes
+        bind "Alt left" { MoveFocusOrTab "left"; }
+        bind "Alt down" { MoveFocus "down"; }
+        bind "Alt up" { MoveFocus "up"; }
+        bind "Alt right" { MoveFocusOrTab "right"; }
+        bind "Alt h" { MoveFocusOrTab "left"; }
+        bind "Alt j" { MoveFocus "down"; }
+        bind "Alt k" { MoveFocus "up"; }
+        bind "Alt l" { MoveFocusOrTab "right"; }
+        bind "Alt n" { NewPane; }
+        bind "Alt +" { Resize "Increase"; }
+        bind "Alt -" { Resize "Decrease"; }
+        bind "Alt =" { Resize "Increase"; }
+        bind "Alt g" {
+            Run "lazygit" {
+                close_on_exit true
+                floating true
+            }
+        }
+
+        // Modes, for rare actions. Esc returns to normal. Ctrl is left to apps,
+        // except Ctrl g for lock.
+        bind "Ctrl g" { SwitchToMode "locked"; }
         bind "Alt Shift p" { SwitchToMode "pane"; }
         bind "Alt Shift t" { SwitchToMode "tab"; }
         bind "Alt Shift r" { SwitchToMode "resize"; }
