@@ -65,6 +65,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 ## Self-Learning Loop & Maintenance
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
 - **Promotion Bar:** Only promote rules that generalize, change future behavior, and are not already covered by existing instructions.
+- **Rule Precedence:** A project's own `AGENTS.md` overrides this global file on conflict. Record project-specific rules there and keep only what generalizes here.
 
 ## Workflow & Solution Validation
 - **Holistic Review:** Before implementing changes, read existing configuration, scripts, and documentation to understand project architecture.
