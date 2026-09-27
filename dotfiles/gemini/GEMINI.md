@@ -25,6 +25,18 @@
 - **Reproducible Toolchains:** Favor reproducible local toolchains managed by `mise`, `uv` (Python), `pnpm` or `bun` (Node/TypeScript), and standard `go`/`cargo` toolchains.
 - **Zero Committed Secrets:** Never commit API keys, tokens, or credentials. Store sensitive values in `.env` (with a tracked `.env.example` containing dummy defaults), shell environment variables, or macOS Keychain. Ensure local databases (`*.db`, `*.sqlite`), local caches, and secrets are in `.gitignore`.
 
+## Type Safety and Correctness
+
+Language-neutral rules. The parentheticals name how each one lands in TypeScript, Python, and Go.
+
+- **Never Escape the Type System:** Do not reach for the untyped escape hatch to get past the checker (`any`, `Any`, bare `interface{}`). At an untyped boundary use the explicit unknown type and narrow with a checked conversion (`unknown` plus a guard, a parsed model or `TypedDict`, the two-value type assertion).
+- **Never Silence the Checker:** Do not suppress a diagnostic to get past an absent or failed case (`!` non-null assertion, `# type: ignore`, a blind `cast`, discarding an error into `_`). Narrow it or handle it.
+- **Absence Is a Value, Not an Exception:** A lookup that finds nothing returns absence in its type (`T | undefined`, `Optional[T]` returning `None`, the comma-ok or sentinel-error form), never a thrown "not found". Reserve exceptions and errors for genuinely exceptional conditions.
+- **Bind Once, Narrowest Scope:** Prefer the immutable binding and declare it at first use (`const` over `let`, never `var`; module-level constants; no mutable package-level state). Reassign only where the value genuinely changes.
+- **Do Not Hand Out Mutable Internals:** Fields never reassigned after construction are immutable (`readonly`, frozen dataclass, unexported field behind an accessor), collections crossing a boundary are read-only or copied, and a caller's argument is never mutated.
+- **Exhaustive Handling of Closed Sets:** A `switch` or `match` over a closed value set handles every variant, and adding a variant must fail the build rather than fall through silently: assert exhaustiveness in the default branch (`never` assignment, `assert_never`, an exhaustiveness linter), or fail loudly where the language cannot check it.
+- **Named, Greppable Exports:** Export named identifiers rather than anonymous defaults or wildcard re-exports (`export default`, `import *`, dot imports), so every public symbol is rename-safe and greppable.
+
 ## Change Scope
 
 Biased toward caution over speed. For a trivial edit with an obvious answer, use judgement rather than ceremony.
