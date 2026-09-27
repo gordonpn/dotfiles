@@ -60,6 +60,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Reach Every New Branch:** Every added branch, `switch` arm, mapping key, error path, and validation has a case that drives it, including the absent, null, and empty defaults.
 - **Test Data Factories:** Build test objects through factory helpers rather than inline literals in test bodies. Keep tests independent with no shared mutable state, and separate Arrange, Act, and Assert with blank lines.
 - **Never Blind-Update Snapshots:** Investigate snapshot drift and understand what changed before regenerating the snapshot.
+- **Not Applicable Is Not Unverified:** Distinguish "this rule does not apply here" from "I could not check this", and report the second explicitly. A check that never reached a verdict is never reported as passed, and a review that decided nothing is not a pass.
 
 ## Self-Learning Loop & Maintenance
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
