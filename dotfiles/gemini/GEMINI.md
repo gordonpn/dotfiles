@@ -20,6 +20,7 @@
   2. Use native platform and POSIX features before custom external scripts.
   3. Default to SQLite with raw SQL, prepared statements, and WAL mode enabled for storage; avoid ORMs unless an existing codebase already mandates one.
   4. Keep frontend interfaces lightweight: prefer server-rendered HTML with HTMX and Alpine.js over heavy Single Page Application frameworks (React, Vue) and complex bundlers.
+- **Check Installed Dependencies Before Hand-Rolling:** Before writing retry or backoff, date and timezone math, pagination, caching, grouping or deduping, hashing, or validation by hand, check what the already-installed dependencies provide. Verify the capability against the resolved version's real API by reading its source, types, or lockfile rather than recalling it from memory. This is not licence to add a dependency: when nothing installed covers it, the hierarchy above still applies.
 - **Reproducible Toolchains:** Favor reproducible local toolchains managed by `mise`, `uv` (Python), `pnpm` or `bun` (Node/TypeScript), and standard `go`/`cargo` toolchains.
 - **Zero Committed Secrets:** Never commit API keys, tokens, or credentials. Store sensitive values in `.env` (with a tracked `.env.example` containing dummy defaults), shell environment variables, or macOS Keychain. Ensure local databases (`*.db`, `*.sqlite`), local caches, and secrets are in `.gitignore`.
 
