@@ -8,6 +8,9 @@
 - **No Emojis & No Em Dashes:** Do not use emojis or em dashes in commit messages, code comments, or documentation.
 - **No AI Attribution:** Never add "AI assisted" or bot disclaimers to commits, PRs, comments, or documentation. Write in the first person for human engineering peers.
 - **Intent-Focused Comments:** Keep code comments succinct and focused on *why* (intent, trade-offs, non-obvious constraints), never restating *what* the code already makes clear.
+- **API Docs State the Contract Only:** Doc comments (godoc, docstrings, TSDoc, rustdoc) state what it does, what it accepts, what it returns, and what it raises. No implementation details, no design rationale, no claims about the rest of the codebase, no future plans. Those claims rot. Inline comments still explain *why*; this restriction applies to public API documentation.
+- **Type Docs Describe Responsibility:** A type, class, or module doc states its role and contract, not an enumeration of what each of its methods does. That is each method's own doc's job.
+- **No Planning References in Code:** Never reference ticket IDs, issue numbers, sprint goals, milestones, or timeline phases in code, comments, or documentation. Plain `TODO` and `FIXME` markers for genuine deferred work are fine.
 - **MCP Tool Prioritization:** When specialized MCP servers (such as `@modelcontextprotocol/server-github`, `kubernetes`, `prometheus`, or database servers) are configured, prioritize calling them directly instead of falling back to ad-hoc raw shell commands (`kubectl`, `curl`, etc.) via bash or zsh.
 - **Web Search Preference:** Prioritize the `brave-search` MCP server (`brave_web_search`, `brave_local_search`) for all web search, external documentation lookups, and research queries instead of built-in search tools.
 - **Task Runners:** Prefer modern task runners (`just` or `task`) over `make` for project workflows, build automation, and command orchestration.
