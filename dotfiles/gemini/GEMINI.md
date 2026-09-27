@@ -54,6 +54,10 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Verifiable Goals:** Restate the task as something checkable, then loop until it passes: "add validation" becomes tests for the invalid inputs; "refactor X" becomes the suite passing before and after. For multi-step work, state the plan and each step's check before starting. Weak criteria ("make it work") force a round trip to find out whether it is done.
 - **Local Quality Gates:** Run project formatters and linters (`gofmt`, `ruff`, `biome`, `shellcheck`, `tofu fmt`) and check for existing git hook configurations (`lefthook`, pre-commit) to ensure local code quality passes before staging.
 - **Remote Pipeline Diagnostics:** When remote pipelines fail, pull failure traces using `gh run view --log-failed` (or GitHub MCP tools) to inspect error logs directly, then reproduce and resolve the breakage in the local worktree.
+- **Exhaustiveness Over Sampling:** For closed value sets (enums, string unions, status constants), cover every member rather than a representative subset. A sampled subset is a gap unless the cap is stated and justified in the change.
+- **Resolve the Case Universe:** Before claiming coverage is complete, read the definition that bounds it (the enum, the union type, the `switch` arms, the schema) and state what was judged against. Never infer the universe from the diff alone.
+- **Prove Exclusion, Not Just Inclusion:** Every filter, guard, and branch needs both a matching case and a non-matching one. Assert exact set membership rather than a count or a single element, and assert every field the operation sets.
+- **Reach Every New Branch:** Every added branch, `switch` arm, mapping key, error path, and validation has a case that drives it, including the absent, null, and empty defaults.
 
 ## Self-Learning Loop & Maintenance
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
