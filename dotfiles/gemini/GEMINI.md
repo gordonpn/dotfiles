@@ -58,6 +58,8 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Resolve the Case Universe:** Before claiming coverage is complete, read the definition that bounds it (the enum, the union type, the `switch` arms, the schema) and state what was judged against. Never infer the universe from the diff alone.
 - **Prove Exclusion, Not Just Inclusion:** Every filter, guard, and branch needs both a matching case and a non-matching one. Assert exact set membership rather than a count or a single element, and assert every field the operation sets.
 - **Reach Every New Branch:** Every added branch, `switch` arm, mapping key, error path, and validation has a case that drives it, including the absent, null, and empty defaults.
+- **Test Data Factories:** Build test objects through factory helpers rather than inline literals in test bodies. Keep tests independent with no shared mutable state, and separate Arrange, Act, and Assert with blank lines.
+- **Never Blind-Update Snapshots:** Investigate snapshot drift and understand what changed before regenerating the snapshot.
 
 ## Self-Learning Loop & Maintenance
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
