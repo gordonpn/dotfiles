@@ -85,22 +85,5 @@ export ZPWR_EXPAND_BRACKETED_PASTE=true
 
 # XDG Base Directory
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
-
-export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
-export ANTHROPIC_MODEL="deepseek-v4-pro[1m]"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="deepseek-v4-pro[1m]"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="deepseek-v4-flash"
-export CLAUDE_CODE_SUBAGENT_MODEL="deepseek-v4-flash"
-export CLAUDE_CODE_EFFORT_LEVEL="max"
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-$(security find-generic-password -a "$USER" -s "deepseek_api_key" -w 2>/dev/null)}"
-else
-    if [[ -z "$ANTHROPIC_AUTH_TOKEN" ]] && command -v secret-tool >/dev/null 2>&1; then
-        export ANTHROPIC_AUTH_TOKEN=$(secret-tool lookup service deepseek_api_key 2>/dev/null)
-    fi
-    if [[ -z "$ANTHROPIC_AUTH_TOKEN" && -f "$HOME/.config/deepseek/api_key" ]]; then
-        export ANTHROPIC_AUTH_TOKEN=$(< "$HOME/.config/deepseek/api_key")
-    elif [[ -z "$ANTHROPIC_AUTH_TOKEN" && -f "$HOME/.deepseek_api_key" ]]; then
-        export ANTHROPIC_AUTH_TOKEN=$(< "$HOME/.deepseek_api_key")
-    fi
-fi
+# Sentinel to prevent duplicate sourcing in subshells
+export ZPROFILE_READ=1

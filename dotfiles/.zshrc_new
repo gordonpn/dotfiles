@@ -6,7 +6,7 @@ if [[ -n $GHOSTTY_RESOURCES_DIR ]]; then
 fi
 
 # Ensure environment variables from .zprofile are available in interactive subshells
-if [[ -z "$ANTHROPIC_BASE_URL" && -f "${ZDOTDIR:-$HOME}/.zprofile" ]]; then
+if [[ -z "$ZPROFILE_READ" && -f "${ZDOTDIR:-$HOME}/.zprofile" ]]; then
   source "${ZDOTDIR:-$HOME}/.zprofile"
 fi
 
@@ -339,19 +339,6 @@ if [[ "$(uname)" == "Darwin" ]]; then
   alias restartwifi='networksetup -setairportpower en0 off && networksetup -setairportpower en0 on'
   alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 fi
-
-# AI/ML Aliases
-# Use Flash for speed (Daily Driver)
-alias ask="aichat -m deepseek-v4-flash"
-
-# Use Pro for Reasoning (Architectural tasks)
-alias reason="llm -m deepseek-v4-pro"
-
-# The "Junior Developer" (Direct file editing)
-alias dev='aider --model deepseek/deepseek-v4-pro --editor-model deepseek/deepseek-chat --architect --reasoning-effort high --dark-mode --no-attribute-author --no-attribute-committer --no-attribute-commit-message-author --no-attribute-commit-message-committer --no-attribute-co-authored-by --cache-prompts --commit-prompt "write single concern atomic conventional commits" --auto-accept-architect --yes-always --no-check-model-accepts-settings' 
-
-# The "Log Parser" (Unix piping)
-alias parse="mods --model deepseek-v4-flash"
 
 # Custom Functions
 pnpx() {
