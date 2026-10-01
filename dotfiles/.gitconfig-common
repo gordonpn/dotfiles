@@ -60,7 +60,7 @@ difftool = true
     plus-style = green bold "#1e2b22"
     plus-non-emph-style = green bold "#1e2b22"
     plus-emph-style = bold green "#2b402d"
-    whitespace-error-style = "#c34043" reverse
+    whitespace-error-style = "#c4746e" reverse
 
 [delta "decorations"]
 commit-decoration-style = bold yellow box ul
