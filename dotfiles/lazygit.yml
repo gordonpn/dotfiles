@@ -16,18 +16,18 @@ gui:
   sideBySideView: auto
   theme:
     selectedLineBgColor:
-      - "#2D4F67"
+      - "#282727"
     selectedRangeBgColor:
       - "#223249"
     defaultFgColor:
-      - "#DCD7BA"
+      - "#c5c9c5"
     activeBorderColor:
-      - "#8EA4A2"
+      - "#8a9a86"
       - bold
     inactiveBorderColor:
-      - "#2A2A37"
+      - "#282727"
     optionsTextColor:
-      - "#7E9CD8"
+      - "#8ba4b0"
 keybinding:
   universal:
     # Transposes the defaults: PgUp/PgDn page the list, ',' and '.' scroll the
