@@ -342,6 +342,7 @@ local plugin_specs = {
     config = function()
       require("kanagawa").setup({
         theme = "dragon",
+        background = { dark = "dragon", light = "lotus" },
         undercurl = true,
         commentStyle = { italic = true },
       })
@@ -365,7 +366,7 @@ local plugin_specs = {
         end,
       })
 
-      vim.cmd.colorscheme("kanagawa")
+      vim.cmd.colorscheme("kanagawa-dragon")
     end
   },
 
