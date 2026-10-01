@@ -87,6 +87,19 @@ bindkey -e
 
 source ${zsh_plugins}.zsh
 
+# Expand aliases on enter before execution so full commands are recorded in history
+expand-and-accept() {
+  zpwrExpandSupernaturalSpace ENTER 2>/dev/null
+  zle .zsh-no-ps2 2>/dev/null || zle accept-line
+}
+zle -N expand-and-accept
+bindkey -M emacs '^M' expand-and-accept
+bindkey -M emacs '^J' expand-and-accept
+bindkey -M viins '^M' expand-and-accept
+bindkey -M viins '^J' expand-and-accept
+bindkey '^M' expand-and-accept
+bindkey '^J' expand-and-accept
+
 # zephyr's history plugin sets NO_share_history; we want it on.
 setopt SHARE_HISTORY
 
@@ -254,8 +267,8 @@ zle -N edit-command-line
 
 # Key Bindings
 # History navigation with FZF
-bindkey "$terminfo[kcuu1]" fzf-history-widget
-bindkey "$terminfo[kcud1]" fzf-history-widget
+[[ -n "$terminfo[kcuu1]" ]] && bindkey "$terminfo[kcuu1]" fzf-history-widget
+[[ -n "$terminfo[kcud1]" ]] && bindkey "$terminfo[kcud1]" fzf-history-widget
 bindkey '^[[A' fzf-history-widget
 bindkey '^[[B' fzf-history-widget
 bindkey '^[OA' fzf-history-widget
