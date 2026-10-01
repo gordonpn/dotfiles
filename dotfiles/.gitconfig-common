@@ -12,9 +12,9 @@
 # .gitconfig: user.email, credential.helper, and the includeIf gitdir rules.
 #
 # Requires on PATH: delta, bat (for the Kanagawa syntax theme), difft, nvim.
-# The Kanagawa theme must be installed for delta to resolve syntax-theme:
+# The Kanagawa-Dragon theme must be installed for delta to resolve syntax-theme:
 #     mkdir -p ~/.config/bat/themes
-#     ln -sf <repo>/dotfiles/bat/themes/Kanagawa.tmTheme ~/.config/bat/themes/
+#     ln -sf <repo>/dotfiles/bat/themes/Kanagawa-Dragon.tmTheme ~/.config/bat/themes/
 #     bat cache --build
 
 [url "git@github.com:"]
@@ -53,7 +53,7 @@ difftool = true
     keep-plus-minus-markers = false
 
 [delta "kanagawa-dragon"]
-    syntax-theme = Kanagawa
+    syntax-theme = Kanagawa-Dragon
     minus-style = red bold "#2a1f21"
     minus-non-emph-style = red bold "#2a1f21"
     minus-emph-style = bold red "#432426"
