@@ -144,7 +144,11 @@ fi
 # LS_COLORS setup with caching for performance (inspired by local/.zshrc)
 if [[ ! -f ~/.ls_colors_cache ]]; then
   if command -v vivid >/dev/null; then
-    vivid generate ansi > ~/.ls_colors_cache
+    if [[ -f ~/.config/vivid/themes/kanagawa-dragon.yml ]]; then
+      vivid generate ~/.config/vivid/themes/kanagawa-dragon.yml > ~/.ls_colors_cache
+    else
+      vivid generate ansi > ~/.ls_colors_cache
+    fi
   fi
 fi
 [[ -f ~/.ls_colors_cache ]] && export LS_COLORS=$(<~/.ls_colors_cache)
