@@ -49,13 +49,17 @@ difftool = true
     hyperlinks = true
     keep-plus-minus-markers = false
 
+# The *-non-emph-style / *-emph-style spellings are delta's real option names.
+# The -non-current-/-emphasized- variants read naturally but do not exist, and
+# delta ignores an unknown key in git config without warning, so intra-line
+# emphasis silently falls back to defaults instead of these colours.
 [delta "flexoki-dark"]
     minus-style = "#AF3029" bold "#281717"
-    minus-non-current-style = "#AF3029" "#281717"
-    minus-emphasized-style = bold "#D14D41" "#3D1F1F"
+    minus-non-emph-style = "#AF3029" "#281717"
+    minus-emph-style = bold "#D14D41" "#3D1F1F"
     plus-style = "#66800B" bold "#1A2414"
-    plus-non-current-style = "#66800B" "#1A2414"
-    plus-emphasized-style = bold "#879A39" "#23331B"
+    plus-non-emph-style = "#66800B" "#1A2414"
+    plus-emph-style = bold "#879A39" "#23331B"
     line-numbers-minus-style = "#AF3029"
     line-numbers-plus-style = "#66800B"
     line-numbers-zero-style = "#6F6E69"
