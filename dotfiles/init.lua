@@ -334,19 +334,12 @@ local plugin_specs = {
   },
 
   {
-    "rebelot/kanagawa.nvim",
-    name = "kanagawa",
+    "kepano/flexoki-neovim",
+    name = "flexoki",
     lazy = false,
     priority = 1000,
     cond = not vim.g.vscode,
     config = function()
-      require("kanagawa").setup({
-        theme = "dragon",
-        background = { dark = "dragon", light = "lotus" },
-        undercurl = true,
-        commentStyle = { italic = true },
-      })
-
       -- FORCE TRANSPARENCY BY CLEARING HIGHLIGHT GROUPS DIRECTLY
       vim.api.nvim_create_autocmd("ColorScheme", {
         pattern = "*",
@@ -366,7 +359,7 @@ local plugin_specs = {
         end,
       })
 
-      vim.cmd.colorscheme("kanagawa-dragon")
+      vim.cmd.colorscheme("flexoki-dark")
     end
   },
 

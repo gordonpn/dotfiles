@@ -1,9 +1,32 @@
 # ~/.config/ghostty/config
 
 # ---------------------------------------------------------------------
-# Theme (Native Kanagawa preset)
+# Theme (Steph Ango's Flexoki Dark)
 # ---------------------------------------------------------------------
-theme = Kanagawa Dragon
+theme = Flexoki Dark
+
+background = #100F0F
+foreground = #CECDC3
+selection-background = #282726
+selection-foreground = #CECDC3
+cursor-color = #CECDC3
+
+palette = 0=#100F0F
+palette = 1=#AF3029
+palette = 2=#66800B
+palette = 3=#AD8301
+palette = 4=#205EA6
+palette = 5=#A02F6F
+palette = 6=#24837B
+palette = 7=#CECDC3
+palette = 8=#6F6E69
+palette = 9=#D14D41
+palette = 10=#879A39
+palette = 11=#D0A215
+palette = 12=#4385BE
+palette = 13=#CE5D97
+palette = 14=#3AA99F
+palette = 15=#FFFCF0
 
 # ---------------------------------------------------------------------
 # Typography (Parsed from your active iTerm2 profile)
@@ -33,11 +56,9 @@ window-padding-x = 12
 window-padding-y = 12
 
 # Cosmetics & Layout (Enables clean native title bar tabs)
+# Base Black to match Flexoki Dark canvas background
 window-theme = "dark"
 macos-titlebar-style = native
-
-# Unified background safety lock to completely wipe out any Neovim margins
-background = #181616
 
 # ---------------------------------------------------------------------
 # Interaction and Buffer Behavior

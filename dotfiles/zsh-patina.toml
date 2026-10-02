@@ -5,8 +5,8 @@
 # Restart the daemon after editing: zsh-patina restart
 
 [highlighting]
-# kanagawa to match the zellij kanagawa-dragon theme
-theme = "kanagawa"
+# classic maps directly to terminal ANSI registers (Flexoki Dark)
+theme = "classic"
 
 # Dynamically highlight callables (missing commands turn red) and paths
 # (existing files/dirs are underlined). "complete" only highlights a path once

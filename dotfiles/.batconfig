@@ -1,10 +1,8 @@
 # bat configuration
 # Reference: https://github.com/sharkdp/bat#configuration-file
 
-# Theme. Kanagawa-Dragon, matching delta's syntax-theme in .gitconfig-common. This is
-# the custom theme in bat/themes/Kanagawa-Dragon.tmTheme, so it only resolves once that
-# file is in ~/.config/bat/themes/ and `bat cache --build` has run.
---theme="Kanagawa-Dragon"
+# Theme. ANSI palette so file previews directly inherit terminal Flexoki registers.
+--theme="ansi"
 
 # Style — line numbers, git change markers, filename header
 # (informative without too much noise)

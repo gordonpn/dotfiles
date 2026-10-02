@@ -11,11 +11,7 @@
 # Machine-specific settings do NOT belong here — keep them in the per-machine
 # .gitconfig: user.email, credential.helper, and the includeIf gitdir rules.
 #
-# Requires on PATH: delta, bat (for the Kanagawa syntax theme), difft, nvim.
-# The Kanagawa-Dragon theme must be installed for delta to resolve syntax-theme:
-#     mkdir -p ~/.config/bat/themes
-#     ln -sf <repo>/dotfiles/bat/themes/Kanagawa-Dragon.tmTheme ~/.config/bat/themes/
-#     bat cache --build
+# Requires on PATH: delta, bat, difft, nvim.
 
 [url "git@github.com:"]
     insteadOf = https://github.com/
@@ -43,7 +39,8 @@ show = delta
 difftool = true
 
 [delta]
-    features = kanagawa-dragon
+    features = flexoki-dark
+    syntax-theme = none
     dark = true
     navigate = true
     side-by-side = true
@@ -52,15 +49,17 @@ difftool = true
     hyperlinks = true
     keep-plus-minus-markers = false
 
-[delta "kanagawa-dragon"]
-    syntax-theme = Kanagawa-Dragon
-    minus-style = red bold "#2a1f21"
-    minus-non-emph-style = red bold "#2a1f21"
-    minus-emph-style = bold red "#432426"
-    plus-style = green bold "#1e2b22"
-    plus-non-emph-style = green bold "#1e2b22"
-    plus-emph-style = bold green "#2b402d"
-    whitespace-error-style = "#c4746e" reverse
+[delta "flexoki-dark"]
+    minus-style = "#AF3029" bold "#281717"
+    minus-non-current-style = "#AF3029" "#281717"
+    minus-emphasized-style = bold "#D14D41" "#3D1F1F"
+    plus-style = "#66800B" bold "#1A2414"
+    plus-non-current-style = "#66800B" "#1A2414"
+    plus-emphasized-style = bold "#879A39" "#23331B"
+    line-numbers-minus-style = "#AF3029"
+    line-numbers-plus-style = "#66800B"
+    line-numbers-zero-style = "#6F6E69"
+    whitespace-error-style = "#AF3029" reverse
 
 [delta "decorations"]
 commit-decoration-style = bold yellow box ul

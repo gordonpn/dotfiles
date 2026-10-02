@@ -268,20 +268,20 @@ web_client {
     font "monospace"
 }
 
-theme "kanagawa-dragon"
+theme "flexoki-dark"
 
 themes {
-    kanagawa-dragon {
-        bg "#181616"      // Darker, earthy charcoal
-        fg "#c5c9c5"      // Softer, muted text contrast
-        black "#0d0c0c"
-        red "#c4746e"
-        green "#8a9a86"
-        yellow "#c4b28a"
-        blue "#8ba4b0"
-        magenta "#a292a3"
-        cyan "#8ea5ab"
-        white "#C8C093"
-        orange "#b6927b"
+    flexoki-dark {
+        bg "#282726"
+        fg "#CECDC3"
+        black "#100F0F"
+        red "#AF3029"
+        green "#66800B"
+        yellow "#AD8301"
+        blue "#205EA6"
+        magenta "#A02F6F"
+        cyan "#24837B"
+        white "#CECDC3"
+        orange "#BC5215"
     }
 }

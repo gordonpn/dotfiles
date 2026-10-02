@@ -115,11 +115,12 @@ if command -v fzf >/dev/null; then
   # UI Improvements
   export FZF_DEFAULT_OPTS="
     --ansi
+    --layout=reverse
     --height 40%
     --border sharp
-    --color=bg+:#222121,bg:#181616,spinner:#c8c093,hl:#c4746e \
-    --color=fg:#c8c093,header:#c8c093,info:#717c7c,pointer:#7aa89f \
-    --color=marker:#7aa89f,fg+:#dcd7ba,prompt:#7aa89f,hl+:#7aa89f
+    --color=bg+:#282726,bg:#100F0F,spinner:#DAD8CE,hl:#AF3029 \
+    --color=fg:#CECDC3,header:#878580,info:#878580,pointer:#24837B \
+    --color=marker:#24837B,fg+:#FFFCF0,prompt:#24837B,hl+:#3AA99F
     --prompt='❯ '
     --pointer='▶'
     --marker='✓'
@@ -154,14 +155,10 @@ if command -v fzf >/dev/null; then
   }
 fi
 
-# LS_COLORS setup with caching for performance (inspired by local/.zshrc)
+# LS_COLORS setup with caching for performance (derived from Flexoki ANSI registers)
 if [[ ! -f ~/.ls_colors_cache ]]; then
   if command -v vivid >/dev/null; then
-    if [[ -f ~/.config/vivid/themes/kanagawa-dragon.yml ]]; then
-      vivid generate ~/.config/vivid/themes/kanagawa-dragon.yml > ~/.ls_colors_cache
-    else
-      vivid generate ansi > ~/.ls_colors_cache
-    fi
+    vivid generate ansi > ~/.ls_colors_cache
   fi
 fi
 [[ -f ~/.ls_colors_cache ]] && export LS_COLORS=$(<~/.ls_colors_cache)

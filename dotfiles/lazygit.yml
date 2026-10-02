@@ -15,19 +15,23 @@ gui:
   mainPanelSplitMode: "flexible"
   sideBySideView: auto
   theme:
-    selectedLineBgColor:
-      - "#282727"
-    selectedRangeBgColor:
-      - "#223249"
-    defaultFgColor:
-      - "#c5c9c5"
     activeBorderColor:
-      - "#8a9a86"
+      - '#24837B'
       - bold
     inactiveBorderColor:
-      - "#282727"
+      - '#403E3C'
     optionsTextColor:
-      - "#8ba4b0"
+      - '#205EA6'
+    selectedLineBgColor:
+      - '#282726'
+    cherryPickedCommitBgColor:
+      - '#343331'
+    cherryPickedCommitFgColor:
+      - '#24837B'
+    unstagedChangesColor:
+      - '#AF3029'
+    defaultFgColor:
+      - '#CECDC3'
 keybinding:
   universal:
     # Transposes the defaults: PgUp/PgDn page the list, ',' and '.' scroll the
