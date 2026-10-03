@@ -63,8 +63,9 @@ macos-titlebar-style = native
 # ---------------------------------------------------------------------
 # Interaction and Buffer Behavior
 # ---------------------------------------------------------------------
-# The maximum number of lines to keep in the scrollback buffer.
-scrollback-limit = 1000000
+# Scrollback size per surface, in bytes (not lines). Allocated lazily, so the
+# cap only costs memory once a surface fills it. 100 MB; the default is 10 MB.
+scrollback-limit = 100000000
 
 # Increase scroll sensitivity for trackpads (precision) and mouse wheels (discrete)
 mouse-scroll-multiplier = precision:2.0,discrete:3.0
