@@ -475,12 +475,14 @@ export PATH="/Users/gordonpn/.local/bin:$PATH"
 # completion of their own (docker, kubectl, curl, tar, ...).
 # CARAPACE_EXCLUDES keeps the completions that beat carapace's generic ones:
 # brew site-functions (bat eza fd gh rg zoxide), hand-written ~/.zfunc entries
-# (lazygit starship), `npm completion`, and zsh's own _git and _ssh, which
-# understand git aliases and ssh config Include directives respectively.
+# (lazygit starship), `npm completion`, zsh's own _git and _ssh (understanding
+# aliases and Include directives), and standard file tools (cat, cp, diff,
+# head, less, ln, ls, mkdir, mv, open, rm, rmdir, tail, touch) whose carapace
+# completers double-escape paths under fzf-tab.
 # Must run after compinit, which the antidote bundle handles.
 if (( $+commands[carapace] )); then
   export CARAPACE_MATCH=1
-  export CARAPACE_EXCLUDES='bat,eza,fd,gh,git,lazygit,npm,rg,ssh,starship,zoxide'
+  export CARAPACE_EXCLUDES='bat,cat,cp,diff,eza,fd,gh,git,head,lazygit,less,ln,ls,mkdir,mv,npm,open,rg,rm,rmdir,ssh,starship,tail,touch,zoxide'
   _zcache_source carapace carapace carapace _carapace zsh
 fi
 
