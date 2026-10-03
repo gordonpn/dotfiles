@@ -490,7 +490,10 @@ export PATH="/Users/gordonpn/.local/bin:$PATH"
 if (( $+commands[carapace] )); then
   export CARAPACE_MATCH=1
   export CARAPACE_EXCLUDES='bat,cat,cp,diff,eza,fd,gh,git,head,lazygit,less,ln,ls,mkdir,mv,npm,open,rg,rm,rmdir,ssh,starship,tail,touch,zoxide'
-  _zcache_source carapace carapace carapace _carapace zsh
+  # -e declares the vars carapace bakes into its generated init, so editing the
+  # exclude list above invalidates the cache. Without that the list changed on
+  # 2026-10-02 and the cache kept serving the old completion set for two days.
+  _zcache_source -e CARAPACE_EXCLUDES -e CARAPACE_MATCH carapace carapace carapace _carapace zsh
 fi
 
 # Cross-platform `sed -i`. GNU sed wants no suffix arg, BSD sed requires one, so
