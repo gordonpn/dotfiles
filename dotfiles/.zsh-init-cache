@@ -9,45 +9,89 @@
 # Lives in the shared repo because all four machines want the same behaviour;
 # only the set of tools differs per host. Keeping one definition here is what
 # stops the per-host .zshrc copies from drifting.
-
-# _zcache_source <cache-name> <binary> <command to run...>
 #
-# Rebuilds whenever the tool's identity changes, so an upgrade (`brew upgrade
-# zoxide`, `mise self-update`) is picked up without manual intervention. Delete
-# ~/.cache/zsh/init to force a rebuild.
+# Two entry points:
+#   _zcache_source  output is shell code, and gets sourced   (zoxide, carapace)
+#   _zcache_value   output is a value, and comes back in $REPLY  (vivid)
+#
+# Both share the same invalidation rules, described on _zcache_stamp below.
+#
+# Do not cache a command that does more than print. `zsh-patina activate` is the
+# cautionary case: it also starts a background daemon and embeds that daemon's
+# socket path in its output, so a cached copy pointed at a dead socket after any
+# restart and highlighting silently stopped. Only cache pure functions of the
+# binary, the arguments and the declared environment.
+
+# _zcache_stamp <binpath> <env-var names...> -- <command...>
+#
+# Builds the identity line compared on every startup, and sets $REPLY to it.
+#
+# Deliberately avoids running `<tool> --version`: that would cost a fork per
+# tool per shell, which is the exact cost this cache exists to avoid. Everything
+# below is obtainable without forking:
+#
+#   1. The fully resolved binary path. This is what catches most upgrades. Both
+#      Homebrew and mise encode the version in the real path
+#      (/opt/homebrew/Cellar/zoxide/0.10.0/bin/zoxide), so an upgrade changes it
+#      even when the symlink on PATH does not move.
+#   2. Its size and mtime, covering a binary replaced in place where the path
+#      stays constant — mise self-update, or a hand-installed build.
+#   3. The command line, so editing the arguments (`vivid generate ansi` to
+#      `vivid generate some-theme.yml`) rebuilds instead of serving old output.
+#   4. The declared environment variables, name and value. Some tools read
+#      configuration from the environment at init time and bake the result into
+#      their output: CARAPACE_EXCLUDES is the live example, where changing the
+#      exclude list changes the generated completion set. Callers declare those
+#      with `-e VAR`, repeatable.
+#
+# mtime alone was not enough: Homebrew bottles can carry a build timestamp older
+# than the cache, so an upgraded tool could look unchanged and leave a stale init
+# sourced indefinitely. Nor was omitting (4): the carapace exclude list changed
+# on 2026-10-02 and the cache kept serving the old completion set, so the fix
+# looked applied but was not. Both fail silently, which is the worst shape for a
+# caching bug to take.
+#
+# Values are flattened to one line, since the stamp is compared as a single line.
+_zcache_stamp() {
+  local binpath=$1; shift
+  local -a envs=()
+  while (( $# )) && [[ $1 != -- ]]; do envs+=($1); shift; done
+  shift  # drop the --
+
+  local real=${binpath:A} sizemtime='- -'
+  local -A st
+  zmodload -F zsh/stat b:zstat 2>/dev/null
+  zstat -H st -- $real 2>/dev/null && sizemtime="${st[size]} ${st[mtime]}"
+
+  local envpart='' v val
+  for v in $envs; do
+    # Indirect: the value of the variable *named* $v. ${(P)v} alone cannot tell
+    # unset from empty — the - default never fires through (P) — so test with
+    # [[ -v ]] to keep those two cases distinguishable in the stamp.
+    if [[ -v $v ]]; then val=${(P)v}; else val='<unset>'; fi
+    envpart+=" $v=${val//$'\n'/\\n}"
+  done
+
+  REPLY="# zcache $real $sizemtime$envpart -- $*"
+}
+
+# _zcache_source [-e VAR]... <cache-name> <binary> <command to run...>
+#
+# Caches the output of a tool's init command and sources it. Rebuilds whenever
+# the stamp changes. Delete ~/.cache/zsh/init to force a rebuild.
 #
 # <binary> is either a bare command name, resolved through $commands, or a path
 # containing a slash, for tools not yet on PATH at the point of the call. A
 # binary that resolves to nothing is not an error: the call becomes a no-op, so
 # the same line is safe on a host that does not have the tool installed.
 #
-# Invalidation. The cache's first line is an identity stamp, compared on every
-# startup. It deliberately avoids running `<tool> --version`: that would cost a
-# fork per tool per shell, which is the exact cost this cache exists to avoid.
-# Instead the stamp is built from three things, all obtainable without forking:
-#
-#   1. The fully resolved binary path. This is what actually catches upgrades.
-#      Both Homebrew and mise encode the version in the real path
-#      (/opt/homebrew/Cellar/zoxide/0.10.0/bin/zoxide), so an upgrade changes it
-#      even when the symlink on PATH does not move.
-#   2. Its size and mtime, which cover a binary replaced in place, where the
-#      path stays constant — mise self-update, or a hand-installed build.
-#   3. The command line itself, so editing the arguments (say `zoxide init zsh
-#      --cmd cd` to `--cmd z`) rebuilds rather than silently serving the old
-#      output.
-#
-# mtime alone was not enough: Homebrew bottles can carry a build timestamp older
-# than the cache, so an upgraded tool could look unchanged and leave a stale init
-# sourced indefinitely. That fails silently and looks like the tool is broken.
-#
-# Known gap: output that depends on the environment rather than the binary or the
-# arguments is not detected. CARAPACE_EXCLUDES is the live example — change it
-# and the cached completion set is stale until you delete the cache.
-#
 # The cache is written to a temporary file and moved into place, so an
 # interrupted or failing generator cannot leave a half-written file that gets
 # sourced forever.
 _zcache_source() {
+  local -a envs=()
+  while [[ $1 == -e ]]; do envs+=($2); shift 2; done
+
   local name=$1 bin=$2; shift 2
   local binpath cache="$HOME/.cache/zsh/init/$name.zsh"
 
@@ -59,15 +103,9 @@ _zcache_source() {
     [[ -n $binpath ]] || return 0
   fi
 
-  local real=${binpath:A} stamp
-  local -A st
-  zmodload -F zsh/stat b:zstat 2>/dev/null
-  if zstat -H st -- $real 2>/dev/null; then
-    stamp="# zcache $real ${st[size]} ${st[mtime]} $*"
-  else
-    # No zsh/stat: the resolved path and argv still cover the common upgrade.
-    stamp="# zcache $real - - $*"
-  fi
+  local REPLY
+  _zcache_stamp $binpath $envs -- "$@"
+  local stamp=$REPLY
 
   local first=
   [[ -f $cache ]] && IFS= read -r first < $cache
@@ -82,4 +120,49 @@ _zcache_source() {
     fi
   fi
   source $cache
+}
+
+# _zcache_value [-e VAR]... <cache-name> <binary> <command to run...>
+#
+# As above, but for a command whose output is a value rather than shell code.
+# Sets $REPLY to the cached output and returns 0; returns non-zero without
+# touching $REPLY when the binary is missing or the generator fails, so callers
+# can leave the target variable alone.
+#
+# The stamp lives in a sidecar file rather than the first line, so the cached
+# value stays byte-exact and needs no trimming.
+_zcache_value() {
+  local -a envs=()
+  while [[ $1 == -e ]]; do envs+=($2); shift 2; done
+
+  local name=$1 bin=$2; shift 2
+  local binpath cache="$HOME/.cache/zsh/init/$name.value"
+
+  if [[ $bin == */* ]]; then
+    binpath=${~bin}
+    [[ -x $binpath ]] || return 1
+  else
+    binpath=${commands[$bin]}
+    [[ -n $binpath ]] || return 1
+  fi
+
+  _zcache_stamp $binpath $envs -- "$@"
+  local stamp=$REPLY
+
+  local first=
+  [[ -f $cache.stamp ]] && IFS= read -r first < $cache.stamp
+
+  if [[ $first != $stamp || ! -f $cache ]]; then
+    [[ -d ${cache:h} ]] || mkdir -p ${cache:h}
+    if "$@" >| $cache.new 2>/dev/null; then
+      mv -f $cache.new $cache
+      print -r -- $stamp >| $cache.stamp
+    else
+      rm -f $cache.new
+      return 1
+    fi
+  fi
+
+  REPLY=$(<$cache)
+  return 0
 }
