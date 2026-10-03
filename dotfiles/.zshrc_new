@@ -115,7 +115,6 @@ if command -v fzf >/dev/null; then
   # UI Improvements
   export FZF_DEFAULT_OPTS="
     --ansi
-    --layout=reverse
     --height 40%
     --border sharp
     --color=bg+:#282726,bg:#100F0F,spinner:#DAD8CE,hl:#AF3029 \
