@@ -160,7 +160,6 @@ fi
 
 setopt MENU_COMPLETE
 zstyle ':completion:*' menu no
-zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 zstyle ':completion:*' verbose yes
 zstyle ':completion:*:descriptions' format '[%d]'
 zstyle ':completion:*:functions' ignored-patterns '(_*|pre(cmd|exec))'
@@ -423,6 +422,12 @@ fi
 if (( $+functions[_zcache_value] )) && _zcache_value ls-colors vivid vivid generate ansi; then
   export LS_COLORS=$REPLY
 fi
+
+# Colour completion listings with the same palette as ls. Must stay after
+# LS_COLORS is populated above: ${(s.:.)LS_COLORS} is expanded here, not re-read
+# later, so up in the zstyle block it saw whatever the parent process exported —
+# nothing in a fresh terminal, which left menus on zsh's built-in defaults.
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
 # mise emits only static `export PATH` lines here, so it caches cleanly. Bare
 # name first so a Homebrew mise wins; the explicit path covers hosts where mise
