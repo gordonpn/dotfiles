@@ -438,63 +438,64 @@ for name, s in data.get('mcpServers', {}).items():
         entry['environment'] = s['env']
     opencode_servers[name] = entry
 
-opencode_cfg = {'\$schema': 'https://opencode.ai/config.json'}
+opencode_cfg = {'\$schema': 'https://opencode.ai/config.json', 'theme': 'flexoki'}
 if os.path.exists(opencode_config):
-    try:
-        with open(opencode_config, 'r') as f:
-            opencode_cfg = json.load(f)
-    except Exception:
-        pass
+    with open(opencode_config, 'r') as f:
+        opencode_cfg = json.load(f)
 if 'mcp' not in opencode_cfg:
     opencode_cfg['mcp'] = {}
-opencode_cfg['mcp']['servers'] = opencode_servers
+opencode_cfg['mcp'].setdefault('servers', {}).update(opencode_servers)
 os.makedirs(os.path.dirname(opencode_config), exist_ok=True)
 with open(opencode_config, 'w') as out:
     json.dump(opencode_cfg, out, indent=2)
 print(f'Synchronized {len(opencode_servers)} MCP servers to {opencode_config}')
 
 # 3. Codex MCP config (~/.codex/config.toml)
+codex_content = ''
 if os.path.exists(codex_config):
     with open(codex_config, 'r') as f:
         codex_content = f.read()
 
-    def toml_str(val):
-        escaped = str(val).replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"')
-        return f'\"{escaped}\"'
+def toml_str(val):
+    escaped = str(val).replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"')
+    return f'\"{escaped}\"'
 
-    toml_lines = ['\n# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===']
-    for name, s in data.get('mcpServers', {}).items():
-        cmd = s.get('command', '')
-        args = s.get('args', [])
-        disabled = s.get('disabled', False)
-        env = s.get('env', {})
+toml_lines = ['\n# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===']
+for name, s in data.get('mcpServers', {}).items():
+    cmd = s.get('command', '')
+    args = s.get('args', [])
+    disabled = s.get('disabled', False)
+    env = s.get('env', {})
 
-        toml_lines.append(f'[mcp_servers.\"{name}\"]')
-        toml_lines.append(f'command = {toml_str(cmd)}')
-        args_str = ', '.join(toml_str(a) for a in args)
-        toml_lines.append(f'args = [{args_str}]')
-        if disabled:
-            toml_lines.append('enabled = false')
+    toml_lines.append(f'[mcp_servers.\"{name}\"]')
+    toml_lines.append(f'command = {toml_str(cmd)}')
+    args_str = ', '.join(toml_str(a) for a in args)
+    toml_lines.append(f'args = [{args_str}]')
+    if disabled:
+        toml_lines.append('enabled = false')
 
-        if env:
-            toml_lines.append(f'[mcp_servers.\"{name}\".env]')
-            for ek, ev in env.items():
-                toml_lines.append(f'{ek} = {toml_str(ev)}')
-        toml_lines.append('')
+    if env:
+        toml_lines.append(f'[mcp_servers.\"{name}\".env]')
+        for ek, ev in env.items():
+            toml_lines.append(f'{ek} = {toml_str(ev)}')
+    toml_lines.append('')
 
-    toml_lines.append('# === END MANAGED MCP SERVERS (mcp-sync) ===\n')
-    managed_block = '\n'.join(toml_lines)
+toml_lines.append('# === END MANAGED MCP SERVERS (mcp-sync) ===\n')
+managed_block = '\n'.join(toml_lines)
 
-    cleaned = re.sub(r'\n?# === BEGIN MANAGED MCP SERVERS.*# === END MANAGED MCP SERVERS[^\n]*\n?', '', codex_content, flags=re.DOTALL)
-    new_content = cleaned.rstrip() + '\n' + managed_block
-    with open(codex_config, 'w') as out:
-        out.write(new_content)
-    print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config}')
+# Strip old managed block
+cleaned = re.sub(r'\n?# === BEGIN MANAGED MCP SERVERS.*# === END MANAGED MCP SERVERS[^\n]*\n?', '', codex_content, flags=re.DOTALL)
+# Strip any pre-existing unmanaged definitions of the same servers to prevent duplicate table errors
+for s_name in data.get('mcpServers', {}):
+    esc = re.escape(s_name)
+    cleaned = re.sub(rf'\n*\[mcp_servers\.(?:\"{esc}\"|{esc})\][\s\S]*?(?=\n\[|\Z)', '', cleaned)
+
+new_content = cleaned.rstrip() + '\n' + managed_block
+os.makedirs(os.path.dirname(codex_config), exist_ok=True)
+with open(codex_config, 'w') as out:
+    out.write(new_content)
+print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config}')
 "
-
-  if command -v opencode >/dev/null 2>&1; then
-    opencode reload >/dev/null 2>&1 || true
-  fi
 }
 
 sync_skills_and_instructions() {
@@ -502,9 +503,9 @@ sync_skills_and_instructions() {
 
   # Link global AGENTS.md instructions
   local dest
-  for dest in "${CODEX_DIR}/AGENTS.md" "${OPENCODE_DIR}/AGENTS.md" "${HOME}/.opencode/AGENTS.md"; do
+  for dest in "${CODEX_DIR}/AGENTS.md" "${OPENCODE_DIR}/AGENTS.md"; do
     mkdir -p "$(dirname "${dest}")"
-    ln -sf "${gemini_rules}" "${dest}"
+    ln -sfn "${gemini_rules}" "${dest}"
   done
 
   # Link skills
@@ -512,15 +513,28 @@ sync_skills_and_instructions() {
   local target_root
   for target_root in "${CODEX_DIR}/skills" "${OPENCODE_DIR}/skills"; do
     mkdir -p "${target_root}"
+    local valid_skills=" "
     for s_dir in "${search_dirs[@]}"; do
       if [[ -d "${s_dir}" ]]; then
         for skill_path in "${s_dir}"/*; do
           if [[ -d "${skill_path}" && -f "${skill_path}/SKILL.md" ]]; then
             local skill_name
             skill_name="$(basename "${skill_path}")"
+            valid_skills="${valid_skills}${skill_name} "
             ln -sfn "${skill_path}" "${target_root}/${skill_name}"
           fi
         done
+      fi
+    done
+
+    # Prune stale skill symlinks
+    for existing in "${target_root}"/*; do
+      if [[ -L "${existing}" ]]; then
+        local base
+        base="$(basename "${existing}")"
+        if [[ "${valid_skills}" != *" ${base} "* ]]; then
+          rm -f "${existing}"
+        fi
       fi
     done
   done
@@ -546,6 +560,9 @@ main() {
   sync_memory_file
   sync_mcp_config
   sync_skills_and_instructions
+  if command -v opencode >/dev/null 2>&1; then
+    opencode reload >/dev/null 2>&1 || true
+  fi
   echo "==> Done. MCP configuration and agent parity ready."
 }
 
