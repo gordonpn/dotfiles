@@ -169,9 +169,9 @@ zstyle ':fzf-tab:complete:kill:argument-rest' extra-opts --preview='ps --pid=$in
 zstyle ':fzf-tab:*' fzf-flags \
   --height=35% \
   --preview-window=right:60% \
-  --color='bg+:#222121,bg:#181616,spinner:#c8c093,hl:#c4746e' \
-  --color='fg:#c8c093,header:#c8c093,info:#717c7c,pointer:#7aa89f' \
-  --color='marker:#7aa89f,fg+:#dcd7ba,prompt:#7aa89f,hl+:#7aa89f' \
+  --color='bg+:#282726,bg:#100F0F,spinner:#DAD8CE,hl:#AF3029' \
+  --color='fg:#CECDC3,header:#878580,info:#878580,pointer:#24837B' \
+  --color='marker:#24837B,fg+:#FFFCF0,prompt:#24837B,hl+:#3AA99F' \
   --bind='ctrl-d:preview-page-down,ctrl-u:preview-page-up'
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath'
 zstyle ':fzf-tab:complete:*:*' fzf-preview '
