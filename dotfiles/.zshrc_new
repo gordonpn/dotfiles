@@ -340,6 +340,10 @@ alias agy='agy --continue --dangerously-skip-permissions'
 alias cpt='copilot --effort=max --allow-all --enable-memory --mode=plan --model=auto'
 alias cld="claude --allow-dangerously-skip-permissions --continue --dangerously-skip-permissions --permission-mode=auto"
 alias cldn="claude --allow-dangerously-skip-permissions --dangerously-skip-permissions --permission-mode=auto"
+alias cdx='codex --dangerously-bypass-approvals-and-sandbox'
+alias cdxr='codex resume --last --dangerously-bypass-approvals-and-sandbox'
+alias op='opencode --continue --auto'
+alias opn='opencode --auto'
 alias fullreboot='sudo reboot'
 if [[ "$(uname)" == "Darwin" ]]; then
   alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
