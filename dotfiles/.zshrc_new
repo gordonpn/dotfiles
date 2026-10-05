@@ -357,7 +357,7 @@ pnpx() {
 }
 
 # Parallel agent sessions, one isolated worktree each via worktrunk (wt).
-# agy resumes in place; agyw starts a fresh session in a new worktree on a new branch.
+# agy, codex, and opencode resume in place; agyw, cdxw, and opw start a fresh session in a new worktree on a new branch.
 #
 # Names are zellij-style: lowercase adjective-noun, like polite-accordion.
 # Zellij's own word lists are not recoverable from its binary, so these are
@@ -402,6 +402,8 @@ _wt_agent() {
 }
 
 agyw() { _wt_agent agy -- --dangerously-skip-permissions "$@" }
+cdxw() { _wt_agent codex -- --dangerously-bypass-approvals-and-sandbox "$@" }
+opw() { _wt_agent opencode -- --auto "$@" }
 
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 

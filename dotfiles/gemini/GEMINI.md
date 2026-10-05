@@ -76,7 +76,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 ## Workflow & Solution Validation
 - **Holistic Review:** Before implementing changes, read existing configuration, scripts, and documentation to understand project architecture.
 - **Project Context Intake:** In any project, inspect and read all root markdown documents (`README.md`, `ARCHITECTURE.md`, `IMPLEMENTATION.md`, and `docs/`) before proposing or writing code.
-- **Isolated Agent Sessions:** For non-trivial features, refactors, or spikes, leverage worktrees via `worktrunk` (`wt switch --create <branch>` or `agyw`) to keep the primary working tree clean and isolated.
+- **Isolated Agent Sessions:** For non-trivial features, refactors, or spikes, leverage worktrees via `worktrunk` (`wt switch --create <branch>`, `agyw`, `cdxw`, or `opw`) to keep the primary working tree clean and isolated.
 - **Issue to PR Flow:** Adopt a GitHub issue to pull request lifecycle for code changes. Create and/or inspect assigned task requirements using `@modelcontextprotocol/server-github` or `gh issue view <id> --json title,body,labels` before proposing logic changes.
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
 - **The Execution Sequence:** Execute work in a verifiable order: formulate checkable plan -> failing test/reproduction -> minimal implementation -> format/lint -> full test suite -> staged diff review -> atomic Conventional Commit -> automated review via OCR -> draft PR.
