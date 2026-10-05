@@ -67,11 +67,14 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Test Data Factories:** Build test objects through factory helpers rather than inline literals in test bodies. Keep tests independent with no shared mutable state, and separate Arrange, Act, and Assert with blank lines.
 - **Never Blind-Update Snapshots:** Investigate snapshot drift and understand what changed before regenerating the snapshot.
 - **Not Applicable Is Not Unverified:** Distinguish "this rule does not apply here" from "I could not check this", and report the second explicitly. A check that never reached a verdict is never reported as passed, and a review that decided nothing is not a pass.
+- **UI Boundary & Edge Proving:** When modifying user interfaces, forms, or interactive components, actively test boundary edge cases: empty input submissions, rapid double submission, pagination limits, and state preservation across page reloads.
 
 ## Self-Learning Loop & Maintenance
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
 - **Promotion Bar:** Only promote rules that generalize, change future behavior, and are not already covered by existing instructions.
 - **Rule Precedence:** A project's own `AGENTS.md` overrides this global file on conflict. Record project-specific rules there and keep only what generalizes here.
+- **Concise Correction Format:** When recording user corrections, write them in the action-oriented form: "When X, do Y".
+- **Repeat Mistake Rule:** If an error occurs despite an existing rule, treat the instruction as ambiguous or poorly scoped and rewrite it rather than appending redundant rules.
 
 ## Workflow & Solution Validation
 - **Holistic Review:** Before implementing changes, read existing configuration, scripts, and documentation to understand project architecture.
@@ -89,6 +92,14 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux (like dotfiles), always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
 - **Trade-Off Declaration:** When architectural choices or non-trivial forks arise during planning, challenge assumptions, enumerate the viable options, and cite the selected trade-off in two sentences or fewer before switching to implementation.
 - **Single-Turn Verification Focus:** Conclude each execution turn with the exact atomic outcome and the single immediate verification command or target (e.g. `Run 'just test' to verify the reproduction suite passes`).
+- **Two-Attempt Circuit Breaker:** If a tool call, test fix, or command fails twice on the same step, stop immediately. Document what failed, reassess assumptions, and re-plan rather than retrying blindly.
+- **Triad Evaluation (UX, DX, AX):** When evaluating architectural trade-offs, weigh User Experience (UX), Developer Experience (DX), and Agent Experience (AX: greppability, unambiguous symbols, explicit types, and clean tool parsing).
+
+## Subagent Orchestration
+- **Role Boundaries:** Keep subagent responsibilities segregated. Explorers read and research; workers make file edits; reviewers audit and critique without mutating files.
+- **Bounded Contracts:** Assign each subagent a single objective, a deterministic done condition, and require a concise outcome report (5 lines or fewer).
+- **No Concurrent File Collisions:** Parallel subagent dispatch is encouraged for independent tasks, but never assign multiple subagents to touch or edit the same file concurrently.
+- **Claim Verification:** Treat subagent findings as hypotheses; verify key assertions against the real codebase before basing architecture or code changes on them.
 
 ## Documentation & Infrastructure
 - **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
@@ -96,3 +107,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Operational Runbooks:** When introducing deployment steps, background daemons, or infrastructure components, document setup, execution commands, and diagnostics in `docs/RUNBOOK.md` or under `/docs/`.
 - **Everything as Code (* as Code):** Always opt for declarative, version-controlled code over manual configuration, web console clicks, or ad-hoc host changes. Define infrastructure (Terraform/OpenTofu), container runtimes, CI/CD pipelines, dashboards, alerting, and operational environments in tracked configuration files. Ensure provisioning is reproducible, automated, and audit-traceable. Use variables for sensitive values and keep local state/secrets in `.gitignore`.
 - **Release & Versioning Discipline:** Follow semantic versioning (`vMAJOR.MINOR.PATCH`) for software releases and tags (`git tag -a`), accompanied by human-readable changelog notes.
+
+## Lessons
+<!-- Newest on top. Delete what no longer applies. -->
+
