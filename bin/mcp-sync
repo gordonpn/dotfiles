@@ -9,6 +9,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TEMPLATE_DIR="${REPO_DIR}/dotfiles/gemini"
 GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
+OPENCODE_DIR="${HOME}/.config/opencode"
+CODEX_DIR="${HOME}/.codex"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
 
@@ -16,7 +18,7 @@ LOCAL_BIN_DIR="${HOME}/.local/bin"
 # from GitHub releases. Pinned for reproducibility; override to bump.
 GITHUB_MCP_SERVER_VERSION="${GITHUB_MCP_SERVER_VERSION:-1.12.1}"
 
-mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
+mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${OPENCODE_DIR}" "${CODEX_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
 
 get_secret() {
   local service_name="$1"
@@ -275,6 +277,8 @@ except Exception as e:
 sync_mcp_config() {
   local template_file="${TEMPLATE_DIR}/mcp_config.template.json"
   local target_file="${GEMINI_CONFIG_DIR}/mcp_config.json"
+  local opencode_config="${OPENCODE_DIR}/opencode.json"
+  local codex_config="${CODEX_DIR}/config.toml"
 
   if [[ ! -f "${template_file}" ]]; then
     echo "Error: Template ${template_file} not found." >&2
@@ -374,10 +378,12 @@ sync_mcp_config() {
   export TFE_ADDRESS="${tfe_address}"
 
   python3 -c "
-import json, os
+import json, os, re
 
 template_file = '${template_file}'
 target_file = '${target_file}'
+opencode_config = '${opencode_config}'
+codex_config = '${codex_config}'
 
 with open(template_file, 'r') as f:
     content = f.read()
@@ -411,11 +417,114 @@ for k, v in replacements.items():
     content = content.replace(k, v)
 
 data = json.loads(content)
+
+# 1. Antigravity MCP config
 with open(target_file, 'w') as out:
     json.dump(data, out, indent=2)
-
 print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_file}')
+
+# 2. OpenCode MCP config (~/.config/opencode/opencode.json)
+opencode_servers = {}
+for name, s in data.get('mcpServers', {}).items():
+    cmd = s.get('command', '')
+    args = s.get('args', [])
+    command_list = [cmd] + args if isinstance(args, list) else [cmd]
+    entry = {
+        'type': 'local',
+        'command': command_list,
+        'enabled': not s.get('disabled', False)
+    }
+    if s.get('env'):
+        entry['environment'] = s['env']
+    opencode_servers[name] = entry
+
+opencode_cfg = {'\$schema': 'https://opencode.ai/config.json'}
+if os.path.exists(opencode_config):
+    try:
+        with open(opencode_config, 'r') as f:
+            opencode_cfg = json.load(f)
+    except Exception:
+        pass
+if 'mcp' not in opencode_cfg:
+    opencode_cfg['mcp'] = {}
+opencode_cfg['mcp']['servers'] = opencode_servers
+os.makedirs(os.path.dirname(opencode_config), exist_ok=True)
+with open(opencode_config, 'w') as out:
+    json.dump(opencode_cfg, out, indent=2)
+print(f'Synchronized {len(opencode_servers)} MCP servers to {opencode_config}')
+
+# 3. Codex MCP config (~/.codex/config.toml)
+if os.path.exists(codex_config):
+    with open(codex_config, 'r') as f:
+        codex_content = f.read()
+
+    def toml_str(val):
+        escaped = str(val).replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"')
+        return f'\"{escaped}\"'
+
+    toml_lines = ['\n# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===']
+    for name, s in data.get('mcpServers', {}).items():
+        cmd = s.get('command', '')
+        args = s.get('args', [])
+        disabled = s.get('disabled', False)
+        env = s.get('env', {})
+
+        toml_lines.append(f'[mcp_servers.\"{name}\"]')
+        toml_lines.append(f'command = {toml_str(cmd)}')
+        args_str = ', '.join(toml_str(a) for a in args)
+        toml_lines.append(f'args = [{args_str}]')
+        if disabled:
+            toml_lines.append('enabled = false')
+
+        if env:
+            toml_lines.append(f'[mcp_servers.\"{name}\".env]')
+            for ek, ev in env.items():
+                toml_lines.append(f'{ek} = {toml_str(ev)}')
+        toml_lines.append('')
+
+    toml_lines.append('# === END MANAGED MCP SERVERS (mcp-sync) ===\n')
+    managed_block = '\n'.join(toml_lines)
+
+    cleaned = re.sub(r'\n?# === BEGIN MANAGED MCP SERVERS.*# === END MANAGED MCP SERVERS[^\n]*\n?', '', codex_content, flags=re.DOTALL)
+    new_content = cleaned.rstrip() + '\n' + managed_block
+    with open(codex_config, 'w') as out:
+        out.write(new_content)
+    print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config}')
 "
+
+  if command -v opencode >/dev/null 2>&1; then
+    opencode reload >/dev/null 2>&1 || true
+  fi
+}
+
+sync_skills_and_instructions() {
+  local gemini_rules="${REPO_DIR}/dotfiles/gemini/GEMINI.md"
+
+  # Link global AGENTS.md instructions
+  local dest
+  for dest in "${CODEX_DIR}/AGENTS.md" "${OPENCODE_DIR}/AGENTS.md" "${HOME}/.opencode/AGENTS.md"; do
+    mkdir -p "$(dirname "${dest}")"
+    ln -sf "${gemini_rules}" "${dest}"
+  done
+
+  # Link skills
+  local -a search_dirs=("${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
+  local target_root
+  for target_root in "${CODEX_DIR}/skills" "${OPENCODE_DIR}/skills"; do
+    mkdir -p "${target_root}"
+    for s_dir in "${search_dirs[@]}"; do
+      if [[ -d "${s_dir}" ]]; then
+        for skill_path in "${s_dir}"/*; do
+          if [[ -d "${skill_path}" && -f "${skill_path}/SKILL.md" ]]; then
+            local skill_name
+            skill_name="$(basename "${skill_path}")"
+            ln -sfn "${skill_path}" "${target_root}/${skill_name}"
+          fi
+        done
+      fi
+    done
+  done
+  echo "Synchronized shared skills and AGENTS.md instructions to Codex and OpenCode"
 }
 
 sync_memory_file() {
@@ -427,7 +536,7 @@ sync_memory_file() {
 }
 
 main() {
-  echo "==> Synchronizing Antigravity MCP environment..."
+  echo "==> Synchronizing AI agent MCP and skills environment..."
   install_github_mcp_server
   install_terraform_mcp_server
   install_repomix
@@ -436,7 +545,8 @@ main() {
   sync_k3s_cluster
   sync_memory_file
   sync_mcp_config
-  echo "==> Done. MCP configuration is ready and hydrated."
+  sync_skills_and_instructions
+  echo "==> Done. MCP configuration and agent parity ready."
 }
 
 main "$@"
