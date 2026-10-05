@@ -409,6 +409,22 @@ agyw() { _wt_agent agy -- --dangerously-skip-permissions "$@" }
 cdxw() { _wt_agent codex -- --dangerously-bypass-approvals-and-sandbox "$@" }
 opw() { _wt_agent opencode -- --auto "$@" }
 
+# Synchronize MCP configuration across Antigravity, OpenCode, and Codex
+# in the background whenever the template or script is newer than the generated targets.
+_check_mcp_sync() {
+  local dotfiles_dir="${DOTFILES_DIR:-$HOME/workspace/dotfiles}"
+  local template="${dotfiles_dir}/dotfiles/gemini/mcp_config.template.json"
+  local target="${HOME}/.gemini/config/mcp_config.json"
+  local script="${dotfiles_dir}/bin/mcp-sync"
+
+  [[ -f "${template}" && -x "${script}" ]] || return 0
+
+  if [[ ! -f "${target}" || ! -f "${HOME}/.codex/config.toml" || ! -f "${HOME}/.config/opencode/opencode.json" || "${template}" -nt "${target}" || "${script}" -nt "${target}" ]]; then
+    pgrep -f "bin/mcp-sync" >/dev/null 2>&1 || "${script}" >/dev/null 2>&1 &!
+  fi
+}
+_check_mcp_sync
+
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
