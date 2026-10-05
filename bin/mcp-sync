@@ -425,9 +425,14 @@ def safe_write_config(path, text):
         os.makedirs(dirname, exist_ok=True)
     tmp_path = path + f'.tmp.{os.getpid()}'
     fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with open(fd, 'w') as f:
-        f.write(text)
-    os.replace(tmp_path, path)
+    try:
+        with open(fd, 'w') as f:
+            f.write(text)
+        os.replace(tmp_path, path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 # 1. Antigravity MCP config
 safe_write_config(target_file, json.dumps(data, indent=2))
@@ -453,14 +458,10 @@ if os.path.exists(opencode_config):
     try:
         with open(opencode_config, 'r') as f:
             opencode_cfg = json.load(f)
-    except Exception:
-        pass
+    except Exception as exc:
+        raise SystemExit(f'Refusing to overwrite unparsable {opencode_config}: {exc}')
 
-mcp_cfg = opencode_cfg.setdefault('mcp', {})
-if not isinstance(mcp_cfg, dict):
-    mcp_cfg = opencode_cfg['mcp'] = {}
-mcp_cfg.pop('servers', None)
-mcp_cfg.update(opencode_servers)
+opencode_cfg['mcp'] = opencode_servers
 
 safe_write_config(opencode_config, json.dumps(opencode_cfg, indent=2))
 print(f'Synchronized {len(opencode_servers)} MCP servers to {opencode_config}')
@@ -526,7 +527,8 @@ sync_skills_and_instructions() {
   for dest in "${CODEX_DIR}/AGENTS.md" "${OPENCODE_DIR}/AGENTS.md"; do
     mkdir -p "$(dirname "${dest}")"
     if [[ -f "${dest}" && ! -L "${dest}" ]]; then
-      local bak_file="${dest}.bak"
+      local bak_file
+      bak_file="${dest}.bak"
       [[ -e "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
       mv "${dest}" "${bak_file}"
     fi
@@ -548,8 +550,10 @@ sync_skills_and_instructions() {
             valid_skills="${valid_skills}${skill_name} "
             local dest_skill="${target_root}/${skill_name}"
             if [[ -d "${dest_skill}" && ! -L "${dest_skill}" ]]; then
-              local s_bak="${dest_skill}.bak"
-              [[ -e "${s_bak}" ]] && s_bak="${dest_skill}.bak.$(date +%s)"
+              local backup_root="${GEMINI_DIR}/skill-backups"
+              mkdir -p "${backup_root}"
+              local s_bak
+              s_bak="${backup_root}/${skill_name}.bak.$(date +%s)"
               mv "${dest_skill}" "${s_bak}"
             fi
             ln -sfn "${skill_path}" "${dest_skill}"
@@ -603,7 +607,9 @@ main() {
 
     local is_active=0
     if [[ -n "${lock_pid}" ]] && kill -0 "${lock_pid}" 2>/dev/null; then
-      is_active=1
+      if ps -p "${lock_pid}" -o command= 2>/dev/null | grep -q "mcp-sync"; then
+        is_active=1
+      fi
     fi
 
     if (( is_active )); then
@@ -622,8 +628,13 @@ main() {
     local now
     now="$(date +%s)"
     if (( now - lock_mtime > 60 )) || [[ -n "${lock_pid}" ]]; then
-      rm -rf "${LOCK_DIR}"
-      mkdir "${LOCK_DIR}" 2>/dev/null || exit 0
+      local stale_dir="${LOCK_DIR}.stale.$$"
+      if mv "${LOCK_DIR}" "${stale_dir}" 2>/dev/null; then
+        rm -rf "${stale_dir}"
+        mkdir "${LOCK_DIR}" 2>/dev/null || exit 0
+      else
+        exit 0
+      fi
     else
       exit 0
     fi

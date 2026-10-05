@@ -450,6 +450,7 @@ _check_mcp_sync() {
   done
 
   if (( needs_sync )); then
+    mkdir -p "${HOME}/.gemini"
     ( "${script}" --configs-only > "${sync_log}" 2>&1 && rm -f "${fail_stamp}" || touch "${fail_stamp}" ) &!
   fi
 }

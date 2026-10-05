@@ -83,7 +83,7 @@ mcp-sync --configs-only
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
 7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json`, `~/.config/opencode/opencode.json`, and `~/.codex/config.toml` (32 total servers).
 8. **Synchronizes Skills & Instructions:** Symlinks `GEMINI.md` to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`, and symlinks custom skills from `~/.gemini` into `~/.codex/skills/` and `~/.config/opencode/skills/`.
-9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with exponential backoff on errors.
+9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 
 ---
 
