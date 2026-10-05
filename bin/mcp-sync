@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# mcp-sync: Synchronize, hydrate, or verify local Antigravity MCP servers and profiles
+# mcp-sync: Synchronize, hydrate, and maintain agent parity across Antigravity, OpenCode, and Codex
 # Pulls sensitive tokens from OS Keychain / secret store or environment variables.
+# Synchronizes MCP server configurations, shared skills, and AGENTS.md instructions.
 
 set -euo pipefail
 
@@ -418,10 +419,18 @@ for k, v in replacements.items():
 
 data = json.loads(content)
 
+def safe_write_config(path, text):
+    dirname = os.path.dirname(path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
+    tmp_path = path + f'.tmp.{os.getpid()}'
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with open(fd, 'w') as f:
+        f.write(text)
+    os.replace(tmp_path, path)
+
 # 1. Antigravity MCP config
-with open(target_file, 'w') as out:
-    json.dump(data, out, indent=2)
-os.chmod(target_file, 0o600)
+safe_write_config(target_file, json.dumps(data, indent=2))
 print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_file}')
 
 # 2. OpenCode MCP config (~/.config/opencode/opencode.json)
@@ -441,15 +450,19 @@ for name, s in data.get('mcpServers', {}).items():
 
 opencode_cfg = {'\$schema': 'https://opencode.ai/config.json', 'theme': 'flexoki'}
 if os.path.exists(opencode_config):
-    with open(opencode_config, 'r') as f:
-        opencode_cfg = json.load(f)
-if 'mcp' not in opencode_cfg:
-    opencode_cfg['mcp'] = {}
-opencode_cfg['mcp']['servers'] = opencode_servers
-os.makedirs(os.path.dirname(opencode_config), exist_ok=True)
-with open(opencode_config, 'w') as out:
-    json.dump(opencode_cfg, out, indent=2)
-os.chmod(opencode_config, 0o600)
+    try:
+        with open(opencode_config, 'r') as f:
+            opencode_cfg = json.load(f)
+    except Exception:
+        pass
+
+mcp_cfg = opencode_cfg.setdefault('mcp', {})
+if not isinstance(mcp_cfg, dict):
+    mcp_cfg = opencode_cfg['mcp'] = {}
+mcp_cfg.pop('servers', None)
+mcp_cfg.update(opencode_servers)
+
+safe_write_config(opencode_config, json.dumps(opencode_cfg, indent=2))
 print(f'Synchronized {len(opencode_servers)} MCP servers to {opencode_config}')
 
 # 3. Codex MCP config (~/.codex/config.toml)
@@ -500,10 +513,7 @@ for s_name in data.get('mcpServers', {}):
     cleaned = re.sub(rf'\n*\[mcp_servers\.(?:\"{esc}\"|{esc})(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\Z)', '', cleaned)
 
 new_content = cleaned.rstrip() + '\n' + managed_block
-os.makedirs(os.path.dirname(codex_config), exist_ok=True)
-with open(codex_config, 'w') as out:
-    out.write(new_content)
-os.chmod(codex_config, 0o600)
+safe_write_config(codex_config, new_content)
 print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config}')
 "
 }
@@ -516,7 +526,9 @@ sync_skills_and_instructions() {
   for dest in "${CODEX_DIR}/AGENTS.md" "${OPENCODE_DIR}/AGENTS.md"; do
     mkdir -p "$(dirname "${dest}")"
     if [[ -f "${dest}" && ! -L "${dest}" ]]; then
-      mv "${dest}" "${dest}.bak"
+      local bak_file="${dest}.bak"
+      [[ -e "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
+      mv "${dest}" "${bak_file}"
     fi
     ln -sfn "${gemini_rules}" "${dest}"
   done
@@ -536,7 +548,9 @@ sync_skills_and_instructions() {
             valid_skills="${valid_skills}${skill_name} "
             local dest_skill="${target_root}/${skill_name}"
             if [[ -d "${dest_skill}" && ! -L "${dest_skill}" ]]; then
-              rm -rf "${dest_skill}"
+              local s_bak="${dest_skill}.bak"
+              [[ -e "${s_bak}" ]] && s_bak="${dest_skill}.bak.$(date +%s)"
+              mv "${dest_skill}" "${s_bak}"
             fi
             ln -sfn "${skill_path}" "${dest_skill}"
           fi
@@ -580,20 +594,48 @@ main() {
     esac
   done
 
-  # Atomic lock directory to prevent concurrent executions
+  # Atomic lock directory with PID tracking to prevent concurrent races
   if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
-    local lock_mtime
-    lock_mtime="$(stat -f %m "${LOCK_DIR}" 2>/dev/null || stat -c %Y "${LOCK_DIR}" 2>/dev/null || echo 0)"
+    local lock_pid=""
+    if [[ -f "${LOCK_DIR}/pid" ]]; then
+      lock_pid="$(cat "${LOCK_DIR}/pid" 2>/dev/null || true)"
+    fi
+
+    local is_active=0
+    if [[ -n "${lock_pid}" ]] && kill -0 "${lock_pid}" 2>/dev/null; then
+      is_active=1
+    fi
+
+    if (( is_active )); then
+      exit 0
+    fi
+
+    # Check lock mtime if pid was missing or dead
+    local lock_mtime=0
+    if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+      lock_mtime="$(stat -f %m "${LOCK_DIR}" 2>/dev/null || echo 0)"
+    else
+      lock_mtime="$(stat -c %Y "${LOCK_DIR}" 2>/dev/null || echo 0)"
+    fi
+    [[ "${lock_mtime}" =~ ^[0-9]+$ ]] || lock_mtime=0
+
     local now
     now="$(date +%s)"
-    if (( now - lock_mtime > 60 )); then
+    if (( now - lock_mtime > 60 )) || [[ -n "${lock_pid}" ]]; then
       rm -rf "${LOCK_DIR}"
       mkdir "${LOCK_DIR}" 2>/dev/null || exit 0
     else
       exit 0
     fi
   fi
-  trap 'rm -rf "${LOCK_DIR}"' EXIT INT TERM
+  echo "$$" > "${LOCK_DIR}/pid"
+
+  cleanup_lock() {
+    if [[ -f "${LOCK_DIR}/pid" ]] && [[ "$(<"${LOCK_DIR}/pid")" == "$$" ]]; then
+      rm -rf "${LOCK_DIR}"
+    fi
+  }
+  trap cleanup_lock EXIT INT TERM
 
   echo "==> Synchronizing AI agent MCP and skills environment..."
   if (( ! configs_only )); then

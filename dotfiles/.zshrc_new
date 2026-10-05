@@ -418,19 +418,39 @@ _check_mcp_sync() {
   local codex_target="${HOME}/.codex/config.toml"
   local opencode_target="${HOME}/.config/opencode/opencode.json"
   local script="${dotfiles_dir}/bin/mcp-sync"
+  local rules="${dotfiles_dir}/dotfiles/gemini/GEMINI.md"
+  local ssh_cfg="${HOME}/.ssh/config"
+  local fail_stamp="${HOME}/.gemini/.mcp-sync.fail"
+  local sync_log="${HOME}/.gemini/mcp-sync.log"
 
   [[ -f "${template}" && -x "${script}" ]] || return 0
 
+  # Back off if last run failed within 5 minutes
+  if [[ -f "${fail_stamp}" ]]; then
+    local fail_mtime=0
+    if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+      fail_mtime="$(stat -f %m "${fail_stamp}" 2>/dev/null || echo 0)"
+    else
+      fail_mtime="$(stat -c %Y "${fail_stamp}" 2>/dev/null || echo 0)"
+    fi
+    [[ "${fail_mtime}" =~ ^[0-9]+$ ]] || fail_mtime=0
+    local now
+    now="$(date +%s)"
+    if (( now - fail_mtime < 300 )); then
+      return 0
+    fi
+  fi
+
   local t needs_sync=0
   for t in "${target}" "${codex_target}" "${opencode_target}"; do
-    if [[ ! -f "${t}" || "${template}" -nt "${t}" || "${script}" -nt "${t}" ]]; then
+    if [[ ! -f "${t}" || "${template}" -nt "${t}" || "${script}" -nt "${t}" || "${rules}" -nt "${t}" || ( -f "${ssh_cfg}" && "${ssh_cfg}" -nt "${t}" ) ]]; then
       needs_sync=1
       break
     fi
   done
 
   if (( needs_sync )); then
-    "${script}" --configs-only >/dev/null 2>&1 &!
+    ( "${script}" --configs-only > "${sync_log}" 2>&1 && rm -f "${fail_stamp}" || touch "${fail_stamp}" ) &!
   fi
 }
 _check_mcp_sync

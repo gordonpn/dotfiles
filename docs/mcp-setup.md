@@ -1,8 +1,13 @@
-# Antigravity Model Context Protocol (MCP) Setup
+# Terminal AI Coding Agents MCP Setup & Parity
 
 ## Overview
 
-This repository configures Model Context Protocol (MCP) servers for the Antigravity AI coding agent (`agy`) on macOS and Linux. `agy` is the only consumer: `bin/mcp-sync` writes `~/.gemini/config/mcp_config.json` and nothing else. The other agents in use read their own machine-local registries, deliberately untracked here because their contents are environment-specific: `~/.kiro/settings/mcp.json` for kiro-cli and `~/.claude.json` for Claude Code, both of which carry work-only servers.
+This repository configures Model Context Protocol (MCP) servers, shared skills, and global instructions for terminal AI coding agents (Antigravity `agy`, OpenCode, and Codex) on macOS and Linux. `bin/mcp-sync` compiles a single source of truth template (`dotfiles/gemini/mcp_config.template.json`) into client-specific configurations for all three agents:
+- Antigravity: `~/.gemini/config/mcp_config.json`
+- OpenCode: `~/.config/opencode/opencode.json`
+- Codex: `~/.codex/config.toml`
+
+It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills to OpenCode (`~/.config/opencode/skills/`) and Codex (`~/.codex/skills/`).
 
 The architecture separates version-controlled templates from machine-local configuration and secrets. Because this repository is public, credentials and cluster private keys are kept in the OS Keychain or environment variables and hydrated onto the local machine via `bin/mcp-sync`.
 
@@ -18,18 +23,31 @@ dotfiles/ (Public Repository)
 ├── dotfiles/
 │   ├── cclsp.json                   # LSP server extension mappings
 │   └── gemini/
+│       ├── GEMINI.md                # Source instructions (symlinked to AGENTS.md)
 │       ├── mcp_config.template.json # Sanitized MCP configuration template
 │       ├── docker-profiles.template.json
 │       └── ssh-profiles.template.json
 └── docs/
     └── mcp-setup.md                 # Architecture documentation
 
-~/.gemini/ (Machine-Local State, Not Committed)
+~/.gemini/ (Antigravity State)
 ├── config/
-│   └── mcp_config.json              # Fully hydrated MCP server registry
+│   ├── mcp_config.json              # Fully hydrated MCP server registry (0600)
+│   └── skills/                      # Custom user skills
 ├── docker-profiles.json             # Local daemon + remote SSH Docker profiles
 ├── memory.json                      # Persistent knowledge graph store
 └── ssh-profiles.json                # Host profiles derived from ~/.ssh/config
+
+~/.config/opencode/ (OpenCode State)
+├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
+├── opencode.json                    # Hydrated MCP server registry + Flexoki theme (0600)
+├── tui.json                         # Flexoki Dark TUI configuration
+└── skills/                          # Symlinked shared skills from ~/.gemini
+
+~/.codex/ (Codex State)
+├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
+├── config.toml                      # Hydrated managed MCP tables (0600)
+└── skills/                          # Symlinked shared skills beside .system skills
 
 ~/.local/bin/ (Machine-Local Binaries, Not Committed)
 └── github-mcp-server                # Pinned release binary, installed by mcp-sync
@@ -49,17 +67,23 @@ Services: brave_api_key, exa_api_key, tailscale_api_key, uptime_kuma_jwt, health
 
 ### Execution
 ```bash
+# Full hydration: binary installs, SSH/Docker/K3s checks, MCP configs, and skills
 mcp-sync
+
+# Lightweight configs-only mode (used by shell startup hooks):
+mcp-sync --configs-only
 ```
 
 ### What It Does
-1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin`, ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`), and links or installs `repomix`.
+1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin`, ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`), and links or installs `repomix` (skipped with `--configs-only`).
 2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `exa_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `tfe_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`, `TFE_ADDRESS`).
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
-5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten`.
+5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Config:** Renders `dotfiles/gemini/mcp_config.template.json` into `~/.gemini/config/mcp_config.json` (32 total servers).
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json`, `~/.config/opencode/opencode.json`, and `~/.codex/config.toml` (32 total servers).
+8. **Synchronizes Skills & Instructions:** Symlinks `GEMINI.md` to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`, and symlinks custom skills from `~/.gemini` into `~/.codex/skills/` and `~/.config/opencode/skills/`.
+9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with exponential backoff on errors.
 
 ---
 
