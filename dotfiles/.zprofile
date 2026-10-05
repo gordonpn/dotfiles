@@ -1,5 +1,7 @@
 # Platform-Specific Configuration
 if [[ "$(uname)" == "Darwin" ]]; then
+  # Avoid descriptor exhaustion when coding agents load skills and MCP servers.
+  ulimit -Sn 4096
   eval "$(/opt/homebrew/bin/brew shellenv)"
   export JAVA_HOME=$(/usr/libexec/java_home)
   export HOMEBREW_CASK_OPTS="--no-quarantine"

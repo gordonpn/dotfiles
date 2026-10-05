@@ -26,6 +26,11 @@ With scripts that will help me set up a Mac on a fresh install.
 - Installs zsh plugins
 - Set macOS Preferences defaults
 
+On macOS, login shells set the soft open-file limit to 4096 so coding agents can
+load skills and MCP servers without exhausting file descriptors. Open a new
+login shell and run `ulimit -Sn` to verify; existing background processes must be
+restarted to inherit the limit. Linux resource limits are unchanged.
+
 ## Getting started
 
 ### Installing and usage
