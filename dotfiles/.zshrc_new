@@ -415,12 +415,22 @@ _check_mcp_sync() {
   local dotfiles_dir="${DOTFILES_DIR:-$HOME/workspace/dotfiles}"
   local template="${dotfiles_dir}/dotfiles/gemini/mcp_config.template.json"
   local target="${HOME}/.gemini/config/mcp_config.json"
+  local codex_target="${HOME}/.codex/config.toml"
+  local opencode_target="${HOME}/.config/opencode/opencode.json"
   local script="${dotfiles_dir}/bin/mcp-sync"
 
   [[ -f "${template}" && -x "${script}" ]] || return 0
 
-  if [[ ! -f "${target}" || ! -f "${HOME}/.codex/config.toml" || ! -f "${HOME}/.config/opencode/opencode.json" || "${template}" -nt "${target}" || "${script}" -nt "${target}" ]]; then
-    pgrep -f "bin/mcp-sync" >/dev/null 2>&1 || "${script}" >/dev/null 2>&1 &!
+  local t needs_sync=0
+  for t in "${target}" "${codex_target}" "${opencode_target}"; do
+    if [[ ! -f "${t}" || "${template}" -nt "${t}" || "${script}" -nt "${t}" ]]; then
+      needs_sync=1
+      break
+    fi
+  done
+
+  if (( needs_sync )); then
+    "${script}" --configs-only >/dev/null 2>&1 &!
   fi
 }
 _check_mcp_sync

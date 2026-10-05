@@ -13,6 +13,7 @@ OPENCODE_DIR="${HOME}/.config/opencode"
 CODEX_DIR="${HOME}/.codex"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
+LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
 
 # github-mcp-server ships as a Go binary, not on npm or PyPI, so it is fetched
 # from GitHub releases. Pinned for reproducibility; override to bump.
@@ -243,7 +244,6 @@ print(f'Generated Docker profiles (default: local, {len(docker_profiles[\"profil
 }
 
 sync_k3s_cluster() {
-  local kube_config="${KUBE_DIR}/config"
   echo "Checking remote K3s connectivity on master..."
   if ssh -o BatchMode=yes -o ConnectTimeout=3 master "true" 2>/dev/null; then
     python3 -c "
@@ -567,13 +567,45 @@ sync_memory_file() {
 }
 
 main() {
+  local configs_only=0
+  while (( $# )); do
+    case "$1" in
+      --configs-only|--mcp-only)
+        configs_only=1
+        shift
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  # Atomic lock directory to prevent concurrent executions
+  if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+    local lock_mtime
+    lock_mtime="$(stat -f %m "${LOCK_DIR}" 2>/dev/null || stat -c %Y "${LOCK_DIR}" 2>/dev/null || echo 0)"
+    local now
+    now="$(date +%s)"
+    if (( now - lock_mtime > 60 )); then
+      rm -rf "${LOCK_DIR}"
+      mkdir "${LOCK_DIR}" 2>/dev/null || exit 0
+    else
+      exit 0
+    fi
+  fi
+  trap 'rm -rf "${LOCK_DIR}"' EXIT INT TERM
+
   echo "==> Synchronizing AI agent MCP and skills environment..."
-  install_github_mcp_server
-  install_terraform_mcp_server
-  install_repomix
+  if (( ! configs_only )); then
+    install_github_mcp_server
+    install_terraform_mcp_server
+    install_repomix
+  fi
   sync_ssh_profiles
   sync_docker_profiles
-  sync_k3s_cluster
+  if (( ! configs_only )); then
+    sync_k3s_cluster
+  fi
   sync_memory_file
   sync_mcp_config
   sync_skills_and_instructions
