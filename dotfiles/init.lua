@@ -657,10 +657,19 @@ local plugin_specs = {
     cond = not vim.g.vscode,
     ft = "java",
     config = function()
-      local project_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
-      local workspace_dir = vim.fn.stdpath("data") .. "/site/java/workspace-root/" .. project_name
+      local root_dir = require('jdtls.setup').find_root({
+        '.git', 'mvnw', 'gradlew', 'pom.xml',
+        '.bemol', 'Config', 'packageInfo',
+      })
+      if not root_dir or root_dir == "" then return end
 
-      local config = {
+      -- Name the data directory after the project root, not the cwd. Opening
+      -- nvim above the package (a multi-package workspace root, say) gave
+      -- every package under it the same jdtls index.
+      local workspace_dir = vim.fn.stdpath("data")
+        .. "/site/java/workspace-root/" .. vim.fn.fnamemodify(root_dir, ":t")
+
+      require('jdtls').start_or_attach({
         cmd = {
           "jdtls",
           "-data", workspace_dir,
@@ -668,13 +677,9 @@ local plugin_specs = {
           "--jvm-arg=-Xmx6G",
           "--jvm-arg=-XX:+UseG1GC",
         },
-        root_dir = require('jdtls.setup').find_root({
-          '.git', 'mvnw', 'gradlew', 'pom.xml',
-          '.bemol', 'Config', 'packageInfo',
-        }),
+        root_dir = root_dir,
         capabilities = require('blink.cmp').get_lsp_capabilities(),
-      }
-      require('jdtls').start_or_attach(config)
+      })
     end
   },
 
