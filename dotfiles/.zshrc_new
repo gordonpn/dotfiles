@@ -531,7 +531,7 @@ add-zsh-hook chpwd _git_bg_fetch
 export PATH="/Users/gordonpn/.local/bin:$PATH"
 
 # carapace: multi-shell completion engine, fills in commands that ship no zsh
-# completion of their own (docker, kubectl, curl, tar, ...).
+# completion of their own (docker, curl, tar, ...).
 # CARAPACE_EXCLUDES keeps the completions that beat carapace's generic ones:
 # brew site-functions (bat eza fd gh rg zoxide), hand-written ~/.zfunc entries
 # (lazygit starship), `npm completion`, zsh's own _git and _ssh (understanding
@@ -541,7 +541,7 @@ export PATH="/Users/gordonpn/.local/bin:$PATH"
 # Must run after compinit, which the antidote bundle handles.
 if (( $+commands[carapace] )); then
   export CARAPACE_MATCH=1
-  export CARAPACE_EXCLUDES='bat,cat,cp,diff,eza,fd,gh,git,head,lazygit,less,ln,ls,mkdir,mv,npm,open,rg,rm,rmdir,ssh,starship,tail,touch,zoxide'
+  export CARAPACE_EXCLUDES='agy,aider,bat,cat,cp,diff,eza,fd,gh,git,golangci-lint,head,kubectl,lazygit,less,llm,ln,ls,mkdir,mv,ngrok,npm,ocr,open,pandoc,pnpm,rg,rm,rmdir,ssh,starship,tail,terraform,tofu,touch,zoxide'
   # -e declares the vars carapace bakes into its generated init, so editing the
   # exclude list above invalidates the cache. Without that the list changed on
   # 2026-10-02 and the cache kept serving the old completion set for two days.
