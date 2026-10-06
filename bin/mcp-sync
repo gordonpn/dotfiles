@@ -385,6 +385,8 @@ template_file = '${template_file}'
 target_file = '${target_file}'
 opencode_config = '${opencode_config}'
 codex_config = '${codex_config}'
+opencode_template = '${REPO_DIR}/dotfiles/opencode/opencode.template.json'
+codex_template = '${REPO_DIR}/dotfiles/codex/config.template.toml'
 
 with open(template_file, 'r') as f:
     content = f.read()
@@ -454,10 +456,20 @@ for name, s in data.get('mcpServers', {}).items():
     opencode_servers[name] = entry
 
 opencode_cfg = {'\$schema': 'https://opencode.ai/config.json', 'theme': 'flexoki'}
+if os.path.exists(opencode_template):
+    try:
+        with open(opencode_template, 'r') as f:
+            opencode_cfg = json.load(f)
+    except Exception:
+        pass
+
 if os.path.exists(opencode_config):
     try:
         with open(opencode_config, 'r') as f:
-            opencode_cfg = json.load(f)
+            existing_cfg = json.load(f)
+            for k, v in existing_cfg.items():
+                if k != 'mcp':
+                    opencode_cfg[k] = v
     except Exception as exc:
         raise SystemExit(f'Refusing to overwrite unparsable {opencode_config}: {exc}')
 
@@ -470,6 +482,9 @@ print(f'Synchronized {len(opencode_servers)} MCP servers to {opencode_config}')
 codex_content = ''
 if os.path.exists(codex_config):
     with open(codex_config, 'r') as f:
+        codex_content = f.read()
+elif os.path.exists(codex_template):
+    with open(codex_template, 'r') as f:
         codex_content = f.read()
 
 def toml_str(val):
@@ -534,6 +549,23 @@ sync_skills_and_instructions() {
     fi
     ln -sfn "${gemini_rules}" "${dest}"
   done
+
+  # Link OpenCode UI and CLI preferences
+  local opencode_ui_dir="${REPO_DIR}/dotfiles/opencode"
+  if [[ -d "${opencode_ui_dir}" ]]; then
+    local conf_name
+    for conf_name in tui.json cli.json; do
+      local conf_src="${opencode_ui_dir}/${conf_name}"
+      local conf_dest="${OPENCODE_DIR}/${conf_name}"
+      if [[ -f "${conf_src}" ]]; then
+        mkdir -p "${OPENCODE_DIR}"
+        if [[ -f "${conf_dest}" && ! -L "${conf_dest}" ]]; then
+          mv "${conf_dest}" "${conf_dest}.bak"
+        fi
+        ln -sfn "${conf_src}" "${conf_dest}"
+      fi
+    done
+  fi
 
   # Link skills
   local -a search_dirs=("${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
