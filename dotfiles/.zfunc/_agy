@@ -1,0 +1,104 @@
+#compdef agy
+
+_agy() {
+  local curcontext="$curcontext" state line
+  typeset -A opt_args
+
+  local -a global_opts=(
+    '--add-dir[Add directory to workspace]:DIR:_files -/'
+    '--agent[Agent for the current CLI session]:agent:'
+    '(-c --continue)'{-c,--continue}'[Continue the most recent conversation]'
+    '--conversation[Resume a previous conversation by ID]:conversation_id:'
+    '--dangerously-skip-permissions[Auto-approve all tool permission requests]'
+    '--disable-slash-commands[Disable slash command and skill expansion]'
+    '--effort[Reasoning effort for current session]:effort:(low medium high xhigh max)'
+    '(-i --prompt-interactive)'{-i,--prompt-interactive}'[Run initial prompt interactively]'
+    '--input-format[Input format for print mode]:format:(text stream-json)'
+    '--json-schema[JSON schema string or path]:schema:_files'
+    '--log-file[Override CLI log file path]:file:_files'
+    '--mode[Set agent execution mode]:mode:(accept-edits plan)'
+    '--model[Model for current CLI session]:model:'
+    '--new-project[Create a new project for session]'
+    '--output-format[Output format for print mode]:format:(text json stream-json)'
+    '(-p --print --prompt)'{-p,--print}'[Run prompt non-interactively and print response]'
+    '--prompt[Alias for --print]:prompt:'
+    '--print-timeout[Time limit for print mode]:duration:'
+    '--project[Project ID or name]:project:'
+    '--remote-control[Create remote connection on startup]'
+    '--sandbox[Run in sandbox with terminal restrictions]'
+  )
+
+  local -a subcommands=(
+    'agent:List available agents'
+    'agents:List available agents'
+    'changelog:Show changelog and release notes'
+    'help:Show help for subcommands'
+    'install:Configure environment paths and shell settings'
+    'mcp:Manage MCP servers'
+    'mic-serve:Serve microphone to a CLI on another host'
+    'models:List available models'
+    'plugin:Manage plugins'
+    'plugins:Manage plugins'
+    'remote-control:Manage remote-control background daemon'
+    'update:Update CLI'
+  )
+
+  _arguments -C \
+    $global_opts \
+    '1: :->command' \
+    '*:: :->args' && return 0
+
+  case "$state" in
+    command)
+      _describe -t commands 'agy subcommand' subcommands
+      ;;
+    args)
+      case "$words[1]" in
+        mcp)
+          local -a mcp_subcmds=(
+            'add:Add or update an MCP server configuration'
+            'remove:Remove an MCP server configuration'
+            'list:List all configured MCP servers'
+            'enable:Enable an MCP server'
+            'disable:Disable an MCP server'
+          )
+          _describe -t mcp_commands 'mcp subcommand' mcp_subcmds
+          ;;
+        plugin|plugins)
+          local -a plugin_subcmds=(
+            'list:List imported plugins'
+            'import:Import plugins from gemini or claude'
+            'install:Install a plugin'
+            'uninstall:Uninstall a plugin'
+            'enable:Enable a plugin'
+            'disable:Disable a plugin'
+            'validate:Validate a plugin'
+            'link:Generate link to a marketplace'
+            'help:Show help'
+          )
+          _describe -t plugin_commands 'plugin subcommand' plugin_subcmds
+          ;;
+        remote-control)
+          local -a rc_subcmds=(
+            'start:Register and start daemon'
+            'status:Show daemon status'
+            'stop:Stop daemon and unregister'
+          )
+          _describe -t rc_commands 'remote-control subcommand' rc_subcmds
+          ;;
+        install)
+          _arguments \
+            '--dir[Custom directory target to configure PATH for]:DIR:_files -/' \
+            '(-h --help)'{-h,--help}'[Show help]' \
+            '--skip-aliases[Bypass shell profile alias purging]' \
+            '--skip-path[Bypass shell profile PATH appending]'
+          ;;
+        *)
+          _files
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_agy "$@"

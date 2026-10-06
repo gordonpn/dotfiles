@@ -1,0 +1,14 @@
+#compdef tofu terraform
+
+_tofu() {
+  local -a completions
+  local -x COMP_LINE="$BUFFER"
+  local -x COMP_POINT="$CURSOR"
+
+  completions=("${(@f)$($words[1])}")
+  if (( ${#completions[@]} > 0 )); then
+    compadd -Q -a completions
+  fi
+}
+
+_tofu "$@"
