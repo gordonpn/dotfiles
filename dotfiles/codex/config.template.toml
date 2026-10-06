@@ -14,6 +14,10 @@ source = "/Users/gordonpn/.codex/.tmp/bundled-marketplaces/openai-bundled"
 source_type = "local"
 source = "/Users/gordonpn/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
+[marketplaces.ponytail]
+source_type = "git"
+source = "https://github.com/DietrichGebert/ponytail.git"
+
 [plugins."visualize@openai-bundled"]
 enabled = true
 
@@ -54,6 +58,9 @@ enabled = true
 enabled = true
 
 [plugins."chrome@openai-bundled"]
+enabled = true
+
+[plugins."ponytail@ponytail"]
 enabled = true
 
 [features]
