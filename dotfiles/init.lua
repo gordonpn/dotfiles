@@ -631,7 +631,16 @@ local plugin_specs = {
     event = "VeryLazy",
     dependencies = {
       "MunifTanjim/nui.nvim",
-      "rcarriga/nvim-notify",
+      {
+        -- notify blends its fade against whatever `background_colour` names,
+        -- defaulting to NotifyBackground, which links to Normal. The colorscheme
+        -- block above clears Normal's bg for terminal transparency, so notify
+        -- found no colour and warned about falling back to #000000 on every
+        -- start. Point it at NormalFloat, which keeps the theme's float
+        -- background and is what the other floating UI already uses.
+        "rcarriga/nvim-notify",
+        opts = { background_colour = "NormalFloat" },
+      },
     },
     opts = {
       lsp = {
