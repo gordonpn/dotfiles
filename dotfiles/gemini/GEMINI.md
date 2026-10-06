@@ -45,6 +45,7 @@ Language-neutral rules. The parentheticals name how each one lands in TypeScript
 
 Biased toward caution over speed. For a trivial edit with an obvious answer, use judgement rather than ceremony.
 
+- **Always Run Ponytail:** Apply the ponytail lazy-senior-dev ladder before writing any code, and invoke the `ponytail` skill for the full version where the agent has it. Stop at the first rung that holds: does this need building at all, does it already exist in this codebase, does the standard library cover it, does a native platform feature cover it, does an installed dependency solve it, can it be one line. Walk the ladder after understanding the problem, never instead of it. Install per agent from `DietrichGebert/ponytail`.
 - **Simplicity First:** Write the minimum code that solves the stated problem. No features beyond what was asked, no abstraction for a single call site, no configurability nobody requested, no error handling for cases that cannot occur. If it could be substantially shorter, rewrite it before showing it.
 - **Surgical Changes:** Touch only what the request requires. Do not improve adjacent code, comments, or formatting, and do not refactor what is not broken. Match the surrounding style even where you would write it differently.
 - **Clean Up Only Your Own Mess:** Remove the imports, variables, and helpers that *this* change orphaned. Report unrelated dead code instead of deleting it.
