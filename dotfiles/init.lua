@@ -554,7 +554,19 @@ local plugin_specs = {
     dependencies = { "nvim-tree/nvim-web-devicons" },
     event = "VeryLazy",
     config = function()
-      pcall(function() require("fzf-lua").setup({ "fzf-native" }) end)
+      -- Deep paths used to truncate into uselessness: the default 0.80-width
+      -- window gives the list ~40% of it (preview takes right:60%), so the
+      -- filename scrolled out of view and every row read the same. Put the
+      -- filename first with the parent dimmed after it, and leave the list more
+      -- room. Version 2 of the formatter also sets --ellipsis/--no-hscroll so
+      -- the part that gets cut is the parent, never the name.
+      pcall(function()
+        require("fzf-lua").setup({
+          "fzf-native",
+          files = { formatter = { "path.filename_first", 2 } },
+          winopts = { width = 0.92, preview = { horizontal = "right:45%" } },
+        })
+      end)
     end,
   },
 
