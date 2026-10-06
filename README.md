@@ -31,6 +31,10 @@ load skills and MCP servers without exhausting file descriptors. Open a new
 login shell and run `ulimit -Sn` to verify; existing background processes must be
 restarted to inherit the limit. Linux resource limits are unchanged.
 
+Antigravity CLI, OpenCode, and Codex share a local codebase knowledge graph MCP
+server. Run `just setup-codebase-memory` to install and configure it. See
+[MCP setup](docs/mcp-setup.md#codebase-memory-mcp) for usage and diagnostics.
+
 ## Getting started
 
 ### Installing and usage

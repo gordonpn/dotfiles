@@ -52,6 +52,9 @@ dotfiles/ (Public Repository)
 ~/.local/bin/ (Machine-Local Binaries, Not Committed)
 └── github-mcp-server                # Pinned release binary, installed by mcp-sync
 
+~/.local/share/codebase-memory-mcp/   # Pinned native runtime
+~/.cache/codebase-memory-mcp/         # Local indexes and coordination logs
+
 OS Keychain / Secret Storage
 ├── macOS Keychain: security find-generic-password -a "$USER" -s <service>
 └── Linux Libsecret: secret-tool lookup service <service>
@@ -72,16 +75,19 @@ mcp-sync
 
 # Lightweight configs-only mode (used by shell startup hooks):
 mcp-sync --configs-only
+
+# Install only codebase-memory-mcp, then synchronize all three client configs:
+just setup-codebase-memory
 ```
 
 ### What It Does
-1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin`, ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`), and links or installs `repomix` (skipped with `--configs-only`).
+1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin` and pinned `codebase-memory-mcp` into its dedicated runtime directory, ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`), and links or installs `repomix` (skipped with `--configs-only`).
 2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `exa_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `tfe_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`, `TFE_ADDRESS`).
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json`, `~/.config/opencode/opencode.json`, and `~/.codex/config.toml` (32 total servers).
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json`, `~/.config/opencode/opencode.json`, and `~/.codex/config.toml` (33 total servers).
 8. **Synchronizes Skills & Instructions:** Symlinks `GEMINI.md` to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`, and symlinks custom skills from `~/.gemini` into `~/.codex/skills/` and `~/.config/opencode/skills/`.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 
@@ -98,6 +104,7 @@ mcp-sync --configs-only
 | **`chrome-devtools`** | stdio | `npx -y chrome-devtools-mcp@latest` | Performance traces, network inspection, and console access |
 | **`puppeteer`** | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
 | **`memory`** | stdio | `npx -y @modelcontextprotocol/server-memory` | Persistent knowledge graph in `~/.gemini/memory.json` |
+| **`codebase-memory-mcp`** | stdio | Pinned native binary | Local code indexing, structural search, call graphs, and architecture queries |
 | **`sequentialthinking`** | stdio | `npx -y @modelcontextprotocol/server-sequential-thinking` | Structured multi-step reasoning scratchpad |
 | **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
@@ -123,6 +130,46 @@ mcp-sync --configs-only
 | **`vault`** | stdio | `uv run --with "mcp<2" --with "httpx"` | HashiCorp Vault KV v2 secret reads/writes and TOTP management |
 | **`slack`** | stdio | `@modelcontextprotocol/server-slack` | Slack workspace channels, threads, and bot communication |
 | **`discord`** | stdio | `@pasympa/discord-mcp` | Discord guild channels, messages, and role queries |
+
+### codebase-memory-mcp
+
+Run `just setup-codebase-memory` from this checkout. It invokes
+`mcp-sync --codebase-memory-only`, installs v0.11.0 into
+`~/.local/share/codebase-memory-mcp/`, and synchronizes the shared stdio entry
+to Antigravity CLI (`agy`), OpenCode, and Codex. No API key, Docker, or language
+runtime is required for the server. Setup requires Bash and curl; verification
+uses the installed Python MCP SDK through `uv`.
+
+`mcp-sync` selects the macOS/Linux architecture, verifies the release checksum,
+and signs the macOS binary. Linux uses the static portable release. The upstream
+installer is deliberately not run: even `--skip-config` edits shell startup
+files. Our templates and shared instruction symlinks remain authoritative;
+upstream hooks, plugins, skills, and subagents are not installed. To upgrade,
+close all clients using the server, change `CODEBASE_MEMORY_MCP_VERSION` in
+`bin/mcp-sync`, and rerun the setup recipe. All running CBM processes must use
+the same binary build. Avoid the upstream installer/updater, which bypasses
+the pin and modifies settings outside this repository's managed setup.
+
+Restart existing `agy` and Codex sessions after setup. OpenCode is reloaded by
+`mcp-sync`; check `opencode mcp list` and `codex mcp get codebase-memory-mcp`.
+In a fresh session, ask the agent to index the specific repository you want to
+query. Automatic indexing is not enabled by setup. Graph data stays under
+`~/.cache/codebase-memory-mcp/`; if indexing exports a `.codebase-memory/`
+artifact into a repository, keep it untracked unless deliberately sharing it.
+
+Diagnostics:
+
+```bash
+~/.local/share/codebase-memory-mcp/codebase-memory-mcp --version
+~/.local/share/codebase-memory-mcp/codebase-memory-mcp daemon status
+just verify-codebase-memory
+just test
+just lint
+```
+
+Daemon startup and indexing errors are recorded in
+`~/.cache/codebase-memory-mcp/logs/cbm-daemon.log`. All clients must use the same
+runtime build and cache root to share the coordination daemon.
 
 ### Deprecated Upstream, Retained Here
 

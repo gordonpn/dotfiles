@@ -19,6 +19,7 @@ LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
 # github-mcp-server ships as a Go binary, not on npm or PyPI, so it is fetched
 # from GitHub releases. Pinned for reproducibility; override to bump.
 GITHUB_MCP_SERVER_VERSION="${GITHUB_MCP_SERVER_VERSION:-1.12.1}"
+CODEBASE_MEMORY_MCP_VERSION="0.11.0"
 
 mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${OPENCODE_DIR}" "${CODEX_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
 
@@ -103,6 +104,57 @@ install_github_mcp_server() {
   echo "${want}" >"${stamp_file}"
   echo "Installed github-mcp-server ${want} to ${bin_path}"
 }
+
+install_codebase_memory_mcp() (
+  local install_dir="${HOME}/.local/share/codebase-memory-mcp"
+  local bin_path="${install_dir}/codebase-memory-mcp"
+  local stamp_file="${install_dir}/.version"
+  local want="${CODEBASE_MEMORY_MCP_VERSION}"
+
+  if [[ -x "${bin_path}" && -f "${stamp_file}" ]] && [[ "$(cat "${stamp_file}")" == "${want}" ]]; then
+    echo "codebase-memory-mcp ${want} already present at ${bin_path}"
+    return 0
+  fi
+
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "$tmp_dir"' EXIT
+
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os=darwin ;;
+    Linux) os=linux ;;
+    *) echo "Unsupported OS for codebase-memory-mcp" >&2; return 1 ;;
+  esac
+  case "$(uname -m)" in
+    arm64|aarch64) arch=arm64 ;;
+    x86_64|amd64) arch=amd64 ;;
+    *) echo "Unsupported architecture for codebase-memory-mcp" >&2; return 1 ;;
+  esac
+  local asset="codebase-memory-mcp-${os}-${arch}"
+  [[ "${os}" != linux ]] || asset+="-portable"
+  asset+=".tar.gz"
+  local base="https://github.com/DeusData/codebase-memory-mcp/releases/download/v${want}"
+
+  # The upstream installer also edits shell startup files, even with --skip-config.
+  curl -fsSL --proto '=https' -o "${tmp_dir}/${asset}" "${base}/${asset}" || return
+  curl -fsSL --proto '=https' -o "${tmp_dir}/checksums.txt" "${base}/checksums.txt" || return
+  local expected actual
+  expected="$(awk -v a="${asset}" '$2 == a {print $1}' "${tmp_dir}/checksums.txt")"
+  actual="$(sha256_of "${tmp_dir}/${asset}")"
+  if [[ -z "${expected}" || "${expected}" != "${actual}" ]]; then
+    echo "Checksum mismatch for ${asset}; leaving codebase-memory-mcp unchanged" >&2
+    return 1
+  fi
+  tar -xzf "${tmp_dir}/${asset}" -C "${tmp_dir}" codebase-memory-mcp || return
+  if [[ "${os}" == darwin ]]; then
+    codesign --force --sign - "${tmp_dir}/codebase-memory-mcp" || return
+  fi
+  mkdir -p "${install_dir}"
+  install -m 755 "${tmp_dir}/codebase-memory-mcp" "${bin_path}" || return
+  "${bin_path}" --version || return
+  echo "${want}" >"${stamp_file}"
+)
 
 install_terraform_mcp_server() {
   local bin_path="${LOCAL_BIN_DIR}/terraform-mcp-server"
@@ -618,10 +670,16 @@ sync_memory_file() {
 
 main() {
   local configs_only=0
+  local codebase_memory_only=0
   while (( $# )); do
     case "$1" in
       --configs-only|--mcp-only)
         configs_only=1
+        shift
+        ;;
+      --codebase-memory-only)
+        configs_only=1
+        codebase_memory_only=1
         shift
         ;;
       *)
@@ -681,6 +739,9 @@ main() {
   trap cleanup_lock EXIT INT TERM
 
   echo "==> Synchronizing AI agent MCP and skills environment..."
+  if (( ! configs_only || codebase_memory_only )); then
+    install_codebase_memory_mcp
+  fi
   if (( ! configs_only )); then
     install_github_mcp_server
     install_terraform_mcp_server
@@ -700,4 +761,6 @@ main() {
   echo "==> Done. MCP configuration and agent parity ready."
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

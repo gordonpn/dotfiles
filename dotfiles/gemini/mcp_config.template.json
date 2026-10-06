@@ -34,6 +34,10 @@
         "MEMORY_FILE_PATH": "${HOME}/.gemini/memory.json"
       }
     },
+    "codebase-memory-mcp": {
+      "command": "${HOME}/.local/share/codebase-memory-mcp/codebase-memory-mcp",
+      "args": []
+    },
     "sequentialthinking": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
