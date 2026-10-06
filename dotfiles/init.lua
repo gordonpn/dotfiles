@@ -460,6 +460,26 @@ local plugin_specs = {
     cmd = "Mason",
     cond = not vim.g.vscode,
     opts = { ensure_installed = { "shfmt" } },
+    config = function(_, opts)
+      -- mason.nvim v2 dropped `ensure_installed`, so the list above is inert
+      -- unless something installs it. Silent failure: conform keeps listing a
+      -- formatter that is not on disk and quietly falls back to LSP formatting,
+      -- which is a different formatter. Install the declared list explicitly.
+      local tools = opts.ensure_installed or {}
+      opts.ensure_installed = nil
+      require("mason").setup(opts)
+
+      local ok, registry = pcall(require, "mason-registry")
+      if not ok then return end
+      registry.refresh(function()
+        for _, name in ipairs(tools) do
+          local found, pkg = pcall(registry.get_package, name)
+          if found and not pkg:is_installed() then
+            pkg:install()
+          end
+        end
+      end)
+    end,
   },
 
   -- MASON LSPCONFIG: Bridges the gap between mason and nvim-lspconfig
