@@ -68,6 +68,11 @@ Services: brave_api_key, exa_api_key, tailscale_api_key, uptime_kuma_jwt, health
 
 `bin/mcp-sync` is located in the dotfiles `bin/` directory (already exposed on `PATH` via `.zprofile`).
 
+The Codex base template enables `tui.copy_on_select = "always"` for transcript
+selections, including in Ghostty. Existing Codex configs retain their non-MCP
+settings during sync; set this value under `[tui]` in `~/.codex/config.toml` and
+restart the CLI when applying it to an existing installation.
+
 ### Execution
 ```bash
 # Full hydration: binary installs, SSH/Docker/K3s checks, MCP configs, and skills

@@ -37,6 +37,9 @@ server. Run `just setup-codebase-memory` to install and configure it. See
 
 ## Getting started
 
+Codex CLI copies transcript selections on mouse release with
+`tui.copy_on_select = "always"`. Restart the CLI after changing this setting.
+
 ### Installing and usage
 
 - Clone the repository
