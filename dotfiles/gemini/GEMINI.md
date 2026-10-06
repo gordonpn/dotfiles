@@ -71,6 +71,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 
 ## Self-Learning Loop & Maintenance
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
+- **Cross-Session Project Memory:** Record durable project-wide decisions, constraints, and non-obvious context needed by other agents or future sessions in the project's `AGENTS.md`. Keep entries actionable and concise; link to `/docs/` for detailed rationale. Do not record temporary progress or duplicate existing guidance.
 - **Promotion Bar:** Only promote rules that generalize, change future behavior, and are not already covered by existing instructions.
 - **Rule Precedence:** A project's own `AGENTS.md` overrides this global file on conflict. Record project-specific rules there and keep only what generalizes here.
 - **Concise Correction Format:** When recording user corrections, write them in the action-oriented form: "When X, do Y".
