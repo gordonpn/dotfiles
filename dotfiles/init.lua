@@ -808,6 +808,22 @@ local opt = vim.opt
 
 -- Basic Behavior
 opt.clipboard = "unnamedplus"
+
+-- Over SSH there is no pbcopy/xclip/wl-copy, so unnamedplus had no provider and
+-- every yank went nowhere. Route it through OSC 52, which writes to the local
+-- terminal's clipboard. Paste reads the last yank rather than querying the
+-- terminal, since clipboard *reads* are usually denied and the query hangs.
+if vim.env.SSH_TTY then
+  local osc52 = require("vim.ui.clipboard.osc52")
+  local function paste()
+    return vim.split(vim.fn.getreg('"'), "\n")
+  end
+  vim.g.clipboard = {
+    name = "OSC 52",
+    copy = { ["+"] = osc52.copy("+"), ["*"] = osc52.copy("*") },
+    paste = { ["+"] = paste, ["*"] = paste },
+  }
+end
 opt.ignorecase = true
 opt.smartcase = true
 opt.incsearch = true
