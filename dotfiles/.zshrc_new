@@ -330,6 +330,7 @@ fi
 alias vi='nvim'
 alias vim='nvim'
 alias v='nvim'
+alias n='nvim'
 alias vr='nvim -R'
 alias repomix='pnpx repomix@latest'
 alias qdrant="docker run --restart always -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant"
