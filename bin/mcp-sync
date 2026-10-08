@@ -20,6 +20,7 @@ LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
 # from GitHub releases. Pinned for reproducibility; override to bump.
 GITHUB_MCP_SERVER_VERSION="${GITHUB_MCP_SERVER_VERSION:-1.12.1}"
 CODEBASE_MEMORY_MCP_VERSION="0.11.0"
+SONARQUBE_MCP_SERVER_VERSION="1.28.0.4397"
 
 mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${OPENCODE_DIR}" "${CODEX_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
 
@@ -206,6 +207,46 @@ install_repomix() {
   fi
 
   echo "Notice: repomix not found and npm is unavailable to install it." >&2
+}
+
+install_semgrep() {
+  local bin_path="${LOCAL_BIN_DIR}/semgrep"
+
+  if [[ -x "${bin_path}" ]]; then
+    return 0
+  fi
+
+  if command -v uv >/dev/null 2>&1; then
+    echo "Installing semgrep via uv tool..."
+    uv tool install semgrep
+    return 0
+  fi
+
+  echo "Notice: semgrep not found and uv is unavailable to install it." >&2
+}
+
+install_sonarqube_mcp_server() {
+  local install_dir="${HOME}/.local/share/sonarqube-mcp-server"
+  local jar_path="${install_dir}/sonarqube-mcp-server.jar"
+  local stamp_file="${install_dir}/.version"
+  local want="${SONARQUBE_MCP_SERVER_VERSION}"
+
+  if [[ -f "${jar_path}" && -f "${stamp_file}" ]] && [[ "$(<"${stamp_file}")" == "${want}" ]]; then
+    return 0
+  fi
+
+  local versioned_jar="${install_dir}/sonarqube-mcp-server-${want}.jar"
+  local url="https://binaries.sonarsource.com/Distribution/sonarqube-mcp-server/sonarqube-mcp-server-${want}.jar"
+  mkdir -p "${install_dir}"
+
+  echo "Downloading sonarqube-mcp-server ${want}..."
+  if curl -fsSL -o "${versioned_jar}" "${url}"; then
+    ln -sfn "${versioned_jar}" "${jar_path}"
+    echo "${want}" > "${stamp_file}"
+    echo "Installed sonarqube-mcp-server ${want} to ${jar_path}"
+  else
+    echo "Notice: download of sonarqube-mcp-server ${want} failed." >&2
+  fi
 }
 
 sync_ssh_profiles() {
@@ -408,6 +449,18 @@ sync_mcp_config() {
   local tfe_address
   tfe_address="${TFE_ADDRESS:-https://app.terraform.io}"
 
+  local postman_key
+  postman_key="$(get_secret "postman_api_key" "POSTMAN_API_KEY")"
+
+  local sonar_token
+  sonar_token="$(get_secret "sonarqube_token" "SONARQUBE_TOKEN")"
+
+  local sonar_url
+  sonar_url="${SONARQUBE_URL:-https://sonarcloud.io}"
+
+  local sonar_org
+  sonar_org="$(get_secret "sonarqube_org" "SONARQUBE_ORG")"
+
   export GITHUB_PERSONAL_ACCESS_TOKEN="${gh_token}"
   export BRAVE_API_KEY="${brave_key}"
   export EXA_API_KEY="${exa_key}"
@@ -429,6 +482,10 @@ sync_mcp_config() {
   export DISCORD_TOKEN="${discord_token}"
   export TFE_TOKEN="${tfe_token}"
   export TFE_ADDRESS="${tfe_address}"
+  export POSTMAN_API_KEY="${postman_key}"
+  export SONARQUBE_TOKEN="${sonar_token}"
+  export SONARQUBE_URL="${sonar_url}"
+  export SONARQUBE_ORG="${sonar_org}"
 
   python3 -c "
 import json, os, re
@@ -465,7 +522,11 @@ replacements = {
     '\${SLACK_TEAM_ID}': os.environ.get('SLACK_TEAM_ID', ''),
     '\${DISCORD_TOKEN}': os.environ.get('DISCORD_TOKEN', ''),
     '\${TFE_TOKEN}': os.environ.get('TFE_TOKEN', ''),
-    '\${TFE_ADDRESS}': os.environ.get('TFE_ADDRESS', '')
+    '\${TFE_ADDRESS}': os.environ.get('TFE_ADDRESS', ''),
+    '\${POSTMAN_API_KEY}': os.environ.get('POSTMAN_API_KEY', ''),
+    '\${SONARQUBE_TOKEN}': os.environ.get('SONARQUBE_TOKEN', ''),
+    '\${SONARQUBE_URL}': os.environ.get('SONARQUBE_URL', ''),
+    '\${SONARQUBE_ORG}': os.environ.get('SONARQUBE_ORG', '')
 }
 
 for k, v in replacements.items():
@@ -746,6 +807,8 @@ main() {
     install_github_mcp_server
     install_terraform_mcp_server
     install_repomix
+    install_semgrep
+    install_sonarqube_mcp_server
   fi
   sync_ssh_profiles
   sync_docker_profiles

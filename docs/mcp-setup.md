@@ -135,6 +135,9 @@ just setup-codebase-memory
 | **`vault`** | stdio | `uv run --with "mcp<2" --with "httpx"` | HashiCorp Vault KV v2 secret reads/writes and TOTP management |
 | **`slack`** | stdio | `@modelcontextprotocol/server-slack` | Slack workspace channels, threads, and bot communication |
 | **`discord`** | stdio | `@pasympa/discord-mcp` | Discord guild channels, messages, and role queries |
+| **`semgrep`** | stdio | `semgrep mcp` | Local AST static analysis, SAST security scans, and custom rule matching |
+| **`postman`** | stdio | `@postman/postman-mcp-server` | Postman workspaces, collections, environments, and mock server management |
+| **`sonarqube`** | stdio | Standalone JAR (`java -jar`) | SonarQube Cloud and Server code quality metrics, quality gates, and hotspots |
 
 ### codebase-memory-mcp
 

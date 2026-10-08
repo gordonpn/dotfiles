@@ -223,6 +223,30 @@
       "env": {
         "DISCORD_TOKEN": "${DISCORD_TOKEN}"
       }
+    },
+    "semgrep": {
+      "command": "${HOME}/.local/bin/semgrep",
+      "args": ["mcp"]
+    },
+    "postman": {
+      "command": "npx",
+      "args": ["-y", "@postman/postman-mcp-server@latest"],
+      "env": {
+        "POSTMAN_API_KEY": "${POSTMAN_API_KEY}"
+      }
+    },
+    "sonarqube": {
+      "command": "java",
+      "args": [
+        "-jar",
+        "${HOME}/.local/share/sonarqube-mcp-server/sonarqube-mcp-server.jar"
+      ],
+      "env": {
+        "STORAGE_PATH": "${HOME}/.local/share/sonarqube-mcp-server/storage",
+        "SONARQUBE_URL": "${SONARQUBE_URL}",
+        "SONARQUBE_TOKEN": "${SONARQUBE_TOKEN}",
+        "SONARQUBE_ORG": "${SONARQUBE_ORG}"
+      }
     }
   }
 }
