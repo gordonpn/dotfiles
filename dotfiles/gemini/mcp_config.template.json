@@ -218,6 +218,7 @@
     "discord": {
       "command": "npx",
       "args": ["-y", "@pasympa/discord-mcp"],
+      "disabled": true,
       "env": {
         "DISCORD_TOKEN": "${DISCORD_TOKEN}"
       }
