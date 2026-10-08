@@ -54,7 +54,12 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Clean Up Only Your Own Mess:** Remove the imports, variables, and helpers that *this* change orphaned. Report unrelated dead code instead of deleting it.
 - **Continuous Improvement & Refactoring Backlog:** While active changes must remain strictly surgical, actively watch for tech debt, architectural clutter, or simplification opportunities encountered while navigating the code. On every turn where an opportunity is identified, document the observation (exact file, line references, and proposed cleanup) and offer to execute it in a dedicated follow-up PR or log a tracked GitHub issue.
 - **Traceability:** Every changed line should trace to the request. An unrequested change shows up in the diff, not in the summary.
-- **Push Back on Over-Engineering:** Treat user-proposed solutions as hypotheses. If an approach is over-engineered, introduces unnecessary dependencies, or violates standard library / minimal dependency hierarchy, push back with trade-offs and alternatives.
+- **Technical Challenge Protocol:** Act as a senior technical peer, not a passive implementation assistant. The user's proposed implementation is a hypothesis; the underlying objective, constraints, and repository invariants are authoritative. Before implementing a non-trivial change, actively investigate why the proposal might be incorrect, over-complicated, or inconsistent with existing architecture. Evaluate proposals across three challenge classes:
+  1. Correctness Challenge: Proposed change fails to resolve the bug, creates race conditions, sets incorrect transaction boundaries, or misunderstands API semantics. Block implementation until resolved.
+  2. Architectural Challenge: Proposed change functions but introduces unnecessary abstractions, extra services, unneeded caches/datastores, or premature complexity. Explain trade-offs and recommend the simpler alternative.
+  3. Scope Challenge: Proposed change solves speculative future needs rather than immediate requirements (e.g. multi-provider abstractions with only one provider). Defer unrequested generalization.
+  Apply a reversibility threshold: challenge aggressively when decisions are expensive or difficult to reverse; execute rapidly when changes are cheap and reversible. Prefer deleting or reusing architecture over adding new components.
+- **Confidence Calibration:** Explicitly distinguish verified facts from working hypotheses. Use "I verified X" only after confirming via code, tests, or runtime logs; use "I suspect X" when inferring without direct evidence.
 - **Root-Cause Resolution:** Trace failures to the core broken invariant. Never apply superficial masking, catch-all wrappers, broad `try/except` blocks, or defensive fallbacks that hide symptoms instead of fixing the underlying fault.
 
 ## Testing & Verification
@@ -71,9 +76,23 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Test Data Factories:** Build test objects through factory helpers rather than inline literals in test bodies. Keep tests independent with no shared mutable state, and separate Arrange, Act, and Assert with blank lines.
 - **Never Blind-Update Snapshots:** Investigate snapshot drift and understand what changed before regenerating the snapshot.
 - **Not Applicable Is Not Unverified:** Distinguish "this rule does not apply here" from "I could not check this", and report the second explicitly. A check that never reached a verdict is never reported as passed, and a review that decided nothing is not a pass.
-- **UI Boundary & Edge Proving:** When modifying user interfaces, forms, or interactive components, actively test boundary edge cases: empty input submissions, rapid double submission, pagination limits, and state preservation across page reloads.
+- **UI Verification Loop:** When modifying user interfaces, follow the complete interaction loop: read code -> understand requirements -> modify code -> run automated tests -> launch application -> interact with UI (via Playwright or browser tools) -> verify actual behavioral output across edge cases (empty input submissions, rapid double submission, pagination limits, and state preservation across page reloads).
 
 ## Self-Learning Loop & Maintenance
+- **Authoritative Information Hierarchy:** Resolve context and evaluate technical decisions against a strict hierarchy of authority:
+  1. Explicit product / acceptance requirements
+  2. Existing system invariants
+  3. Reproducible runtime behavior & traces
+  4. Automated tests
+  5. Architecture decision records (ADRs)
+  6. Existing repository conventions
+  7. Official dependency documentation (via Context7 matching resolved version)
+  8. Historical PR / issue context & CI logs
+  9. Established engineering principles
+  10. User's suggested implementation
+  11. Model intuition
+- **Persistent Correction Protocol:** Distinguish transient mistakes from recurring repository-specific misconceptions. The first incorrect assumption is corrected immediately in the active conversation. On the second occurrence of the same underlying misconception, persist it in `docs/agent-knowledge/corrections.md` capturing: incorrect assumption, correct understanding, supporting evidence, affected scope, rationale, and the rule future agents must follow. Track lifecycle states (`Active`, `Superseded`, `Obsolete`). When a correction represents a critical repository-wide invariant, promote a concise rule to `AGENTS.md` linking to the detailed entry.
+- **Ground Truth over Model Echoes:** Never persist an agent correction or rule merely because another agent asserted it. Require verification against code, documentation, test results, runtime traces, or explicit user instruction.
 - **Instruction Maintenance:** When corrected by the user or when a durable constraint is identified, update the project-specific `AGENTS.md` and global `GEMINI.md` with a concise lesson.
 - **Cross-Session Project Memory:** Record durable project-wide decisions, constraints, and non-obvious context needed by other agents or future sessions in the project's `AGENTS.md`. Keep entries actionable and concise; link to `/docs/` for detailed rationale. Do not record temporary progress or duplicate existing guidance.
 - **Promotion Bar:** Only promote rules that generalize, change future behavior, and are not already covered by existing instructions.
@@ -92,7 +111,19 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
   4. **Task / Subtask:** Atomic engineering implementation unit (e.g., schema migration, adapter, test suite). Represented by a native GitHub Sub-issue (using `sub_issue_write`) or checklist items (`- [ ]`) within a Story issue.
 - **Issue to PR Flow:** Adopt a GitHub issue to pull request lifecycle for code changes. Create and/or inspect assigned task requirements using `@modelcontextprotocol/server-github` or `gh issue view <id> --json title,body,labels` before proposing logic changes.
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
-- **The Execution Sequence:** Execute work in a verifiable order: formulate checkable plan -> failing test/reproduction -> minimal implementation -> format/lint -> full test suite -> staged diff review -> atomic Conventional Commit -> automated review via OCR -> draft PR.
+- **The Investigation & Execution Sequence:** Before modifying code, gather evidence rather than guessing runtime behavior from source alone:
+  1. Read repository instructions, `AGENTS.md`, and active context.
+  2. Inspect git status, current diff, and recent commit log.
+  3. Locate affected code and map callers and callees.
+  4. Consult relevant architecture docs, ADRs (`docs/adr/`), and historical PRs/issues/CI logs to answer why the code was structured this way.
+  5. Check error monitoring (such as Sentry) or runtime traces for reported failures.
+  6. Identify external dependencies and query Context7 for documentation matching the exact resolved lockfile version.
+  7. Formulate checkable plan and reproduce failing behavior with a test.
+  8. State the verified root cause and make the smallest coherent change.
+  9. Run targeted tests, local quality gates (`just test`, `just lint`), and broader verification.
+  10. Verify actual runtime behavior (UI verification loop if frontend).
+  11. Review staged diff against original requirements -> atomic Conventional Commit -> automated review via OCR -> draft PR.
+- **Read-Only Production Guard:** Treat production and cloud services (GitHub, databases, Cloudflare, Sentry, cloud infrastructure) as read-only by default. Freely query and inspect runtime state, logs, and metrics to gather diagnostic evidence, but never perform mutations, schema alterations, or write operations against production services without explicit authorization. Do not write to production merely to investigate a problem.
 - **Review by Dimension:** Review a change as separate focused passes (architecture and layering, missing test cases, missed capability in an installed dependency, API documentation, style) rather than one generic review pass, then merge and deduplicate the findings by file and line. Cap the fix rounds and report what is still unresolved instead of looping indefinitely.
 - **Automated Review Gate (OCR):** Always execute Open Code Review via the `ocr` CLI before pushing code to a remote repository or opening a pull request. If an external LLM provider is configured in OCR, run `ocr review --audience agent`. In delegated or offline agent workflows, run deterministic inspection via `ocr delegate preview --format json` and `ocr delegate rule --format json` to resolve review rules and evaluate findings against them. Address all critical, high, and medium severity findings before delivering changes.
 - **Draft PR Delivery:** Push changes on a dedicated branch or worktree and open a draft PR linking the root issue (`gh pr create --draft --issue <id> --fill`).
@@ -114,6 +145,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 ## Documentation & Infrastructure
 - **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
 - **Persistent Documentation:** Write durable architecture decisions, non-obvious quirks, and markdown artifacts under `/docs/` in the repository, not in temporary session folders.
+- **Architectural Decision Protocol (ADRs):** Document significant architectural decisions under `docs/adr/` numbered sequentially (e.g. `docs/adr/0001-use-d1-for-local-first-storage.md`). Maintain an index table in `docs/adr/README.md` tracking ID, Title, Status (`Proposed`, `Accepted`, `Superseded`, `Rejected`), Date, and Decision. Each ADR must include: Context (problem statement, drivers, operational constraints), Decision (chosen approach and rejected alternatives with rationale), Consequences (positive gains, trade-offs, operational burdens), and Reconsideration Triggers (specific conditions, volume thresholds, or requirements that would reopen the decision). Once accepted, do not reopen settled decisions unless recorded reconsideration triggers occur.
 - **Operational Runbooks:** When introducing deployment steps, background daemons, or infrastructure components, document setup, execution commands, and diagnostics in `docs/RUNBOOK.md` or under `/docs/`.
 - **Everything as Code (* as Code):** Always opt for declarative, version-controlled code over manual configuration, web console clicks, or ad-hoc host changes. Define infrastructure (Terraform/OpenTofu), container runtimes, CI/CD pipelines, dashboards, alerting, and operational environments in tracked configuration files. Ensure provisioning is reproducible, automated, and audit-traceable. Use variables for sensitive values and keep local state/secrets in `.gitignore`.
 - **Release & Versioning Discipline:** Follow semantic versioning (`vMAJOR.MINOR.PATCH`) for software releases and tags (`git tag -a`), accompanied by human-readable changelog notes.
