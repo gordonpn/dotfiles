@@ -154,4 +154,3 @@ virtualenv/
 
 # AI Agent Workspaces & Session Caches
 .codex/
-.opencode/

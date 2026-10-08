@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mcp-sync: Synchronize, hydrate, and maintain agent parity across Antigravity, OpenCode, and Codex
+# mcp-sync: Synchronize, hydrate, and maintain agent parity across Antigravity and Codex
 # Pulls sensitive tokens from OS Keychain / secret store or environment variables.
 # Synchronizes MCP server configurations, shared skills, and AGENTS.md instructions.
 
@@ -10,7 +10,6 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TEMPLATE_DIR="${REPO_DIR}/dotfiles/gemini"
 GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
-OPENCODE_DIR="${HOME}/.config/opencode"
 CODEX_DIR="${HOME}/.codex"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
@@ -22,7 +21,7 @@ GITHUB_MCP_SERVER_VERSION="${GITHUB_MCP_SERVER_VERSION:-1.12.1}"
 CODEBASE_MEMORY_MCP_VERSION="0.11.0"
 SONARQUBE_MCP_SERVER_VERSION="1.28.0.4397"
 
-mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${OPENCODE_DIR}" "${CODEX_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
+mkdir -p "${GEMINI_DIR}" "${GEMINI_CONFIG_DIR}" "${CODEX_DIR}" "${KUBE_DIR}" "${LOCAL_BIN_DIR}"
 
 get_secret() {
   local service_name="$1"
@@ -371,7 +370,6 @@ except Exception as e:
 sync_mcp_config() {
   local template_file="${TEMPLATE_DIR}/mcp_config.template.json"
   local target_file="${GEMINI_CONFIG_DIR}/mcp_config.json"
-  local opencode_config="${OPENCODE_DIR}/opencode.json"
   local codex_config="${CODEX_DIR}/config.toml"
 
   if [[ ! -f "${template_file}" ]]; then
@@ -492,9 +490,7 @@ import json, os, re
 
 template_file = '${template_file}'
 target_file = '${target_file}'
-opencode_config = '${opencode_config}'
 codex_config = '${codex_config}'
-opencode_template = '${REPO_DIR}/dotfiles/opencode/opencode.template.json'
 codex_template = '${REPO_DIR}/dotfiles/codex/config.template.toml'
 
 with open(template_file, 'r') as f:
@@ -553,45 +549,7 @@ def safe_write_config(path, text):
 safe_write_config(target_file, json.dumps(data, indent=2))
 print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_file}')
 
-# 2. OpenCode MCP config (~/.config/opencode/opencode.json)
-opencode_servers = {}
-for name, s in data.get('mcpServers', {}).items():
-    cmd = s.get('command', '')
-    args = s.get('args', [])
-    command_list = [cmd] + args if isinstance(args, list) else [cmd]
-    entry = {
-        'type': 'local',
-        'command': command_list,
-        'enabled': not s.get('disabled', False)
-    }
-    if s.get('env'):
-        entry['environment'] = s['env']
-    opencode_servers[name] = entry
-
-opencode_cfg = {'\$schema': 'https://opencode.ai/config.json', 'theme': 'flexoki'}
-if os.path.exists(opencode_template):
-    try:
-        with open(opencode_template, 'r') as f:
-            opencode_cfg = json.load(f)
-    except Exception:
-        pass
-
-if os.path.exists(opencode_config):
-    try:
-        with open(opencode_config, 'r') as f:
-            existing_cfg = json.load(f)
-            for k, v in existing_cfg.items():
-                if k != 'mcp':
-                    opencode_cfg[k] = v
-    except Exception as exc:
-        raise SystemExit(f'Refusing to overwrite unparsable {opencode_config}: {exc}')
-
-opencode_cfg['mcp'] = opencode_servers
-
-safe_write_config(opencode_config, json.dumps(opencode_cfg, indent=2))
-print(f'Synchronized {len(opencode_servers)} MCP servers to {opencode_config}')
-
-# 3. Codex MCP config (~/.codex/config.toml)
+# 2. Codex MCP config (~/.codex/config.toml)
 codex_content = ''
 if os.path.exists(codex_config):
     with open(codex_config, 'r') as f:
@@ -651,74 +609,53 @@ sync_skills_and_instructions() {
   local gemini_rules="${REPO_DIR}/dotfiles/gemini/GEMINI.md"
 
   # Link global AGENTS.md instructions
-  local dest
-  for dest in "${CODEX_DIR}/AGENTS.md" "${OPENCODE_DIR}/AGENTS.md"; do
-    mkdir -p "$(dirname "${dest}")"
-    if [[ -f "${dest}" && ! -L "${dest}" ]]; then
-      local bak_file
-      bak_file="${dest}.bak"
-      [[ -e "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
-      mv "${dest}" "${bak_file}"
-    fi
-    ln -sfn "${gemini_rules}" "${dest}"
-  done
-
-  # Link OpenCode UI and CLI preferences
-  local opencode_ui_dir="${REPO_DIR}/dotfiles/opencode"
-  if [[ -d "${opencode_ui_dir}" ]]; then
-    local conf_name
-    for conf_name in tui.json cli.json; do
-      local conf_src="${opencode_ui_dir}/${conf_name}"
-      local conf_dest="${OPENCODE_DIR}/${conf_name}"
-      if [[ -f "${conf_src}" ]]; then
-        mkdir -p "${OPENCODE_DIR}"
-        if [[ -f "${conf_dest}" && ! -L "${conf_dest}" ]]; then
-          mv "${conf_dest}" "${conf_dest}.bak"
-        fi
-        ln -sfn "${conf_src}" "${conf_dest}"
-      fi
-    done
+  local dest="${CODEX_DIR}/AGENTS.md"
+  mkdir -p "$(dirname "${dest}")"
+  if [[ -f "${dest}" && ! -L "${dest}" ]]; then
+    local bak_file
+    bak_file="${dest}.bak"
+    [[ -e "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
+    mv "${dest}" "${bak_file}"
   fi
+  ln -sfn "${gemini_rules}" "${dest}"
 
   # Link skills
   local -a search_dirs=("${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
-  local target_root
-  for target_root in "${CODEX_DIR}/skills" "${OPENCODE_DIR}/skills"; do
-    mkdir -p "${target_root}"
-    local valid_skills=" "
-    for s_dir in "${search_dirs[@]}"; do
-      if [[ -d "${s_dir}" ]]; then
-        for skill_path in "${s_dir}"/*; do
-          if [[ -d "${skill_path}" && -f "${skill_path}/SKILL.md" ]]; then
-            local skill_name
-            skill_name="$(basename "${skill_path}")"
-            valid_skills="${valid_skills}${skill_name} "
-            local dest_skill="${target_root}/${skill_name}"
-            if [[ -d "${dest_skill}" && ! -L "${dest_skill}" ]]; then
-              local backup_root="${GEMINI_DIR}/skill-backups"
-              mkdir -p "${backup_root}"
-              local s_bak
-              s_bak="${backup_root}/${skill_name}.bak.$(date +%s)"
-              mv "${dest_skill}" "${s_bak}"
-            fi
-            ln -sfn "${skill_path}" "${dest_skill}"
+  local target_root="${CODEX_DIR}/skills"
+  mkdir -p "${target_root}"
+  local valid_skills=" "
+  for s_dir in "${search_dirs[@]}"; do
+    if [[ -d "${s_dir}" ]]; then
+      for skill_path in "${s_dir}"/*; do
+        if [[ -d "${skill_path}" && -f "${skill_path}/SKILL.md" ]]; then
+          local skill_name
+          skill_name="$(basename "${skill_path}")"
+          valid_skills="${valid_skills}${skill_name} "
+          local dest_skill="${target_root}/${skill_name}"
+          if [[ -d "${dest_skill}" && ! -L "${dest_skill}" ]]; then
+            local backup_root="${GEMINI_DIR}/skill-backups"
+            mkdir -p "${backup_root}"
+            local s_bak
+            s_bak="${backup_root}/${skill_name}.bak.$(date +%s)"
+            mv "${dest_skill}" "${s_bak}"
           fi
-        done
-      fi
-    done
-
-    # Prune stale skill symlinks
-    for existing in "${target_root}"/*; do
-      if [[ -L "${existing}" ]]; then
-        local base
-        base="$(basename "${existing}")"
-        if [[ "${valid_skills}" != *" ${base} "* ]]; then
-          rm -f "${existing}"
+          ln -sfn "${skill_path}" "${dest_skill}"
         fi
-      fi
-    done
+      done
+    fi
   done
-  echo "Synchronized shared skills and AGENTS.md instructions to Codex and OpenCode"
+
+  # Prune stale skill symlinks
+  for existing in "${target_root}"/*; do
+    if [[ -L "${existing}" ]]; then
+      local base
+      base="$(basename "${existing}")"
+      if [[ "${valid_skills}" != *" ${base} "* ]]; then
+        rm -f "${existing}"
+      fi
+    fi
+  done
+  echo "Synchronized shared skills and AGENTS.md instructions to Codex"
 }
 
 sync_memory_file() {
@@ -818,9 +755,6 @@ main() {
   sync_memory_file
   sync_mcp_config
   sync_skills_and_instructions
-  if command -v opencode >/dev/null 2>&1; then
-    opencode reload >/dev/null 2>&1 || true
-  fi
   echo "==> Done. MCP configuration and agent parity ready."
 }
 

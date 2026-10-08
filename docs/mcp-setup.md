@@ -2,12 +2,11 @@
 
 ## Overview
 
-This repository configures Model Context Protocol (MCP) servers, shared skills, and global instructions for terminal AI coding agents (Antigravity `agy`, OpenCode, and Codex) on macOS and Linux. `bin/mcp-sync` compiles a single source of truth template (`dotfiles/gemini/mcp_config.template.json`) into client-specific configurations for all three agents:
+This repository configures Model Context Protocol (MCP) servers, shared skills, and global instructions for terminal AI coding agents (Antigravity `agy` and Codex) on macOS and Linux. `bin/mcp-sync` compiles a single source of truth template (`dotfiles/gemini/mcp_config.template.json`) into client-specific configurations for both agents:
 - Antigravity: `~/.gemini/config/mcp_config.json`
-- OpenCode: `~/.config/opencode/opencode.json`
 - Codex: `~/.codex/config.toml`
 
-It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills to OpenCode (`~/.config/opencode/skills/`) and Codex (`~/.codex/skills/`).
+It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills to Codex (`~/.codex/skills/`).
 
 The architecture separates version-controlled templates from machine-local configuration and secrets. Because this repository is public, credentials and cluster private keys are kept in the OS Keychain or environment variables and hydrated onto the local machine via `bin/mcp-sync`.
 
@@ -37,12 +36,6 @@ dotfiles/ (Public Repository)
 ├── docker-profiles.json             # Local daemon + remote SSH Docker profiles
 ├── memory.json                      # Persistent knowledge graph store
 └── ssh-profiles.json                # Host profiles derived from ~/.ssh/config
-
-~/.config/opencode/ (OpenCode State)
-├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
-├── opencode.json                    # Hydrated MCP server registry + Flexoki theme (0600)
-├── tui.json                         # Flexoki Dark TUI configuration
-└── skills/                          # Symlinked shared skills from ~/.gemini
 
 ~/.codex/ (Codex State)
 ├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
@@ -92,8 +85,8 @@ just setup-codebase-memory
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json`, `~/.config/opencode/opencode.json`, and `~/.codex/config.toml` (33 total servers).
-8. **Synchronizes Skills & Instructions:** Symlinks `GEMINI.md` to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`, and symlinks custom skills from `~/.gemini` into `~/.codex/skills/` and `~/.config/opencode/skills/`.
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` and `~/.codex/config.toml` (36 total servers).
+8. **Synchronizes Skills & Instructions:** Symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and symlinks custom skills from `~/.gemini` into `~/.codex/skills/`.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 
 ---
@@ -144,7 +137,7 @@ just setup-codebase-memory
 Run `just setup-codebase-memory` from this checkout. It invokes
 `mcp-sync --codebase-memory-only`, installs v0.11.0 into
 `~/.local/share/codebase-memory-mcp/`, and synchronizes the shared stdio entry
-to Antigravity CLI (`agy`), OpenCode, and Codex. No API key, Docker, or language
+to Antigravity CLI (`agy`) and Codex. No API key, Docker, or language
 runtime is required for the server. Setup requires Bash and curl; verification
 uses the installed Python MCP SDK through `uv`.
 
@@ -158,8 +151,7 @@ close all clients using the server, change `CODEBASE_MEMORY_MCP_VERSION` in
 the same binary build. Avoid the upstream installer/updater, which bypasses
 the pin and modifies settings outside this repository's managed setup.
 
-Restart existing `agy` and Codex sessions after setup. OpenCode is reloaded by
-`mcp-sync`; check `opencode mcp list` and `codex mcp get codebase-memory-mcp`.
+Restart existing `agy` and Codex sessions after setup; check `codex mcp get codebase-memory-mcp`.
 In a fresh session, ask the agent to index the specific repository you want to
 query. Automatic indexing is not enabled by setup. Graph data stays under
 `~/.cache/codebase-memory-mcp/`; if indexing exports a `.codebase-memory/`

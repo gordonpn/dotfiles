@@ -343,8 +343,6 @@ alias cld="claude --allow-dangerously-skip-permissions --continue --dangerously-
 alias cldn="claude --allow-dangerously-skip-permissions --dangerously-skip-permissions --permission-mode=auto"
 alias cdxn='codex --dangerously-bypass-approvals-and-sandbox'
 alias cdx='codex resume --last --dangerously-bypass-approvals-and-sandbox'
-alias op='opencode --continue --auto'
-alias opn='opencode --auto'
 alias fullreboot='sudo reboot'
 if [[ "$(uname)" == "Darwin" ]]; then
   alias softreboot="osascript -e 'tell app \"System Events\" to restart'"
@@ -362,7 +360,7 @@ pnpx() {
 }
 
 # Parallel agent sessions, one isolated worktree each via worktrunk (wt).
-# agy, codex, and opencode resume in place; agyw, cdxw, and opw start a fresh session in a new worktree on a new branch.
+# agy and codex resume in place; agyw and cdxw start a fresh session in a new worktree on a new branch.
 #
 # Names are zellij-style: lowercase adjective-noun, like polite-accordion.
 # Zellij's own word lists are not recoverable from its binary, so these are
@@ -408,16 +406,14 @@ _wt_agent() {
 
 agyw() { _wt_agent agy -- --dangerously-skip-permissions "$@" }
 cdxw() { _wt_agent codex -- --dangerously-bypass-approvals-and-sandbox "$@" }
-opw() { _wt_agent opencode -- --auto "$@" }
 
-# Synchronize MCP configuration across Antigravity, OpenCode, and Codex
+# Synchronize MCP configuration across Antigravity and Codex
 # in the background whenever the template or script is newer than the generated targets.
 _check_mcp_sync() {
   local dotfiles_dir="${DOTFILES_DIR:-$HOME/workspace/dotfiles}"
   local template="${dotfiles_dir}/dotfiles/gemini/mcp_config.template.json"
   local target="${HOME}/.gemini/config/mcp_config.json"
   local codex_target="${HOME}/.codex/config.toml"
-  local opencode_target="${HOME}/.config/opencode/opencode.json"
   local script="${dotfiles_dir}/bin/mcp-sync"
   local rules="${dotfiles_dir}/dotfiles/gemini/GEMINI.md"
   local ssh_cfg="${HOME}/.ssh/config"
@@ -443,7 +439,7 @@ _check_mcp_sync() {
   fi
 
   local t needs_sync=0
-  for t in "${target}" "${codex_target}" "${opencode_target}"; do
+  for t in "${target}" "${codex_target}"; do
     if [[ ! -f "${t}" || "${template}" -nt "${t}" || "${script}" -nt "${t}" || "${rules}" -nt "${t}" || ( -f "${ssh_cfg}" && "${ssh_cfg}" -nt "${t}" ) ]]; then
       needs_sync=1
       break
