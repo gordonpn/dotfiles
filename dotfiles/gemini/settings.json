@@ -6,6 +6,12 @@
     "enablePermanentToolApproval": true,
     "autoAddToPolicyByDefault": true
   },
+  "toolPermission": "always-proceed",
+  "artifactReviewPolicy": "always-proceed",
+  "notifications": true,
+  "allowNonWorkspaceAccess": true,
+  "verbosity": "low",
+  "showFeedbackSurvey": false,
   "general": {
     "vimMode": true,
     "enableNotifications": true,
