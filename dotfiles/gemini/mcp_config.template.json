@@ -81,7 +81,10 @@
         "@cloudflare/mcp-server-cloudflare",
         "run",
         "${CLOUDFLARE_ACCOUNT_ID}"
-      ]
+      ],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "${CLOUDFLARE_API_TOKEN}"
+      }
     },
     "prometheus": {
       "command": "npx",

@@ -52,7 +52,8 @@ OS Keychain / Secret Storage
 ├── macOS Keychain: security find-generic-password -a "$USER" -s <service>
 └── Linux Libsecret: secret-tool lookup service <service>
 Services: brave_api_key, exa_api_key, tailscale_api_key, uptime_kuma_jwt, healthchecks_api_key,
-          github_token, vault_token, slack_bot_token, discord_token, tfe_token
+          github_token, vault_token, slack_bot_token, discord_token, tfe_token,
+          postman_api_key, sonarqube_token, sonarqube_org, cloudflare_api_token
 ```
 
 ---
@@ -80,7 +81,7 @@ just setup-codebase-memory
 
 ### What It Does
 1. **Installs MCP Binaries:** Downloads and verifies `github-mcp-server` into `~/.local/bin` and pinned `codebase-memory-mcp` into its dedicated runtime directory, ensures `terraform-mcp-server` is installed and linked (via Homebrew or `go install`), and links or installs `repomix` (skipped with `--configs-only`).
-2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `exa_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `tfe_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`, `TFE_ADDRESS`).
+2. **Pulls Secrets & Defaults:** Queries macOS Keychain (or Linux `secret-tool`) and environment variables for service credentials and addresses (`brave_api_key`, `exa_api_key`, `tailscale_api_key`, `uptime_kuma_jwt`, `healthchecks_api_key`, `github_token`, `vault_token`, `slack_bot_token`, `discord_token`, `tfe_token`, `postman_api_key`, `sonarqube_token`, `sonarqube_org`, `cloudflare_api_token`, `CADDY_ADMIN_URL`, `POSTGRES_URL`, `REDIS_URL`, `VAULT_ADDR`, `LOKI_URL`, `TFE_ADDRESS`).
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).

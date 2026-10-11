@@ -402,6 +402,9 @@ sync_mcp_config() {
   local cf_account
   cf_account="${CLOUDFLARE_ACCOUNT_ID:-75520e73ba21df12b124d81e80ad29c1}"
 
+  local cf_token
+  cf_token="$(get_secret "cloudflare_api_token" "CLOUDFLARE_API_TOKEN")"
+
   local prom_url
   prom_url="${PROMETHEUS_URL:-http://master.tailb65f8c.ts.net:30090}"
 
@@ -466,6 +469,7 @@ sync_mcp_config() {
   export UPTIME_KUMA_JWT_TOKEN="${kuma_jwt}"
   export HEALTHCHECKS_API_KEY="${hc_key}"
   export CLOUDFLARE_ACCOUNT_ID="${cf_account}"
+  export CLOUDFLARE_API_TOKEN="${cf_token}"
   export PROMETHEUS_URL="${prom_url}"
   export LOKI_URL="${loki_url}"
   export UPTIME_KUMA_URL="${kuma_url}"
@@ -503,6 +507,7 @@ replacements = {
     '\${EXA_API_KEY}': os.environ.get('EXA_API_KEY', ''),
     '\${SQLITE_DB_PATH}': os.environ.get('SQLITE_DB_PATH', ''),
     '\${CLOUDFLARE_ACCOUNT_ID}': os.environ.get('CLOUDFLARE_ACCOUNT_ID', ''),
+    '\${CLOUDFLARE_API_TOKEN}': os.environ.get('CLOUDFLARE_API_TOKEN', ''),
     '\${PROMETHEUS_URL}': os.environ.get('PROMETHEUS_URL', ''),
     '\${LOKI_URL}': os.environ.get('LOKI_URL', ''),
     '\${TAILSCALE_API_KEY}': os.environ.get('TAILSCALE_API_KEY', ''),
