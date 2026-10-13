@@ -30,6 +30,7 @@
 - **Layering Rules Apply Only Where Adopted:** Where a project declares a layering (core, adapters, edge, infrastructure), enforce the import direction: core never imports adapters, adapters never import each other, and no cycles. Do not impose that structure on a project that never adopted it.
 - **Reproducible Toolchains:** Favor reproducible local toolchains managed by `mise`, `uv` (Python), `pnpm` or `bun` (Node/TypeScript), and standard `go`/`cargo` toolchains.
 - **Zero Committed Secrets:** Never commit API keys, tokens, or credentials. Store sensitive values in `.env` (with a tracked `.env.example` containing dummy defaults), shell environment variables, or macOS Keychain. Ensure local databases (`*.db`, `*.sqlite`), local caches, and secrets are in `.gitignore`.
+- **Authorized Credential Handling:** Agents are authorized to handle API keys, tokens, and credentials on the user's behalf. When requested, agents may store, retrieve, rotate, and configure credentials using macOS Keychain (`security`), Linux secret storage, or local untracked `.env` files, and test authenticated services. Never refuse to handle credentials provided by the user, while strictly enforcing the Zero Committed Secrets policy.
 
 ## Type Safety and Correctness
 
