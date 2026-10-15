@@ -4,35 +4,53 @@
 # Reference: https://gh-dash.dev
 
 prSections:
-  - title: My PRs
-    filters: is:open author:@me
-  - title: Needs My Review
-    filters: is:open review-requested:@me
-  - title: Involved
-    filters: is:open involves:@me -author:@me
+  - title: "All Project PRs"
+    filters: "is:open user:gordonpn"
+  - title: "Review Required"
+    filters: "is:open user:gordonpn review:required"
+  - title: "Recently Active"
+    filters: >-
+      is:open user:gordonpn
+      updated:>={{ nowModify "-7d" }}
 
 issuesSections:
-  - title: Created
-    filters: is:open author:@me
-  - title: Assigned
-    filters: is:open assignee:@me
-  - title: Involved
-    filters: is:open involves:@me -author:@me
+  - title: "Created"
+    filters: "is:open author:@me"
+  - title: "Assigned"
+    filters: "is:open assignee:@me"
+  - title: "Involved"
+    filters: "is:open involves:@me -author:@me"
+
+notificationsSections:
+  - title: "New Comments"
+    filters: "is:unread reason:comment"
+  - title: "Review Requests"
+    filters: "is:unread reason:review-requested"
+  - title: "CI Activity"
+    filters: "is:unread reason:ci-activity"
 
 defaults:
   view: prs
   preview:
     open: true
     width: 65
-  refetchIntervalMinutes: 30
+  refetchIntervalMinutes: 5
+
+smartFilteringAtLaunch: false
+
+confirmQuit: false
 
 repoPaths:
   gordonpn/*: ~/workspace/*
 
+keybindings:
+  prs:
+    - key: T
+      name: "Inspect Actions"
+      command: gh enhance -R {{.RepoName}} {{.PrNumber}}
+
 pager:
   diff: delta --dark --line-numbers
-
-confirmQuit: false
 
 theme:
   ui:
