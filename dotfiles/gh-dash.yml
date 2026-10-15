@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://gh-dash.dev/schema.json
+
+# gh-dash configuration
+# Reference: https://gh-dash.dev
+
+prSections:
+  - title: My PRs
+    filters: is:open author:@me
+  - title: Needs My Review
+    filters: is:open review-requested:@me
+  - title: Involved
+    filters: is:open involves:@me -author:@me
+
+issuesSections:
+  - title: Created
+    filters: is:open author:@me
+  - title: Assigned
+    filters: is:open assignee:@me
+  - title: Involved
+    filters: is:open involves:@me -author:@me
+
+defaults:
+  view: prs
+  preview:
+    open: true
+    width: 65
+  refetchIntervalMinutes: 30
+
+repoPaths:
+  gordonpn/*: ~/workspace/*
+
+pager:
+  diff: delta --dark --line-numbers
+
+confirmQuit: false
+
+theme:
+  ui:
+    sectionsShowCount: true
+  table:
+    showSeparators: true
+  colors:
+    text:
+      primary: "#CECDC3"
+      secondary: "#878580"
+      inverted: "#100F0F"
+      faint: "#575653"
+      warning: "#AD8301"
+      success: "#66800B"
+      error: "#AF3029"
+    background:
+      selected: "#282726"
+    border:
+      primary: "#24837B"
+      secondary: "#205EA6"
+      faint: "#403E3C"
