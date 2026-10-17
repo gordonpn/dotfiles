@@ -625,7 +625,7 @@ sync_skills_and_instructions() {
   ln -sfn "${gemini_rules}" "${dest}"
 
   # Link skills
-  local -a search_dirs=("${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
+  local -a search_dirs=("${HOME}/.agents/skills" "${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
   local target_root="${CODEX_DIR}/skills"
   mkdir -p "${target_root}"
   local valid_skills=" "
@@ -635,6 +635,9 @@ sync_skills_and_instructions() {
         if [[ -d "${skill_path}" && -f "${skill_path}/SKILL.md" ]]; then
           local skill_name
           skill_name="$(basename "${skill_path}")"
+          if [[ "${valid_skills}" == *" ${skill_name} "* ]]; then
+            continue
+          fi
           valid_skills="${valid_skills}${skill_name} "
           local dest_skill="${target_root}/${skill_name}"
           if [[ -d "${dest_skill}" && ! -L "${dest_skill}" ]]; then
@@ -645,13 +648,33 @@ sync_skills_and_instructions() {
             mv "${dest_skill}" "${s_bak}"
           fi
           ln -sfn "${skill_path}" "${dest_skill}"
+
+          # Ensure Antigravity CLI discovers skills managed in ~/.agents/skills
+          if [[ "${s_dir}" == "${HOME}/.agents/skills" ]]; then
+            mkdir -p "${GEMINI_CONFIG_DIR}/skills"
+            local gemini_skill="${GEMINI_CONFIG_DIR}/skills/${skill_name}"
+            if [[ ! -e "${gemini_skill}" || -L "${gemini_skill}" ]]; then
+              ln -sfn "${skill_path}" "${gemini_skill}"
+            fi
+          fi
         fi
       done
     fi
   done
 
-  # Prune stale skill symlinks
+  # Prune stale skill symlinks in Codex
   for existing in "${target_root}"/*; do
+    if [[ -L "${existing}" ]]; then
+      local base
+      base="$(basename "${existing}")"
+      if [[ "${valid_skills}" != *" ${base} "* ]]; then
+        rm -f "${existing}"
+      fi
+    fi
+  done
+
+  # Prune stale skill symlinks in Gemini config
+  for existing in "${GEMINI_CONFIG_DIR}/skills"/*; do
     if [[ -L "${existing}" ]]; then
       local base
       base="$(basename "${existing}")"
