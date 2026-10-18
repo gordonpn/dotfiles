@@ -48,7 +48,8 @@ keybindings:
     - key: S
       name: "Squash merge & delete branch"
       command: >
-        gh pr merge {{.PrNumber}}
+        gum confirm "Squash merge {{.RepoName}}#{{.PrNumber}} and delete branch?"
+        && gh pr merge {{.PrNumber}}
         --repo {{.RepoName}}
         --squash
         --delete-branch

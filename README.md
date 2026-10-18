@@ -43,8 +43,9 @@ Codex CLI copies transcript selections on mouse release with
 Codex's `project_doc_max_bytes = 65536` allows up to 64 KiB of combined global
 and repository instructions, accommodating the shared cross-agent handoff policy.
 
-In gh-dash's PR view, press `S` to squash-merge the selected pull request and
-delete its branch. This action runs `gh pr merge --squash --delete-branch`.
+In gh-dash's PR view, press `S` to confirm squash-merging the selected pull
+request and deleting its branch through Gum (`brew install gum`, included in
+`lists/Brewfile`). Only confirmation runs `gh pr merge --squash --delete-branch`.
 
 ### Installing and usage
 
