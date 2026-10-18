@@ -48,6 +48,9 @@ keybindings:
     - key: T
       name: "Inspect Actions"
       command: gh enhance -R {{.RepoName}} {{.PrNumber}}
+    - key: W
+      name: "Mark Ready"
+      command: gh pr ready {{.PrNumber}} -R {{.RepoName}}
 
 pager:
   diff: delta --dark --line-numbers
