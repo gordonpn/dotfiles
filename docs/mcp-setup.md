@@ -67,6 +67,11 @@ selections, including in Ghostty. Existing Codex configs retain their non-MCP
 settings during sync; set this value under `[tui]` in `~/.codex/config.toml` and
 restart the CLI when applying it to an existing installation.
 
+The base template also sets top-level `project_doc_max_bytes = 65536` so the
+combined global and repository instructions fit within Codex's 64 KiB limit.
+For existing installations, set it before any TOML table in `~/.codex/config.toml`
+and restart Codex; synchronization preserves existing non-MCP settings.
+
 ### Execution
 ```bash
 # Full hydration: binary installs, SSH/Docker/K3s checks, MCP configs, and skills

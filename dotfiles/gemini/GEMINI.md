@@ -148,6 +148,26 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Two-Attempt Circuit Breaker:** If a tool call, test fix, or command fails twice on the same step, stop immediately. Document what failed, reassess assumptions, and re-plan rather than retrying blindly.
 - **Triad Evaluation (UX, DX, AX):** When evaluating architectural trade-offs, weigh User Experience (UX), Developer Experience (DX), and Agent Experience (AX: greppability, unambiguous symbols, explicit types, and clean tool parsing).
 
+## Cross-Agent Task Continuity
+
+These rules apply across coding agents, including Antigravity CLI and Codex CLI.
+
+### Task State
+
+- **One Checkpoint:** For multi-step implementations, maintain `.agent/HANDOFF.md` in the relevant worktree unless the project already defines a handoff location. Reuse that location rather than creating a competing record. Trivial, single-step edits need no handoff document.
+- **Update Timing:** Update the checkpoint at meaningful milestones and before ending an unfinished session or transferring the task. Keep it concise, factual, and current, not a transcript or growing activity log.
+- **Required Context:** Record the objective and acceptance criteria; branch and latest commit; completed work and modified files, including uncommitted changes; significant decisions and rationale; exact verification commands and outcomes; outstanding failures, blockers, remaining tasks, and the single next recommended action.
+- **Evidence and Limits:** Distinguish verified results from inherited claims, hypotheses, and checks not run. Identify the revision or working-tree state tested and relevant environment constraints. Never include secrets or sensitive log contents.
+- **Lifecycle:** Treat the handoff as a temporary task checkpoint, an exception to the durable-documentation location rule. Link to existing requirements and ADRs rather than duplicating them. On completion, mark it complete and preserve any durable knowledge in the appropriate project documentation.
+
+### Session Recovery
+
+1. Read repository instructions and the handoff, if present.
+2. Inspect the current branch, recent commits, working-tree status, and staged and unstaged diffs.
+3. Reconcile the checkpoint with source code and available verification evidence. Re-run relevant checks when evidence is missing or subsequent changes invalidate it; never treat another agent's claims as proof of success.
+4. Continue from the latest verified state, preserving existing work. Do not reset, discard, or overwrite unfamiliar changes to match the handoff; resolve discrepancies first.
+5. Correct stale checkpoint entries. If no handoff exists, reconstruct the necessary context from the repository and user request before proceeding.
+
 ## Subagent Orchestration
 - **Role Boundaries:** Keep subagent responsibilities segregated. Explorers read and research; workers make file edits; reviewers audit and critique without mutating files.
 - **Bounded Contracts:** Assign each subagent a single objective, a deterministic done condition, and require a concise outcome report (5 lines or fewer).

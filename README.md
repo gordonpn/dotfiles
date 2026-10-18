@@ -40,6 +40,9 @@ server. Run `just setup-codebase-memory` to install and configure it. See
 Codex CLI copies transcript selections on mouse release with
 `tui.copy_on_select = "always"`. Restart the CLI after changing this setting.
 
+Codex's `project_doc_max_bytes = 65536` allows up to 64 KiB of combined global
+and repository instructions, accommodating the shared cross-agent handoff policy.
+
 ### Installing and usage
 
 - Clone the repository

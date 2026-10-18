@@ -6,6 +6,7 @@ notify = ["/Users/gordonpn/.codex/computer-use/Codex Computer Use.app/Contents/S
 model = "gpt-6.1-sol"
 model_reasoning_effort = "high"
 web_search = "indexed"
+project_doc_max_bytes = 65536
 
 [marketplaces.openai-bundled]
 source_type = "local"
