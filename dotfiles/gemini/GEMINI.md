@@ -155,6 +155,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 ### Task State
 
 - **One Checkpoint:** For multi-step implementations, maintain `.agent/HANDOFF.md` in the relevant worktree unless the project already defines a handoff location. Reuse that location rather than creating a competing record. Trivial, single-step edits need no handoff document.
+- **Local Only:** Keep `.agent/HANDOFF.md` local and untracked. Never stage, commit, or force-add it.
 - **Update Timing:** Update the checkpoint at meaningful milestones and before ending an unfinished session or transferring the task. Keep it concise, factual, and current, not a transcript or growing activity log.
 - **Required Context:** Record the objective and acceptance criteria; branch and latest commit; completed work and modified files, including uncommitted changes; significant decisions and rationale; exact verification commands and outcomes; outstanding failures, blockers, remaining tasks, and the single next recommended action.
 - **Evidence and Limits:** Distinguish verified results from inherited claims, hypotheses, and checks not run. Identify the revision or working-tree state tested and relevant environment constraints. Never include secrets or sensitive log contents.
