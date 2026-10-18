@@ -47,6 +47,10 @@ In gh-dash's PR view, press `S` to confirm squash-merging the selected pull
 request and deleting its branch through Gum (`brew install gum`, included in
 `lists/Brewfile`). Only confirmation runs `gh pr merge --squash --delete-branch`.
 
+gh-dash notifications include New Comments, Review Requests, CI Activity,
+My PR Activity, and Mentions, refreshing every five minutes. My PR Activity
+also includes issues you opened because it uses `reason:author`.
+
 ### Installing and usage
 
 - Clone the repository

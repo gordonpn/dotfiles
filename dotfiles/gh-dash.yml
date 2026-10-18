@@ -28,6 +28,10 @@ notificationsSections:
     filters: "is:unread reason:review-requested"
   - title: "CI Activity"
     filters: "is:unread reason:ci-activity"
+  - title: "My PR Activity"
+    filters: "is:unread reason:author"
+  - title: "Mentions"
+    filters: "is:unread reason:mention"
 
 defaults:
   view: prs
