@@ -45,6 +45,13 @@ repoPaths:
 
 keybindings:
   prs:
+    - key: S
+      name: "Squash merge & delete branch"
+      command: >
+        gh pr merge {{.PrNumber}}
+        --repo {{.RepoName}}
+        --squash
+        --delete-branch
     - key: T
       name: "Inspect Actions"
       command: gh enhance -R {{.RepoName}} {{.PrNumber}}
