@@ -118,6 +118,23 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
   2. **Epic:** Large capability or architectural shift requiring multiple deliverables. Represented by a parent GitHub Issue (labeled `epic`) linking child Stories via GitHub native sub-issues or markdown task lists (`- [ ] #<id>`). Contains overarching architecture notes and end-to-end acceptance criteria.
   3. **Story:** Single vertical slice of user-facing or developer value delivering an end-to-end increment. Represented by an Issue (labeled `story` or `feature`) parented by an Epic. Must include user value narrative ("As a... I want to... So that..."), deterministic acceptance criteria (`Given/When/Then`), and maps 1:1 to a single-concern draft PR.
   4. **Task / Subtask:** Atomic engineering implementation unit (e.g., schema migration, adapter, test suite). Represented by a native GitHub Sub-issue (using `sub_issue_write`) or checklist items (`- [ ]`) within a Story issue.
+- **Issue Effort & Priority Classification:** Every created GitHub issue must define both **Priority** and **Effort** in its body metadata and as GitHub labels:
+  - **Priority Scale:**
+    - `P0` (`priority:p0`): Blocker, critical production regression, security vulnerability, or data loss.
+    - `P1` (`priority:p1`): High priority, core user path or milestone deliverable.
+    - `P2` (`priority:p2`): Normal priority, standard feature or routine bug fix.
+    - `P3` (`priority:p3`): Low priority, nice-to-have improvement, polish, or deferred task.
+  - **Effort Scale:**
+    - `Trivial` (`effort:trivial`): Minutes to execute, single-line or config fix, minimal testing required.
+    - `Small` (`effort:small`): Few hours, isolated change within one module or function, straightforward verification.
+    - `Medium` (`effort:medium`): 1-2 days, cross-cutting change across several files or adapters, requires comprehensive tests.
+    - `Large` (`effort:large`): Multi-day architectural change or epic component; consider decomposing into smaller stories.
+  - **Issue Metadata Format:** Include the metadata block at the top of the issue body:
+    ```markdown
+    **Priority:** P0 | P1 | P2 | P3
+    **Effort:** Trivial | Small | Medium | Large
+    ```
+    Attach the matching labels (`priority:p<0-3>`, `effort:<trivial|small|medium|large>`). If the labels do not exist in the target repository, create them on first use.
 - **Issue to PR Flow:** Adopt a GitHub issue to pull request lifecycle for code changes. Create and/or inspect assigned task requirements using `@modelcontextprotocol/server-github` or `gh issue view <id> --json title,body,labels` before proposing logic changes.
 - **Atomic Issue Scope & Lifecycle Protection:** Each issue must tackle one atomic code change addressed by a corresponding PR. Ensure the issue and PR scopes are aligned 1:1 so that merging a PR delivers the entire scope of the issue. A PR must not close an issue prematurely before all concerns, requirements, and acceptance criteria in the issue are completely satisfied. Never use auto-closing keywords (`Fixes #<id>`, `Closes #<id>`) if residual tasks, sub-tasks, or unresolved concerns remain open.
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
