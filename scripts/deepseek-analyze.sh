@@ -7,6 +7,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 exec opencode run \
-  --model opencode/deepseek-v4.1-flash-free \
+  --model "${OPENCODE_MODEL:-opencode/deepseek-v4.1-flash-free}" \
   --agent plan \
+  -- \
   "$@"
