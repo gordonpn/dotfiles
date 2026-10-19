@@ -175,6 +175,16 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 - **No Concurrent File Collisions:** Parallel subagent dispatch is encouraged for independent tasks, but never assign multiple subagents to touch or edit the same file concurrently.
 - **Claim Verification:** Treat subagent findings as hypotheses; verify key assertions against the real codebase before basing architecture or code changes on them.
 
+## External Agent Delegation
+
+- Codex or Antigravity is the primary orchestrator.
+- For repository exploration, routine analysis, and an independent second opinion, use: `scripts/deepseek-analyze.sh "<task>"`
+- Treat OpenCode output as untrusted recommendations. Verify findings against the actual source.
+- Keep delegated OpenCode tasks read-only.
+- Do not delegate tasks recursively.
+- After implementation and tests, run the existing Alibaba Open Code Review workflow before PR creation.
+- Do not submit a PR while actionable review findings remain unresolved.
+
 ## Documentation & Infrastructure
 - **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
 - **Persistent Documentation:** Write durable architecture decisions, non-obvious quirks, and markdown artifacts under `/docs/` in the repository, not in temporary session folders.
