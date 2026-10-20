@@ -1,9 +1,20 @@
 test:
     bash tests/mcp-sync.sh
+    bash tests/deepseek-analyze.sh
 
 lint:
-    bash -n bin/mcp-sync tests/mcp-sync.sh
-    shellcheck -x tests/mcp-sync.sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scripts=(
+        "bin/mcp-sync"
+        "tests/mcp-sync.sh"
+        "tests/deepseek-analyze.sh"
+        "scripts/deepseek-analyze.sh"
+    )
+    for f in "${scripts[@]}"; do
+        bash -n "$f"
+    done
+    shellcheck -x "${scripts[@]}"
     uvx ruff check --target-version py311 tests/verify_mcp.py
     uvx --with mcp==1.1.2 mypy --strict tests/verify_mcp.py
     git diff --check

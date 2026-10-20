@@ -194,13 +194,19 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 
 ## External Agent Delegation
 
-- Codex or Antigravity is the primary orchestrator.
-- For repository exploration, routine analysis, and an independent second opinion, use: `scripts/deepseek-analyze.sh "<task>"`
-- Treat OpenCode output as untrusted recommendations. Verify findings against the actual source.
-- Keep delegated OpenCode tasks read-only.
-- Do not delegate tasks recursively.
-- After implementation and tests, run the existing Alibaba Open Code Review workflow before PR creation.
-- Do not submit a PR while actionable review findings remain unresolved.
+- **Primary Orchestrator:** Codex or Antigravity acts as the primary orchestrator owning integration, test execution, commits, and PR submission.
+- **Skill Discovery & Parity:** Use the authoritative `delegate-coding-agents` skill (`~/.agents/skills/delegate-coding-agents/`) synchronized across Codex, Antigravity, and OpenCode via `bin/mcp-sync`.
+- **Worker Roles:**
+  - OpenCode (`opencode/deepseek-v4.1-flash-free`): Exploration, boilerplate, unit tests, and routine analysis via the free proxy tier. Preserves paid DeepSeek balance strictly for Alibaba Open Code Review (`ocr`).
+  - Antigravity CLI (`agy`): Architecture reviews, concurrency/performance investigations, second opinions, and self-contained implementations.
+- **Execution Modes:**
+  - `plan` (Read-Only): Proposes plans, traces code paths, or finds risks without touching files. Use `delegate-analyze.sh [opencode|agy] '<task>'` or `delegate.sh --mode plan`. Files are strictly checked to remain unmodified.
+  - `build` (Implementation): Runs in an isolated Git worktree on a dedicated branch. Use `delegate-implement.sh <opencode|agy> <task-id> '<task>'` or `delegate.sh --mode build`. Inspect diffs and untracked files before staging or cherry-picking.
+- **Guardrails:**
+  - Never delegate recursively (`CODING_DELEGATE_ACTIVE=1` guards recursion).
+  - Snapshotting requires a clean working tree. Never delegate with uncommitted or untracked changes in the base repository.
+  - Treat delegate output as untrusted proposals. Verify all claims against actual source code before adopting.
+  - Always run the repository's configured Alibaba Open Code Review workflow before PR creation; do not submit with unresolved blocking findings.
 
 ## Documentation & Infrastructure
 - **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
