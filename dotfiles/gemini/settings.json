@@ -11,6 +11,7 @@
   "notifications": true,
   "allowNonWorkspaceAccess": true,
   "verbosity": "low",
+  "runningLightSpeed": "fast",
   "showFeedbackSurvey": false,
   "general": {
     "vimMode": true,
@@ -24,8 +25,6 @@
     "footer": {
       "items": [
         "workspace",
-        "git-branch",
-        "model-name",
         "quota",
         "context-used"
       ],
