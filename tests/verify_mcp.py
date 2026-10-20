@@ -42,24 +42,23 @@ def verify_configs() -> Path:
     home = Path.home()
     executable = home / ".local/share/codebase-memory-mcp/codebase-memory-mcp"
     agy: object = json.loads((home / ".gemini/config/mcp_config.json").read_text())
-    opencode: object = json.loads((home / ".config/opencode/opencode.json").read_text())
     codex: object = tomllib.loads((home / ".codex/config.toml").read_text())
     expected: dict[str, object] = {"command": str(executable), "args": []}
 
     assert server_entry(agy, "mcpServers") == expected
     assert server_entry(codex, "mcp_servers") == expected
-    assert server_entry(opencode, "mcp") == {
-        "type": "local",
-        "command": [str(executable)],
-        "enabled": True,
-    }
-    for config in (
+
+    configs = [
         home / ".gemini/config/mcp_config.json",
-        home / ".config/opencode/opencode.json",
         home / ".codex/config.toml",
-    ):
+    ]
+
+    # OpenCode MCP registration is not managed by mcp-sync (only shared skills
+    # and AGENTS.md instructions are synchronized for OpenCode).
+
+    for config in configs:
         assert config.stat().st_mode & 0o777 == 0o600, f"Unsafe permissions: {config}"
-    print("All three client registrations match; config permissions are 0600")
+    print("Client registrations match; config permissions are 0600")
     return executable
 
 
