@@ -118,23 +118,24 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
   2. **Epic:** Large capability or architectural shift requiring multiple deliverables. Represented by a parent GitHub Issue (labeled `epic`) linking child Stories via GitHub native sub-issues or markdown task lists (`- [ ] #<id>`). Contains overarching architecture notes and end-to-end acceptance criteria.
   3. **Story:** Single vertical slice of user-facing or developer value delivering an end-to-end increment. Represented by an Issue (labeled `story` or `feature`) parented by an Epic. Must include user value narrative ("As a... I want to... So that..."), deterministic acceptance criteria (`Given/When/Then`), and maps 1:1 to a single-concern draft PR.
   4. **Task / Subtask:** Atomic engineering implementation unit (e.g., schema migration, adapter, test suite). Represented by a native GitHub Sub-issue (using `sub_issue_write`) or checklist items (`- [ ]`) within a Story issue.
-- **Issue Effort & Priority Classification:** Every created GitHub issue must define both **Priority** and **Effort** in its body metadata and as GitHub labels:
+- **Issue Effort & Priority Classification:** Every created GitHub issue must define both **Priority** and **Effort (T-Shirt Size)** in its body metadata and as GitHub labels:
   - **Priority Scale:**
     - `P0` (`priority:p0`): Blocker, critical production regression, security vulnerability, or data loss.
     - `P1` (`priority:p1`): High priority, core user path or milestone deliverable.
     - `P2` (`priority:p2`): Normal priority, standard feature or routine bug fix.
     - `P3` (`priority:p3`): Low priority, nice-to-have improvement, polish, or deferred task.
-  - **Effort Scale:**
-    - `Trivial` (`effort:trivial`): Minutes to execute, single-line or config fix, minimal testing required.
-    - `Small` (`effort:small`): Few hours, isolated change within one module or function, straightforward verification.
-    - `Medium` (`effort:medium`): 1-2 days, cross-cutting change across several files or adapters, requires comprehensive tests.
-    - `Large` (`effort:large`): Multi-day architectural change or epic component; consider decomposing into smaller stories.
+  - **Effort Scale (T-Shirt Sizes):**
+    - `XS` (`effort:xs`): Trivial, minutes to execute, single-line or config fix, minimal testing required.
+    - `S` (`effort:s`): Small, few hours, isolated change within one module or function, straightforward verification.
+    - `M` (`effort:m`): Medium, 1-2 days, cross-cutting change across several files or adapters, requires comprehensive tests.
+    - `L` (`effort:l`): Large, multi-day architectural change or epic component; consider decomposing into smaller stories.
+    - `XL` (`effort:xl`): Extra Large, multi-week architectural change or complex epic; must be decomposed into smaller stories before implementation.
   - **Issue Metadata Format:** Include the metadata block at the top of the issue body:
     ```markdown
     **Priority:** P0 | P1 | P2 | P3
-    **Effort:** Trivial | Small | Medium | Large
+    **Effort:** XS | S | M | L | XL
     ```
-    Attach the matching labels (`priority:p<0-3>`, `effort:<trivial|small|medium|large>`). If the labels do not exist in the target repository, create them on first use.
+    Attach the matching labels (`priority:p<0-3>`, `effort:<xs|s|m|l|xl>`). If the labels do not exist in the target repository, create them on first use.
 - **Issue to PR Flow:** Adopt a GitHub issue to pull request lifecycle for code changes. Create and/or inspect assigned task requirements using `@modelcontextprotocol/server-github` or `gh issue view <id> --json title,body,labels` before proposing logic changes.
 - **Atomic Issue Scope & Lifecycle Protection:** Each issue must tackle one atomic code change addressed by a corresponding PR. Ensure the issue and PR scopes are aligned 1:1 so that merging a PR delivers the entire scope of the issue. A PR must not close an issue prematurely before all concerns, requirements, and acceptance criteria in the issue are completely satisfied. Never use auto-closing keywords (`Fixes #<id>`, `Closes #<id>`) if residual tasks, sub-tasks, or unresolved concerns remain open.
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
@@ -164,6 +165,369 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Single-Turn Verification Focus:** Conclude each execution turn with the exact atomic outcome and the single immediate verification command or target (e.g. `Run 'just test' to verify the reproduction suite passes`).
 - **Two-Attempt Circuit Breaker:** If a tool call, test fix, or command fails twice on the same step, stop immediately. Document what failed, reassess assumptions, and re-plan rather than retrying blindly.
 - **Triad Evaluation (UX, DX, AX):** When evaluating architectural trade-offs, weigh User Experience (UX), Developer Experience (DX), and Agent Experience (AX: greppability, unambiguous symbols, explicit types, and clean tool parsing).
+
+## Continuous Development & Backlog Management Protocol
+
+### Purpose
+
+Maintain a continuous, lightweight development workflow that makes the next actionable task obvious, keeps GitHub Issues synchronized with actual progress, and minimizes repeated planning.
+
+Follow this workflow when working in repositories that use GitHub Issues for task management.
+
+Do not perform comprehensive backlog refinement unless explicitly requested or materially justified by major project changes.
+
+### 1. Sources of Truth
+
+Use the following hierarchy:
+
+1. **GitHub Issues:** Canonical task definitions, priorities, effort estimates (T-shirt sizes: XS, S, M, L, XL), dependencies, and completion status.
+2. **GitHub Projects:** Planning fields and workflow status, where configured.
+3. **Repository and tests:** Evidence of implementation and correctness.
+4. **Project documentation:** Requirements and intended behavior.
+5. **`NEXT.md`:** Derived snapshot of immediate execution priorities.
+
+Never treat `NEXT.md` as authoritative over newer GitHub information.
+
+Avoid maintaining duplicate backlogs in Markdown when GitHub Issues already provides the necessary task tracking.
+
+### 2. Beginning a Coding Session
+
+When starting an implementation session:
+
+1. Read applicable repository instructions.
+2. Identify the current GitHub repository and working branch.
+3. Check the working tree for existing uncommitted changes.
+4. Read `NEXT.md` if present.
+5. Retrieve the relevant GitHub Issues and verify their current state.
+6. Identify existing work in progress and outstanding blockers.
+7. Determine the most appropriate next task.
+
+Do not perform a full repository or backlog audit unless necessary.
+
+#### Selecting Work
+
+If the user requests a specific task, prioritize that request over the existing execution queue.
+
+If the user asks what to work on next, consult the current queue and validate it against GitHub.
+
+If the user explicitly requests autonomous backlog execution, select the highest-leverage READY task.
+
+Do not begin unrelated implementation merely because `NEXT.md` identifies available work.
+
+#### Next-Task Decision Rules
+
+Prefer tasks that are:
+
+1. Critical, when a genuine urgent issue exists.
+2. Already in progress and appropriate to finish.
+3. Ready for immediate implementation.
+4. Blocking important downstream work.
+5. High-impact relative to implementation effort.
+6. Capable of reducing meaningful technical uncertainty.
+
+Respect dependencies and avoid unnecessary context switching.
+
+Do not choose a blocked task merely because it has a higher priority.
+
+When no implementation task is ready, recommend the smallest useful blocker-resolution or investigation task.
+
+### 3. Definition of Ready
+
+Before starting an issue, verify:
+
+- [ ] Objective is clear.
+- [ ] Acceptance criteria are testable.
+- [ ] Scope is appropriately bounded.
+- [ ] Dependencies are satisfied.
+- [ ] No unresolved decision prevents execution.
+- [ ] Relevant implementation context is available.
+- [ ] Verification expectations are known.
+
+If an issue is missing minor implementation details, resolve them through repository investigation.
+
+If important requirements are missing, clarify or refine the issue before implementation.
+
+Do not invent major requirements to make a task appear ready.
+
+### 4. Maintain a NOW / NEXT / LATER Queue
+
+Maintain `NEXT.md` as a concise representation of the current execution plan.
+
+#### NOW
+
+Exactly one primary recommended task.
+
+Include:
+
+- GitHub issue number and link
+- Priority (`P0` to `P3`)
+- Effort estimate (T-shirt size: `XS`, `S`, `M`, `L`, `XL`)
+- Readiness
+- Reason for selection
+- First concrete action
+- Definition of Done
+- Important downstream tasks it unblocks
+
+#### NEXT
+
+The next 3-5 tasks, ordered by dependencies and expected value.
+
+Include links, priorities, effort estimates (T-shirt sizes), and blockers.
+
+Identify work that can be executed in parallel.
+
+#### LATER
+
+Do not reproduce the entire backlog.
+
+Link to the relevant GitHub Issues or GitHub Project view.
+
+#### BLOCKERS
+
+List meaningful blockers and unresolved decisions affecting immediate work.
+
+Keep this file short enough to review at the start of every coding session.
+
+GitHub remains the canonical source of truth.
+
+### 5. Implementation Workflow
+
+When executing a selected task:
+
+1. Retrieve the latest GitHub Issue details.
+2. Inspect relevant source code and tests.
+3. Confirm the implementation scope.
+4. Follow existing project architecture and conventions.
+5. Implement the smallest complete solution satisfying acceptance criteria.
+6. Add or update appropriate tests.
+7. Run relevant verification.
+8. Review the resulting changes for unintended consequences.
+9. Record significant discoveries or blockers.
+10. Update GitHub and the execution queue as appropriate.
+
+Prefer minimal, focused changes.
+
+Do not combine unrelated backlog tasks into one implementation unless explicitly justified.
+
+For complex tasks, use an implementation plan. Avoid unnecessary planning overhead for straightforward changes.
+
+### 6. Keep GitHub Issues Updated
+
+During implementation, treat GitHub task management as part of the workflow rather than a separate administrative activity.
+
+#### When Starting Work
+
+When supported by the repository's conventions:
+
+- Mark the issue as in progress.
+- Maintain the existing assignee or ownership conventions.
+- Reference the issue in the relevant branch or pull request.
+- Record material scope clarifications when necessary.
+
+Do not overwrite another contributor's active ownership or work.
+
+#### When Discovering Missing Work
+
+If implementation reveals a previously unknown task:
+
+1. Determine whether it belongs within the current issue's scope.
+2. Search for an existing GitHub Issue.
+3. If necessary, create a new issue with clear acceptance criteria.
+4. Set an appropriate priority (`P0`-`P3`) and effort estimate (T-shirt size: `XS`, `S`, `M`, `L`, `XL`).
+5. Link it to the current task when relevant.
+6. Reassess the execution queue only if the discovery materially changes priorities or dependencies.
+
+Do not expand the current implementation indefinitely to address unrelated discoveries.
+
+#### When Blocked
+
+If a task becomes blocked:
+
+- Identify the specific blocker.
+- Update the relevant GitHub Issue or Project status.
+- Record an actionable resolution path.
+- Link prerequisite work.
+- Select the next available task only when continued work is authorized.
+
+Do not repeatedly attempt the same unsuccessful approach without addressing its underlying cause.
+
+#### When Completing Work
+
+Before reporting completion:
+
+- Verify relevant acceptance criteria.
+- Run appropriate tests and checks.
+- Confirm that implementation scope is satisfied.
+- Identify any remaining limitations.
+
+Then synchronize GitHub appropriately:
+
+- Link related commits or pull requests.
+- Update the issue's implementation status.
+- Record meaningful remaining work.
+- Close the issue only when it meets the repository's actual completion criteria.
+
+If a pull request still requires review or merging, do not falsely report the issue as fully completed. Follow the repository's established PR-to-issue closure workflow.
+
+Never claim verification that was not performed.
+
+### 7. Automatically Refresh `NEXT.md`
+
+Update `NEXT.md` when a meaningful execution-state change occurs, including:
+
+- Completion of the current task
+- A new blocking dependency
+- A major priority change
+- Discovery of important missing work
+- Changes to the immediate execution order
+- Comprehensive backlog refinement
+
+#### Refresh Procedure
+
+1. Retrieve current GitHub Issue state.
+2. Remove completed, obsolete, or superseded tasks from the immediate queue.
+3. Reevaluate dependencies and readiness.
+4. Identify the highest-leverage actionable task.
+5. Select exactly one NOW task.
+6. Choose the next 3-5 tasks.
+7. Update `NEXT.md`.
+8. Ensure all referenced issue numbers and links are valid.
+
+Do not regenerate `NEXT.md` after every trivial code edit.
+
+Do not overwrite unrelated local changes.
+
+Treat regeneration as synchronization from GitHub, never the reverse.
+
+If GitHub is unavailable, do not silently assume cached issue data is current. Preserve the existing queue or clearly mark the result as unverified.
+
+### 8. Avoid Unnecessary Replanning
+
+Use three levels of planning:
+
+#### Level 1: Task Execution
+
+For ordinary implementation work:
+
+- Verify the selected issue.
+- Execute the task.
+- Validate the result.
+- Update GitHub.
+- Refresh the execution queue if needed.
+
+Do not audit unrelated issues.
+
+#### Level 2: Incremental Refinement
+
+Use when:
+
+- Important dependencies change.
+- New implementation discoveries affect nearby work.
+- Several upcoming tasks become blocked.
+- The current execution queue is no longer realistic.
+
+Review the affected issues and their direct dependencies.
+
+Update only what is necessary.
+
+#### Level 3: Comprehensive Backlog Audit
+
+Use when explicitly requested, or recommend it when:
+
+- Project objectives change significantly.
+- Major architectural changes invalidate the backlog.
+- A substantial amount of implementation has diverged from the plan.
+- The backlog contains widespread stale or duplicated work.
+- Reliable execution ordering cannot be established incrementally.
+
+Do not automatically perform a comprehensive audit after every completed task.
+
+### 9. Synchronization, Idempotency & Concurrency
+
+When updating GitHub:
+
+- Check issue state before writing.
+- Preserve existing descriptions, comments, and metadata.
+- Follow existing labels and GitHub Projects conventions.
+- Avoid duplicate issues or comments.
+- Do not recreate previously closed tasks without justification.
+- Do not overwrite changes made by another contributor or agent.
+- Reread recently modified issues when concurrent changes are possible.
+- Apply changes idempotently.
+- Verify successful GitHub mutations.
+
+Do not modify issues in unrelated repositories.
+
+Avoid automatically starting multiple tasks or assigning work to other contributors without authorization.
+
+Never confuse planned, implemented, verified, reviewed, and merged states.
+
+If an update fails, report the failure accurately instead of assuming it succeeded.
+
+### 10. Session Completion Protocol
+
+At the end of a substantive implementation session:
+
+#### A. Implementation Summary
+
+Report:
+
+- What changed
+- Which issue was addressed
+- What was verified
+- What remains incomplete
+
+#### B. GitHub Status
+
+Report:
+
+- Issues updated or created
+- Issues closed, if any
+- Related pull requests
+- Remaining blockers
+- Any synchronization failures
+
+#### C. Next Task
+
+Identify the next actionable issue based on the latest available state.
+
+Conclude with:
+
+**WORK ON THIS NEXT: [Issue Number] - [Issue Title]**
+
+Include a brief explanation of why it is next.
+
+If the next task is blocked, identify the immediate blocker-resolution action instead.
+
+Do not automatically start another implementation task unless the user has requested continued or autonomous execution.
+
+### 11. Interaction & Authorization Rules
+
+- For informational questions, explanations, or read-only reviews, do not modify GitHub or local files.
+- For requested coding work, keep the associated issue status and execution queue synchronized within available permissions.
+- For explicitly requested backlog refinement, perform the authorized GitHub changes rather than merely proposing them.
+- Do not delete issues, force-push, modify unrelated repositories, or change organization-wide settings.
+- Respect the user's current request over standing backlog preferences.
+- Escalate consequential ambiguities rather than making unsupported project decisions.
+- If GitHub authentication or write permissions are missing, report the limitation and provide the intended changes without pretending they were applied.
+
+Global instructions do not create background automation. Perform this workflow during active coding-agent sessions and authorized execution.
+
+### Core Principle
+
+**Always make the next actionable task obvious without turning every coding session into a planning session.**
+
+GitHub defines the work.
+
+`NEXT.md` identifies what matters now.
+
+Implementation advances the project.
+
+Verification establishes completion.
+
+GitHub synchronization preserves progress.
+
+The next task is selected from the updated state.
 
 ## Cross-Agent Task Continuity
 
