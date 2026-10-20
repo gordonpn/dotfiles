@@ -11,6 +11,7 @@ TEMPLATE_DIR="${REPO_DIR}/dotfiles/gemini"
 GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
 CODEX_DIR="${HOME}/.codex"
+OPENCODE_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/opencode"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
 LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
@@ -610,24 +611,117 @@ print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_c
 "
 }
 
+backup_with_collision_avoidance() {
+  local src="$1"
+  local base_dest="$2"
+  local dest="${base_dest}"
+  local counter=1
+  while [[ -e "${dest}" || -L "${dest}" ]]; do
+    dest="${base_dest}.${counter}"
+    counter=$((counter + 1))
+  done
+  mv "${src}" "${dest}"
+}
+
+link_skill_into() {
+  local target_dir="$1"
+  local skill_name="$2"
+  local skill_path="$3"
+  local backup_prefix="$4"
+  local dest_skill="${target_dir}/${skill_name}"
+  local needs_backup=0
+  if [[ -L "${dest_skill}" ]]; then
+    [[ "$(readlink "${dest_skill}" || true)" == "${skill_path}" ]] || needs_backup=1
+  elif [[ -e "${dest_skill}" ]]; then
+    needs_backup=1
+  fi
+  if [[ "${needs_backup}" -eq 1 ]]; then
+    local backup_root="${GEMINI_DIR}/skill-backups"
+    mkdir -p "${backup_root}"
+    local s_bak
+    s_bak="${backup_root}/${backup_prefix}.bak.$(date +%s)"
+    backup_with_collision_avoidance "${dest_skill}" "${s_bak}"
+  fi
+  ln -sfn "${skill_path}" "${dest_skill}"
+}
+
+# Prune managed or dangling skill symlinks in target_dir.
+# valid_set must be formatted with space-padded tokens (e.g. " name1 name2 ")
+# for portable Bash 3.2 compatibility without associative arrays.
+prune_managed_skill_symlinks() {
+  local target_dir="$1"
+  local valid_set="$2"
+  shift 2
+  local -a roots=("$@")
+  [[ -d "${target_dir}" ]] || return 0
+  for existing in "${target_dir}"/*; do
+    if [[ -L "${existing}" ]]; then
+      local target_dest
+      target_dest="$(readlink "${existing}" || true)"
+      local managed=0
+      local s_dir
+      for s_dir in "${roots[@]}"; do
+        if [[ "${target_dest}" == "${s_dir}/"* ]]; then
+          managed=1
+          break
+        fi
+      done
+      if [[ "${managed}" -eq 1 ]]; then
+        if [[ ! -e "${existing}" ]]; then
+          echo "Pruned stale skill link: ${existing}"
+          rm -f "${existing}"
+        else
+          local base
+          base="$(basename "${existing}")"
+          if [[ "${valid_set}" != *" ${base} "* ]]; then
+            echo "Pruned stale skill link: ${existing}"
+            rm -f "${existing}"
+          fi
+        fi
+      fi
+    fi
+  done
+}
+
+opencode_available() {
+  command -v opencode >/dev/null 2>&1 || [[ -d "${OPENCODE_DIR}" ]]
+}
+
 sync_skills_and_instructions() {
   local gemini_rules="${REPO_DIR}/dotfiles/gemini/GEMINI.md"
 
   # Link global AGENTS.md instructions
   local dest="${CODEX_DIR}/AGENTS.md"
   mkdir -p "$(dirname "${dest}")"
-  if [[ -f "${dest}" && ! -L "${dest}" ]]; then
+  if [[ -e "${dest}" && ! -L "${dest}" ]]; then
     local bak_file
     bak_file="${dest}.bak"
-    [[ -e "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
-    mv "${dest}" "${bak_file}"
+    [[ -e "${bak_file}" || -L "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
+    backup_with_collision_avoidance "${dest}" "${bak_file}"
   fi
   ln -sfn "${gemini_rules}" "${dest}"
+
+  local opencode_enabled=0
+  if opencode_available; then
+    opencode_enabled=1
+    mkdir -p "${OPENCODE_DIR}"
+    local opencode_agents="${OPENCODE_DIR}/AGENTS.md"
+    if [[ -e "${opencode_agents}" && ! -L "${opencode_agents}" ]]; then
+      local bak_file="${opencode_agents}.bak"
+      [[ -e "${bak_file}" || -L "${bak_file}" ]] && bak_file="${opencode_agents}.bak.$(date +%s)"
+      backup_with_collision_avoidance "${opencode_agents}" "${bak_file}"
+    fi
+    ln -sfn "${gemini_rules}" "${opencode_agents}"
+  fi
 
   # Link skills
   local -a search_dirs=("${HOME}/.agents/skills" "${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
   local target_root="${CODEX_DIR}/skills"
   mkdir -p "${target_root}"
+  if [[ "${opencode_enabled}" -eq 1 ]]; then
+    mkdir -p "${OPENCODE_DIR}/skills"
+  fi
+
   local valid_skills=" "
   for s_dir in "${search_dirs[@]}"; do
     if [[ -d "${s_dir}" ]]; then
@@ -639,15 +733,12 @@ sync_skills_and_instructions() {
             continue
           fi
           valid_skills="${valid_skills}${skill_name} "
-          local dest_skill="${target_root}/${skill_name}"
-          if [[ -d "${dest_skill}" && ! -L "${dest_skill}" ]]; then
-            local backup_root="${GEMINI_DIR}/skill-backups"
-            mkdir -p "${backup_root}"
-            local s_bak
-            s_bak="${backup_root}/${skill_name}.bak.$(date +%s)"
-            mv "${dest_skill}" "${s_bak}"
+          link_skill_into "${target_root}" "${skill_name}" "${skill_path}" "${skill_name}"
+
+          # Ensure OpenCode discovers skills across all search dirs
+          if [[ "${opencode_enabled}" -eq 1 ]]; then
+            link_skill_into "${OPENCODE_DIR}/skills" "${skill_name}" "${skill_path}" "opencode-${skill_name}"
           fi
-          ln -sfn "${skill_path}" "${dest_skill}"
 
           # Ensure Antigravity CLI discovers skills managed in ~/.agents/skills
           if [[ "${s_dir}" == "${HOME}/.agents/skills" ]]; then
@@ -662,28 +753,11 @@ sync_skills_and_instructions() {
     fi
   done
 
-  # Prune stale skill symlinks in Codex
-  for existing in "${target_root}"/*; do
-    if [[ -L "${existing}" ]]; then
-      local base
-      base="$(basename "${existing}")"
-      if [[ "${valid_skills}" != *" ${base} "* ]]; then
-        rm -f "${existing}"
-      fi
-    fi
-  done
-
-  # Prune stale skill symlinks in Gemini config
-  for existing in "${GEMINI_CONFIG_DIR}/skills"/*; do
-    if [[ -L "${existing}" ]]; then
-      local base
-      base="$(basename "${existing}")"
-      if [[ "${valid_skills}" != *" ${base} "* ]]; then
-        rm -f "${existing}"
-      fi
-    fi
-  done
-  echo "Synchronized shared skills and AGENTS.md instructions to Codex"
+  # Prune managed/dangling skill symlinks across all agent harnesses
+  prune_managed_skill_symlinks "${target_root}" "${valid_skills}" "${search_dirs[@]}"
+  prune_managed_skill_symlinks "${GEMINI_CONFIG_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
+  prune_managed_skill_symlinks "${OPENCODE_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
+  echo "Synchronized shared skills and AGENTS.md instructions across agents"
 }
 
 sync_memory_file() {
