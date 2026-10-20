@@ -60,6 +60,12 @@ keybindings:
     - key: T
       name: "Inspect Actions"
       command: gh enhance -R {{.RepoName}} {{.PrNumber}}
+    - key: W
+      name: "Mark PR ready for review"
+      command: >
+        gum confirm "Mark {{.RepoName}}#{{.PrNumber}} ready for review?"
+        && gh pr ready {{.PrNumber}}
+        --repo {{.RepoName}}
 
 pager:
   diff: delta --dark --line-numbers
