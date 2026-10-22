@@ -689,6 +689,26 @@ opencode_available() {
 
 sync_skills_and_instructions() {
   local gemini_rules="${REPO_DIR}/dotfiles/gemini/GEMINI.md"
+  local delegate_skill="${REPO_DIR}/dotfiles/agent-skills/delegate-coding-agents"
+  local agy_delegation_rule="${REPO_DIR}/dotfiles/gemini/antigravity-cli/rules/auto-delegation.md"
+
+  # Keep delegation assets version-controlled here, then let the shared-skill
+  # sync below mirror the skill into each agent's discovery directory.
+  if [[ -f "${delegate_skill}/SKILL.md" ]]; then
+    mkdir -p "${HOME}/.agents/skills"
+    link_skill_into "${HOME}/.agents/skills" "delegate-coding-agents" "${delegate_skill}" "delegate-coding-agents"
+  fi
+
+  local agy_rule_dest="${GEMINI_DIR}/antigravity-cli/rules/auto-delegation.md"
+  if [[ -f "${agy_delegation_rule}" ]]; then
+    mkdir -p "$(dirname "${agy_rule_dest}")"
+    if [[ ( -e "${agy_rule_dest}" || -L "${agy_rule_dest}" ) && "$(readlink "${agy_rule_dest}" 2>/dev/null || true)" != "${agy_delegation_rule}" ]]; then
+      local rule_backup_root="${GEMINI_DIR}/rule-backups"
+      mkdir -p "${rule_backup_root}"
+      backup_with_collision_avoidance "${agy_rule_dest}" "${rule_backup_root}/auto-delegation.md.bak.$(date +%s)"
+    fi
+    ln -sfn "${agy_delegation_rule}" "${agy_rule_dest}"
+  fi
 
   # Link global AGENTS.md instructions
   local dest="${CODEX_DIR}/AGENTS.md"

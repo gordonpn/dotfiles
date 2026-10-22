@@ -32,7 +32,9 @@ dotfiles/ (Public Repository)
 ~/.gemini/ (Antigravity State)
 ├── config/
 │   ├── mcp_config.json              # Fully hydrated MCP server registry (0600)
-│   └── skills/                      # Custom user skills
+│   └── skills/                      # Symlinks to shared custom skills
+├── antigravity-cli/rules/
+│   └── auto-delegation.md           # Symlink to tracked Antigravity rule
 ├── docker-profiles.json             # Local daemon + remote SSH Docker profiles
 ├── memory.json                      # Persistent knowledge graph store
 └── ssh-profiles.json                # Host profiles derived from ~/.ssh/config
@@ -41,6 +43,8 @@ dotfiles/ (Public Repository)
 ├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
 ├── config.toml                      # Hydrated managed MCP tables (0600)
 └── skills/                          # Symlinked shared skills beside .system skills
+
+~/.agents/skills/delegate-coding-agents/ # Symlink to tracked shared skill
 
 ~/.local/bin/ (Machine-Local Binaries, Not Committed)
 └── github-mcp-server                # Pinned release binary, installed by mcp-sync
@@ -92,7 +96,7 @@ just setup-codebase-memory
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
 7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` and `~/.codex/config.toml` (36 total servers).
-8. **Synchronizes Skills & Instructions:** Symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills across `~/.agents/skills/`, `~/.gemini/config/skills/`, and `~/.codex/skills/`.
+8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories. The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 
 ---
