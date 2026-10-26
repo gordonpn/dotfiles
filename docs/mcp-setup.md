@@ -6,7 +6,7 @@ This repository configures Model Context Protocol (MCP) servers, shared skills, 
 - Antigravity: `~/.gemini/config/mcp_config.json`
 - Codex: `~/.codex/config.toml`
 
-It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills to Codex (`~/.codex/skills/`).
+It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills into Codex, Antigravity, and OpenCode discovery paths.
 
 The architecture separates version-controlled templates from machine-local configuration and secrets. Because this repository is public, credentials and cluster private keys are kept in the OS Keychain or environment variables and hydrated onto the local machine via `bin/mcp-sync`.
 
@@ -97,6 +97,7 @@ just setup-codebase-memory
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
 7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` and `~/.codex/config.toml` (36 total servers).
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories. The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
+   Codex uses OpenCode DeepSeek Flash Free, then GLM Flash Free only after an explicit quota/rate-limit failure, and Gemini CLI if both OpenCode free routes are limited. The Gemini CLI fallback requires a separately installed and authenticated `gemini` command.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 
 ---

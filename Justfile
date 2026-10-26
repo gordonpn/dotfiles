@@ -1,6 +1,7 @@
 test:
     bash tests/mcp-sync.sh
     bash tests/deepseek-analyze.sh
+    bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
 
 lint:
     #!/usr/bin/env bash
@@ -10,6 +11,10 @@ lint:
         "tests/mcp-sync.sh"
         "tests/deepseek-analyze.sh"
         "scripts/deepseek-analyze.sh"
+        "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh"
+        "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-analyze.sh"
+        "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-implement.sh"
+        "dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh"
     )
     for f in "${scripts[@]}"; do
         bash -n "$f"

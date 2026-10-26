@@ -3,12 +3,12 @@ set -euo pipefail
 
 # Convenience wrapper for worktree-isolated implementation
 # Usage:
-#   delegate-implement.sh <opencode|agy> <task-id> '<task>'
+#   delegate-implement.sh <opencode|gemini> <task-id> '<task>'
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ $# -lt 3 ]]; then
-  echo "Usage: $0 <opencode|agy> <task-id> '<task description>'" >&2
+  echo "Usage: $0 <opencode|gemini> <task-id> '<task description>'" >&2
   exit 2
 fi
 

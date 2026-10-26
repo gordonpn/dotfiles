@@ -7,6 +7,12 @@ to link them into `~/.agents/skills/` and
 OpenCode, and Antigravity's skill discovery directory. Existing conflicting
 local copies are backed up by the sync script.
 
+Codex delegates sequentially to OpenCode DeepSeek Flash Free, OpenCode GLM
+Flash Free only after an explicit quota/rate-limit failure, then Gemini CLI if
+both OpenCode free routes are limited. Codex does not delegate to Antigravity
+CLI or Copilot CLI. Gemini CLI must be installed and authenticated before that
+fallback can run.
+
 Automatic delegation requires explicit opt-in in each eligible repository:
 
 ```bash
@@ -19,7 +25,7 @@ enable global shell-approval bypass.
 
 ## Notes
 
-- Parent Codex delegates to OpenCode or agy; parent agy delegates only to OpenCode.
+- Parent Codex uses the sequential OpenCode-to-Gemini fallback; parent agy delegates only to OpenCode.
 - Automatic repo opt-in avoids accidentally sending confidential employer sources to an external hosted model.
 - If no repo opt-in exists, the agent should complete tasks itself or explain that delegation is blocked.
 - Both delegations operate on a clean committed checkout; current uncommitted edits cannot be safely inherited.
