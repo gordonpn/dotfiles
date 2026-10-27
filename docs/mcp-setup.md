@@ -218,6 +218,24 @@ The package requires Node.js 22.5 or newer. Context Mode stores session data
 locally; consult the [upstream repository](https://github.com/mksglu/context-mode)
 for its data paths, security model, and current platform support.
 
+### Everything Claude Code (ECC)
+
+ECC provides reusable skills, workflows, rules, agents, and a Codex session-start
+hook. The Codex plugin is pinned to `v2.2.3`; Antigravity's minimal profile is
+installed project-locally into `.agents/` with the pinned `ecc-universal@2.2.3`
+package. Run `just setup-ecc` to install both integrations. The generated
+`.agents/` directory is ignored by Git; the pinned recipe recreates it.
+
+ECC also bundles a Chrome DevTools MCP server. It is disabled in the Codex
+template because this setup already has browser and Chrome plugins. Enable it
+in the Codex plugin settings if you specifically want that additional server.
+Start new Codex and Antigravity sessions after setup; Codex may ask you to trust
+the plugin's session-start hook.
+
+See the [ECC repository](https://github.com/affaan-m/ECC) and its
+[Antigravity guide](https://github.com/affaan-m/ECC/blob/v2.2.3/docs/ANTIGRAVITY-GUIDE.md)
+for supported components and usage.
+
 ### Deprecated Upstream, Retained Here
 
 `puppeteer`, `brave-search`, `postgres`, and `slack` come from `modelcontextprotocol/servers`, whose npm packages are marked "package no longer supported" and frozen at 2025 releases. They still work; expect no fixes. Maintained alternatives if one breaks: `@playwright/mcp` (already registered) for `puppeteer`, `@brave/brave-search-mcp-server`, `crystaldba/postgres-mcp`, and `korotovsky/slack-mcp-server`.

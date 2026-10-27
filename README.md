@@ -39,6 +39,10 @@ Codex and Antigravity CLI also use Context Mode for context-efficient tool
 output and session capture. Run `just setup-context-mode` to install the pinned
 plugin integrations. See [MCP setup](docs/mcp-setup.md#context-mode) for details.
 
+Codex and Antigravity CLI use ECC for reusable engineering workflows. Run
+`just setup-ecc` to install the pinned Codex plugin and Antigravity's
+project-local minimal profile. See [MCP setup](docs/mcp-setup.md#ecc) for details.
+
 ## Getting started
 
 Codex CLI copies transcript selections on mouse release with

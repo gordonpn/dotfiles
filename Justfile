@@ -35,5 +35,10 @@ setup-context-mode:
     bin/fix-codex-plugin-symlinks 1.0.169
     if ! agy plugin list --json | jq -e '.[] | select(.name == "context-mode")' >/dev/null; then agy plugin install https://github.com/mksglu/context-mode/tree/v1.0.169/configs/antigravity-cli; fi
 
+setup-ecc:
+    if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "ecc")' >/dev/null; then codex plugin marketplace add affaan-m/ECC --ref v2.2.3; fi
+    if ! codex plugin list --json | jq -e '.installed[] | select(.name == "ecc" and .marketplaceName == "ecc")' >/dev/null; then codex plugin add ecc@ecc; fi
+    npx --yes ecc-universal@2.2.3 install --profile minimal --target antigravity
+
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py

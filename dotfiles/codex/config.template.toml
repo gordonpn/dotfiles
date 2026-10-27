@@ -25,6 +25,11 @@ source_type = "git"
 source = "https://github.com/mksglu/context-mode.git"
 ref = "v1.0.169"
 
+[marketplaces.ecc]
+source_type = "git"
+source = "https://github.com/affaan-m/ECC.git"
+ref = "v2.2.3"
+
 [plugins."visualize@openai-bundled"]
 enabled = true
 
@@ -72,6 +77,12 @@ enabled = true
 
 [plugins."context-mode@context-mode"]
 enabled = true
+
+[plugins."ecc@ecc"]
+enabled = true
+
+[plugins."ecc@ecc".mcp_servers.chrome-devtools]
+enabled = false
 
 [features]
 js_repl = false
