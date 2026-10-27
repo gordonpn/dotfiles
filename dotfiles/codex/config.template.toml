@@ -20,6 +20,11 @@ source = "/Users/gordonpn/.cache/codex-runtimes/codex-primary-runtime/plugins/op
 source_type = "git"
 source = "https://github.com/DietrichGebert/ponytail.git"
 
+[marketplaces.context-mode]
+source_type = "git"
+source = "https://github.com/mksglu/context-mode.git"
+ref = "v1.0.169"
+
 [plugins."visualize@openai-bundled"]
 enabled = true
 
@@ -65,9 +70,13 @@ enabled = true
 [plugins."ponytail@ponytail"]
 enabled = true
 
+[plugins."context-mode@context-mode"]
+enabled = true
+
 [features]
 js_repl = false
 memories = true
+hooks = true
 
 [mcp_servers.node_repl]
 args = []

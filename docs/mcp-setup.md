@@ -8,6 +8,10 @@ This repository configures Model Context Protocol (MCP) servers, shared skills, 
 
 It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills into Codex, Antigravity, and OpenCode discovery paths.
 
+Context Mode is installed separately through its native Codex and Antigravity
+CLI plugins. Its plugin-managed MCP and hooks are intentionally not duplicated
+in `mcp_config.template.json` or `mcp-sync`.
+
 The architecture separates version-controlled templates from machine-local configuration and secrets. Because this repository is public, credentials and cluster private keys are kept in the OS Keychain or environment variables and hydrated onto the local machine via `bin/mcp-sync`.
 
 ---
@@ -42,7 +46,10 @@ dotfiles/ (Public Repository)
 ~/.codex/ (Codex State)
 ├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
 ├── config.toml                      # Hydrated managed MCP tables (0600)
+├── plugins/                         # Installed Codex plugins, including Context Mode
 └── skills/                          # Symlinked shared skills beside .system skills
+
+~/.gemini/config/plugins/            # Installed Antigravity CLI plugins, including Context Mode
 
 ~/.agents/skills/delegate-coding-agents/ # Symlink to tracked shared skill
 
@@ -181,6 +188,32 @@ just lint
 Daemon startup and indexing errors are recorded in
 `~/.cache/codebase-memory-mcp/logs/cbm-daemon.log`. All clients must use the same
 runtime build and cache root to share the coordination daemon.
+
+### Context Mode
+
+Context Mode's official plugins provide its MCP server and context-capture
+hooks for Codex and Antigravity CLI. The global npm package and Git plugin
+sources are pinned to `1.0.169` / `v1.0.169` in `Justfile` and
+`dotfiles/codex/config.template.toml`. Codex enables `hooks` in that template.
+The hooks run the locally installed
+`context-mode` binary during agent events, so review upstream changes before
+upgrading the version pin.
+
+Run `just setup-context-mode` to install the pinned package, enable Codex hook
+support, and add any missing plugins. This is separate from `mcp-sync`; the
+plugins own their MCP and hook registrations, so do not add a duplicate
+`context-mode` server to the shared MCP template.
+Restart Codex and `agy` after setup. Verify with:
+
+```bash
+context-mode doctor
+codex plugin list --marketplace context-mode
+agy plugin list --json
+```
+
+The package requires Node.js 22.5 or newer. Context Mode stores session data
+locally; consult the [upstream repository](https://github.com/mksglu/context-mode)
+for its data paths, security model, and current platform support.
 
 ### Deprecated Upstream, Retained Here
 

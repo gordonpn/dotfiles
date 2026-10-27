@@ -27,5 +27,12 @@ lint:
 setup-codebase-memory:
     bash bin/mcp-sync --codebase-memory-only
 
+setup-context-mode:
+    npm list --global context-mode@1.0.169 --depth=0 >/dev/null 2>&1 || npm install --global context-mode@1.0.169
+    codex features enable hooks
+    if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "context-mode")' >/dev/null; then codex plugin marketplace add mksglu/context-mode --ref v1.0.169; fi
+    if ! codex plugin list --json | jq -e 'flatten[] | select(type == "object" and .name == "context-mode")' >/dev/null; then codex plugin add context-mode@context-mode; fi
+    if ! agy plugin list --json | jq -e '.[] | select(.name == "context-mode")' >/dev/null; then agy plugin install https://github.com/mksglu/context-mode/tree/v1.0.169/configs/antigravity-cli; fi
+
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py

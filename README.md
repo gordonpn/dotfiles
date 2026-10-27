@@ -35,6 +35,10 @@ Antigravity CLI, OpenCode, and Codex share a local codebase knowledge graph MCP
 server. Run `just setup-codebase-memory` to install and configure it. See
 [MCP setup](docs/mcp-setup.md#codebase-memory-mcp) for usage and diagnostics.
 
+Codex and Antigravity CLI also use Context Mode for context-efficient tool
+output and session capture. Run `just setup-context-mode` to install the pinned
+plugin integrations. See [MCP setup](docs/mcp-setup.md#context-mode) for details.
+
 ## Getting started
 
 Codex CLI copies transcript selections on mouse release with
