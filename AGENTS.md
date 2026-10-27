@@ -4,7 +4,7 @@ These instructions apply specifically to this repository. Global engineering sta
 
 ## Repo-Specific Context
 - **Personal Agent Client Parity:** When installing MCP servers or skills for personal projects, configure Antigravity CLI (`agy`) and Codex unless explicitly requested otherwise. Keep shared configuration and skill synchronization authoritative.
-- **Direct Dotfiles Delivery:** For this repository and dotfiles work, GitHub issues, issue hierarchies, and pull requests are not required. Deliver verified, atomic Conventional Commits directly to the default `main` or `master` branch. Keep staged diff review and the automated review gate before pushing.
+- **Dotfiles Delivery:** GitHub issues and issue hierarchies are optional for this repository, but changes must be committed on a dedicated task branch and delivered through a draft PR targeting the default branch. Never commit directly to `main` or `master`. Keep staged diff review and the automated review gate before pushing.
 - **Shell Configuration:** This repository contains the source of truth for shell exports, aliases, and setup scripts for both macOS and Ubuntu systems.
 - **Cross-Platform:** Always verify changes against both Darwin and Linux logic blocks in `.zshrc_new`, `.zprofile`, and related files.
 - **Dynamic Clipboard:** Use `bin/cbcopy` for clipboard tasks. It detects macOS (`pbcopy`), Wayland (`wl-copy`), X11 (`xclip`/`xsel`), and remote SSH sessions (OSC 52 escape sequence to local client terminal).
