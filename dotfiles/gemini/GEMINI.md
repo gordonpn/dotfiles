@@ -587,3 +587,5 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 ## Lessons
 <!-- Newest on top. Delete what no longer applies. -->
 
+- When a service targets different hosted and self-hosted databases, keep dialect-specific SQL and migrations behind storage adapters and verify each supported backend.
+
