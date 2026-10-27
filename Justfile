@@ -40,5 +40,11 @@ setup-ecc:
     if ! codex plugin list --json | jq -e '.installed[] | select(.name == "ecc" and .marketplaceName == "ecc")' >/dev/null; then codex plugin add ecc@ecc; fi
     npx --yes ecc-universal@2.2.3 install --profile minimal --target antigravity
 
+setup-claude-mem:
+    CLAUDE_MEM_TELEMETRY=0 npx --yes claude-mem@15.3.0 telemetry disable
+    CLAUDE_MEM_TELEMETRY=0 CLAUDE_MEM_ONLINE_OPTIN=false npx --yes claude-mem@15.3.0 install --ide claude-code --provider claude --runtime worker --no-auto-start
+    CLAUDE_MEM_TELEMETRY=0 CLAUDE_MEM_ONLINE_OPTIN=false npx --yes claude-mem@15.3.0 install --ide codex-cli --provider claude --runtime worker --no-auto-start
+    npx --yes claude-mem@15.3.0 start
+
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py
