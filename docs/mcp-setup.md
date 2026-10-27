@@ -200,9 +200,12 @@ The hooks run the locally installed
 upgrading the version pin.
 
 Run `just setup-context-mode` to install the pinned package, enable Codex hook
-support, and add any missing plugins. This is separate from `mcp-sync`; the
-plugins own their MCP and hook registrations, so do not add a duplicate
-`context-mode` server to the shared MCP template.
+support, add any missing plugins, and work around Codex rejecting npm-generated
+symlinks while loading plugin hooks. The workaround replaces symlinks in the
+installed Codex plugin cache with executable wrappers and is reapplied after
+plugin installation. This is separate from `mcp-sync`; the plugins own their
+MCP and hook registrations, so do not add a duplicate `context-mode` server to
+the shared MCP template.
 Restart Codex and `agy` after setup. Verify with:
 
 ```bash

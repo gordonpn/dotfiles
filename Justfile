@@ -32,6 +32,7 @@ setup-context-mode:
     codex features enable hooks
     if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "context-mode")' >/dev/null; then codex plugin marketplace add mksglu/context-mode --ref v1.0.169; fi
     if ! codex plugin list --json | jq -e 'flatten[] | select(type == "object" and .name == "context-mode")' >/dev/null; then codex plugin add context-mode@context-mode; fi
+    bin/fix-codex-plugin-symlinks 1.0.169
     if ! agy plugin list --json | jq -e '.[] | select(.name == "context-mode")' >/dev/null; then agy plugin install https://github.com/mksglu/context-mode/tree/v1.0.169/configs/antigravity-cli; fi
 
 verify-codebase-memory:
