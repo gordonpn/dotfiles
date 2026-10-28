@@ -35,17 +35,9 @@ Antigravity CLI, OpenCode, and Codex share a local codebase knowledge graph MCP
 server. Run `just setup-codebase-memory` to install and configure it. See
 [MCP setup](docs/mcp-setup.md#codebase-memory-mcp) for usage and diagnostics.
 
-Codex and Antigravity CLI also use Context Mode for context-efficient tool
-output and session capture. Run `just setup-context-mode` to install the pinned
-plugin integrations. See [MCP setup](docs/mcp-setup.md#context-mode) for details.
-
 Codex and Antigravity CLI use ECC for reusable engineering workflows. Run
 `just setup-ecc` to install the pinned Codex plugin and Antigravity's
 project-local minimal profile. See [MCP setup](docs/mcp-setup.md#ecc) for details.
-
-Claude Code and Codex use claude-mem for persistent local agent memory. Run
-`just setup-claude-mem` to install the pinned integrations with telemetry disabled.
-See [MCP setup](docs/mcp-setup.md#claude-mem) for privacy and Antigravity notes.
 
 ## Getting started
 

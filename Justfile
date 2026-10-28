@@ -27,24 +27,10 @@ lint:
 setup-codebase-memory:
     bash bin/mcp-sync --codebase-memory-only
 
-setup-context-mode:
-    npm list --global context-mode@1.0.169 --depth=0 >/dev/null 2>&1 || npm install --global context-mode@1.0.169
-    codex features enable hooks
-    if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "context-mode")' >/dev/null; then codex plugin marketplace add mksglu/context-mode --ref v1.0.169; fi
-    if ! codex plugin list --json | jq -e 'flatten[] | select(type == "object" and .name == "context-mode")' >/dev/null; then codex plugin add context-mode@context-mode; fi
-    bin/fix-codex-plugin-symlinks 1.0.169
-    if ! agy plugin list --json | jq -e '.[] | select(.name == "context-mode")' >/dev/null; then agy plugin install https://github.com/mksglu/context-mode/tree/v1.0.169/configs/antigravity-cli; fi
-
 setup-ecc:
     if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "ecc")' >/dev/null; then codex plugin marketplace add affaan-m/ECC --ref v2.2.3; fi
     if ! codex plugin list --json | jq -e '.installed[] | select(.name == "ecc" and .marketplaceName == "ecc")' >/dev/null; then codex plugin add ecc@ecc; fi
     npx --yes ecc-universal@2.2.3 install --profile minimal --target antigravity
-
-setup-claude-mem:
-    CLAUDE_MEM_TELEMETRY=0 npx --yes claude-mem@15.3.0 telemetry disable
-    CLAUDE_MEM_TELEMETRY=0 CLAUDE_MEM_ONLINE_OPTIN=false npx --yes claude-mem@15.3.0 install --ide claude-code --provider claude --runtime worker --no-auto-start
-    CLAUDE_MEM_TELEMETRY=0 CLAUDE_MEM_ONLINE_OPTIN=false npx --yes claude-mem@15.3.0 install --ide codex-cli --provider claude --runtime worker --no-auto-start
-    npx --yes claude-mem@15.3.0 start
 
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py

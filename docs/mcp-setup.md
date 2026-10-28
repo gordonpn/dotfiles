@@ -8,10 +8,6 @@ This repository configures Model Context Protocol (MCP) servers, shared skills, 
 
 It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills into Codex, Antigravity, and OpenCode discovery paths.
 
-Context Mode is installed separately through its native Codex and Antigravity
-CLI plugins. Its plugin-managed MCP and hooks are intentionally not duplicated
-in `mcp_config.template.json` or `mcp-sync`.
-
 The architecture separates version-controlled templates from machine-local configuration and secrets. Because this repository is public, credentials and cluster private keys are kept in the OS Keychain or environment variables and hydrated onto the local machine via `bin/mcp-sync`.
 
 ---
@@ -46,10 +42,10 @@ dotfiles/ (Public Repository)
 ~/.codex/ (Codex State)
 ├── AGENTS.md                        # Symlink to dotfiles/gemini/GEMINI.md
 ├── config.toml                      # Hydrated managed MCP tables (0600)
-├── plugins/                         # Installed Codex plugins, including Context Mode
+├── plugins/                         # Installed Codex plugins
 └── skills/                          # Symlinked shared skills beside .system skills
 
-~/.gemini/config/plugins/            # Installed Antigravity CLI plugins, including Context Mode
+~/.gemini/config/plugins/            # Installed Antigravity CLI plugins
 
 ~/.agents/skills/delegate-coding-agents/ # Symlink to tracked shared skill
 
@@ -189,35 +185,6 @@ Daemon startup and indexing errors are recorded in
 `~/.cache/codebase-memory-mcp/logs/cbm-daemon.log`. All clients must use the same
 runtime build and cache root to share the coordination daemon.
 
-### Context Mode
-
-Context Mode's official plugins provide its MCP server and context-capture
-hooks for Codex and Antigravity CLI. The global npm package and Git plugin
-sources are pinned to `1.0.169` / `v1.0.169` in `Justfile` and
-`dotfiles/codex/config.template.toml`. Codex enables `hooks` in that template.
-The hooks run the locally installed
-`context-mode` binary during agent events, so review upstream changes before
-upgrading the version pin.
-
-Run `just setup-context-mode` to install the pinned package, enable Codex hook
-support, add any missing plugins, and work around Codex rejecting npm-generated
-symlinks while loading plugin hooks. The workaround replaces symlinks in the
-installed Codex plugin cache with executable wrappers and is reapplied after
-plugin installation. This is separate from `mcp-sync`; the plugins own their
-MCP and hook registrations, so do not add a duplicate `context-mode` server to
-the shared MCP template.
-Restart Codex and `agy` after setup. Verify with:
-
-```bash
-context-mode doctor
-codex plugin list --marketplace context-mode
-agy plugin list --json
-```
-
-The package requires Node.js 22.5 or newer. Context Mode stores session data
-locally; consult the [upstream repository](https://github.com/mksglu/context-mode)
-for its data paths, security model, and current platform support.
-
 ### Everything Claude Code (ECC)
 
 ECC provides reusable skills, workflows, rules, agents, and a Codex session-start
@@ -235,36 +202,6 @@ the plugin's session-start hook.
 See the [ECC repository](https://github.com/affaan-m/ECC) and its
 [Antigravity guide](https://github.com/affaan-m/ECC/blob/v2.2.3/docs/ANTIGRAVITY-GUIDE.md)
 for supported components and usage.
-
-### Claude-Mem
-
-Claude-Mem captures agent observations and builds persistent memory. Run
-`just setup-claude-mem` to install the pinned `15.3.0` integrations for Claude
-Code and Codex. The setup uses the existing Claude provider, runs a local worker,
-and disables telemetry while preserving Claude Code's native auto-memory. It
-does not configure cloud sync; ignore the optional CMEM sign-in link printed by
-the installer unless you choose to enable its account features. Captured prompts
-and tool observations may still be processed by the configured Claude provider,
-so local storage is not a privacy boundary for sensitive repositories.
-
-Restart Claude Code and Codex after setup. Verify with:
-
-```bash
-npx --yes claude-mem@15.3.0 doctor
-npx --yes claude-mem@15.3.0 status
-claude plugin list
-codex plugin list
-```
-
-The Antigravity integration is intentionally not installed: its upstream
-installer adds a mutable memory section to `~/.gemini/GEMINI.md`. On this host,
-that path is a symlink to the tracked `dotfiles/gemini/GEMINI.md`, so generated
-memory would modify the global instruction source. Revisit the integration after
-separating Antigravity's runtime context file from tracked instructions.
-
-See the [Claude-Mem repository](https://github.com/thedotmack/claude-mem), its
-[Codex integration guide](https://github.com/thedotmack/claude-mem/blob/v15.3.0/docs/public/platform-integration.mdx),
-and [Antigravity setup guide](https://docs.claude-mem.ai/antigravity-cli/setup).
 
 ### Deprecated Upstream, Retained Here
 
