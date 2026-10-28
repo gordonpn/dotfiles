@@ -203,36 +203,6 @@ See the [ECC repository](https://github.com/affaan-m/ECC) and its
 [Antigravity guide](https://github.com/affaan-m/ECC/blob/v2.2.3/docs/ANTIGRAVITY-GUIDE.md)
 for supported components and usage.
 
-### Claude-Mem
-
-Claude-Mem captures agent observations and builds persistent memory. Run
-`just setup-claude-mem` to install the pinned `15.3.0` integrations for Claude
-Code and Codex. The setup uses the existing Claude provider, runs a local worker,
-and disables telemetry while preserving Claude Code's native auto-memory. It
-does not configure cloud sync; ignore the optional CMEM sign-in link printed by
-the installer unless you choose to enable its account features. Captured prompts
-and tool observations may still be processed by the configured Claude provider,
-so local storage is not a privacy boundary for sensitive repositories.
-
-Restart Claude Code and Codex after setup. Verify with:
-
-```bash
-npx --yes claude-mem@15.3.0 doctor
-npx --yes claude-mem@15.3.0 status
-claude plugin list
-codex plugin list
-```
-
-The Antigravity integration is intentionally not installed: its upstream
-installer adds a mutable memory section to `~/.gemini/GEMINI.md`. On this host,
-that path is a symlink to the tracked `dotfiles/gemini/GEMINI.md`, so generated
-memory would modify the global instruction source. Revisit the integration after
-separating Antigravity's runtime context file from tracked instructions.
-
-See the [Claude-Mem repository](https://github.com/thedotmack/claude-mem), its
-[Codex integration guide](https://github.com/thedotmack/claude-mem/blob/v15.3.0/docs/public/platform-integration.mdx),
-and [Antigravity setup guide](https://docs.claude-mem.ai/antigravity-cli/setup).
-
 ### Deprecated Upstream, Retained Here
 
 `puppeteer`, `brave-search`, `postgres`, and `slack` come from `modelcontextprotocol/servers`, whose npm packages are marked "package no longer supported" and frozen at 2025 releases. They still work; expect no fixes. Maintained alternatives if one breaks: `@playwright/mcp` (already registered) for `puppeteer`, `@brave/brave-search-mcp-server`, `crystaldba/postgres-mcp`, and `korotovsky/slack-mcp-server`.
