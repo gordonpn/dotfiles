@@ -569,8 +569,8 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
   - OpenCode (`opencode/deepseek-v4.1-flash-free`, then `opencode/glm-5.3-flash-free` on quota limits): Exploration, implementation, unit tests, and routine analysis via currently free offers.
   - Gemini CLI (`gemini`): Final free-route fallback for bounded analysis or implementation when OpenCode free models are quota-limited; use the account's configured model and leave shell-command approvals enabled.
 - **Execution Modes:**
-  - `plan` (Read-Only): Proposes plans, traces code paths, or finds risks without touching files. Use `delegate-analyze.sh [opencode|gemini] '<task>'` or `delegate.sh --mode plan`. Files are strictly checked to remain unmodified.
-  - `build` (Implementation): Runs in an isolated Git worktree on a dedicated branch. Use `delegate-implement.sh <opencode|gemini> <task-id> '<task>'` or `delegate.sh --mode build`. Inspect diffs and untracked files before staging and integrating approved changes into the orchestrator branch.
+  - `plan` (Read-Only): Proposes plans, traces code paths, or finds risks without touching files. For Codex, use `delegate-analyze.sh [opencode|gemini] '<task>'`. For automatic Antigravity delegation, use `delegate.sh --orchestrator agy --automatic --agent opencode --mode plan --id <task-id> --task '<task>'`. Files are strictly checked to remain unmodified.
+  - `build` (Implementation): Runs in an isolated Git worktree on a dedicated branch. For Codex, use `delegate-implement.sh <opencode|gemini> <task-id> '<task>'`. For automatic Antigravity delegation, use `delegate.sh --orchestrator agy --automatic --agent opencode --mode build --id <task-id> --task '<task>'`. Inspect diffs and untracked files, stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch.
 - **Guardrails:**
   - Never delegate recursively (`CODING_DELEGATE_ACTIVE=1` guards recursion).
   - Snapshotting requires a clean working tree. Never delegate with uncommitted or untracked changes in the base repository.

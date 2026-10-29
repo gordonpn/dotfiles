@@ -13,7 +13,7 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
 2. **Phase Routing:**
    - Use OpenCode `--mode plan` for initial repository exploration, architecture analysis, trade-off evaluation, and test plan creation.
    - Use OpenCode `--mode build` for generating tests, boilerplate, mechanical refactors, documentation, and separable implementation slices.
-3. **Orchestrator Scope:** Antigravity owns cross-cutting architectural validation, final review, test verification, staging approved changes from the worktree, and PR delivery. Do not duplicate OpenCode's exploration or draft work when delegation is available.
+3. **Orchestrator Scope:** Antigravity owns cross-cutting architectural validation, final review, test verification, cherry-picking approved worktree commits, and PR delivery. Do not duplicate OpenCode's exploration or draft work when delegation is available.
 4. **Eligibility Gate:** Delegate only when the repository has local Git configuration `agents.delegationAllowed=true` and a clean working tree (`git status --porcelain` empty). If the working tree is dirty or delegation is disabled, execute directly. Never bypass the opt-in gate for confidential or employer code.
 5. **Defer to User Intent:** When the user explicitly requests direct execution, asks Antigravity not to delegate, or specifies a different workflow, respect their choice and execute directly without delegating.
 
@@ -33,5 +33,5 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
   ```
 - Give the worker explicit scope, acceptance criteria, verification commands, and prohibited file areas.
 - After the run completes, inspect `DELEGATION_RESULT`, reports, diffs, and untracked files. Independently verify the proposed changes against repository invariants and tests.
-- Review and stage approved file changes from the worktree into the orchestrator branch; never blindly apply unreviewed diffs.
+- Review the worktree changes. Stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch; never blindly apply unreviewed diffs.
 - Preserve the configured Alibaba Open Code Review gate. Never auto-push or create a PR unless asked.
