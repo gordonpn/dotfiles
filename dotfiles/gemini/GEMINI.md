@@ -570,7 +570,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
   - Gemini CLI (`gemini`): Final free-route fallback for bounded analysis or implementation when OpenCode free models are quota-limited; use the account's configured model and leave shell-command approvals enabled.
 - **Execution Modes:**
   - `plan` (Read-Only): Proposes plans, traces code paths, or finds risks without touching files. Use `delegate-analyze.sh [opencode|gemini] '<task>'` or `delegate.sh --mode plan`. Files are strictly checked to remain unmodified.
-  - `build` (Implementation): Runs in an isolated Git worktree on a dedicated branch. Use `delegate-implement.sh <opencode|gemini> <task-id> '<task>'` or `delegate.sh --mode build`. Inspect diffs and untracked files before staging or cherry-picking.
+  - `build` (Implementation): Runs in an isolated Git worktree on a dedicated branch. Use `delegate-implement.sh <opencode|gemini> <task-id> '<task>'` or `delegate.sh --mode build`. Inspect diffs and untracked files before staging and integrating approved changes into the orchestrator branch.
 - **Guardrails:**
   - Never delegate recursively (`CODING_DELEGATE_ACTIVE=1` guards recursion).
   - Snapshotting requires a clean working tree. Never delegate with uncommitted or untracked changes in the base repository.

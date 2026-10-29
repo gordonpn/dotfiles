@@ -11,16 +11,27 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
 
 1. **Default to OpenCode:** Whenever an engineering task requires codebase exploration, design analysis, test drafting, or code modification, delegate the subtask to OpenCode before attempting to write code directly.
 2. **Phase Routing:**
-   - Use OpenCode `--mode plan` (or `scripts/deepseek-analyze.sh`) for initial repository exploration, architecture analysis, trade-off evaluation, and test plan creation.
+   - Use OpenCode `--mode plan` for initial repository exploration, architecture analysis, trade-off evaluation, and test plan creation.
    - Use OpenCode `--mode build` for generating tests, boilerplate, mechanical refactors, documentation, and separable implementation slices.
-3. **Orchestrator Scope:** Antigravity owns cross-cutting architectural validation, final review, test verification, integration cherry-picking, and PR delivery. Do not duplicate OpenCode's exploration or draft work when delegation is available.
+3. **Orchestrator Scope:** Antigravity owns cross-cutting architectural validation, final review, test verification, staging approved changes from the worktree, and PR delivery. Do not duplicate OpenCode's exploration or draft work when delegation is available.
 4. **Eligibility Gate:** Delegate only when the repository has local Git configuration `agents.delegationAllowed=true` and a clean working tree (`git status --porcelain` empty). If the working tree is dirty or delegation is disabled, execute directly. Never bypass the opt-in gate for confidential or employer code.
+5. **Defer to User Intent:** When the user explicitly requests direct execution, asks Antigravity not to delegate, or specifies a different workflow, respect their choice and execute directly without delegating.
 
 ## Execution
 
-- Invoke the installed `delegate-coding-agents` skill via `scripts/delegate.sh` or `scripts/deepseek-analyze.sh`:
-  `"$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" --orchestrator agy --agent opencode --mode plan|build --automatic --id <meaningful-id> --task '<bounded-task>'`
+- Invoke the installed `delegate-coding-agents` skill via `scripts/delegate.sh`:
+  ```bash
+  # Plan mode (investigation and architecture):
+  "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
+    --orchestrator agy --agent opencode --mode plan --automatic \
+    --id explore-feature --task 'Investigate module structure and propose tests.'
+
+  # Build mode (mechanical refactors and tests):
+  "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
+    --orchestrator agy --agent opencode --mode build --automatic \
+    --id implement-tests --task 'Implement unit tests for the validator.'
+  ```
 - Give the worker explicit scope, acceptance criteria, verification commands, and prohibited file areas.
 - After the run completes, inspect `DELEGATION_RESULT`, reports, diffs, and untracked files. Independently verify the proposed changes against repository invariants and tests.
-- Integrate approved work into the orchestrator branch; never blindly apply unreviewed diffs.
+- Review and stage approved file changes from the worktree into the orchestrator branch; never blindly apply unreviewed diffs.
 - Preserve the configured Alibaba Open Code Review gate. Never auto-push or create a PR unless asked.
