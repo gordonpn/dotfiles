@@ -21,7 +21,8 @@
     },
     "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"]
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "disabled": true
     },
     "puppeteer": {
       "command": "npx",
@@ -31,9 +32,19 @@
     "memory": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "disabled": true,
       "env": {
         "MEMORY_FILE_PATH": "${HOME}/.gemini/memory.json"
       }
+    },
+    "ai-memory": {
+      "command": "${HOME}/.local/bin/ai-memory",
+      "args": [
+        "mcp-bridge",
+        "--no-session-id",
+        "--server-url",
+        "http://127.0.0.1:49374/mcp"
+      ]
     },
     "codebase-memory-mcp": {
       "command": "${HOME}/.local/share/codebase-memory-mcp/codebase-memory-mcp",
@@ -164,7 +175,8 @@
         "-y",
         "@modelcontextprotocol/server-filesystem",
         "${HOME}/workspace/server-services-configs"
-      ]
+      ],
+      "disabled": true
     },
     "repomix": {
       "command": "repomix",

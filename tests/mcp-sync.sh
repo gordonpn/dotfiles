@@ -135,13 +135,43 @@ entry="$(jq -c '.mcpServers["codebase-memory-mcp"]' "${TEMPLATE_DIR}/mcp_config.
 expected="{\"command\":\"\${HOME}/.local/share/codebase-memory-mcp/codebase-memory-mcp\",\"args\":[]}"
 [[ "$entry" == "$expected" ]]
 
+ai_entry="$(jq -c '.mcpServers["ai-memory"]' "${TEMPLATE_DIR}/mcp_config.template.json")"
+ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-bridge\",\"--no-session-id\",\"--server-url\",\"http://127.0.0.1:49374/mcp\"]}"
+[[ "$ai_entry" == "$ai_expected" ]]
+
+[[ "$(jq -r '.mcpServers["chrome-devtools"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["memory"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["server-services-configs"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+
 get_secret() { printf ''; }
 gh() { return 1; }
 
 sync_mcp_config
 uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" --configs-only
 
+[[ "$(jq -r '.mcpServers["ai-memory"].command' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "${HOME}/.local/bin/ai-memory" ]]
+[[ "$(jq -r '.mcpServers["memory"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["chrome-devtools"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["server-services-configs"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+
+grep -F '[mcp_servers."ai-memory"]' "${CODEX_DIR}/config.toml"
+grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 3 -F '[mcp_servers."chrome-devtools"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 3 -F '[mcp_servers."server-services-configs"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+# Fast-path stamp check for ai-memory
+ai_stamp="${LOCAL_BIN_DIR}/.ai-memory.version"
+mkdir -p "${LOCAL_BIN_DIR}"
+touch "${LOCAL_BIN_DIR}/ai-memory"
+chmod +x "${LOCAL_BIN_DIR}/ai-memory"
+printf '3.2.9\n' >"${ai_stamp}"
+: >"$calls"
+install_ai_memory
+[[ ! -s "$calls" ]]
+
 # Verify skill and instruction synchronization across agents
+mkdir -p "${HOME}/.local/share/cc-thinking-skills/skills/thinking-model-router"
+touch "${HOME}/.local/share/cc-thinking-skills/skills/thinking-model-router/SKILL.md"
 mkdir -p "${HOME}/.agents/skills/shared-skill"
 touch "${HOME}/.agents/skills/shared-skill/SKILL.md"
 mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-skill"
@@ -215,9 +245,12 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 
 [[ "$(readlink "${CODEX_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
+[[ "$(readlink "${OPENCODE_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
+[[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 
 # Manual non-symlink skill is preserved
 [[ -d "${OPENCODE_DIR}/skills/manual-skill" && ! -L "${OPENCODE_DIR}/skills/manual-skill" ]]
@@ -271,6 +304,8 @@ backup_count_after=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 )
 
 install_codebase_memory_mcp() { echo codebase >>"$calls"; }
+install_ai_memory() { echo ai-memory >>"$calls"; }
+install_thinking_skills() { echo thinking-skills >>"$calls"; }
 install_github_mcp_server() { echo github >>"$calls"; }
 install_terraform_mcp_server() { echo terraform >>"$calls"; }
 install_repomix() { echo repomix >>"$calls"; }
@@ -295,5 +330,5 @@ opencode() { :; }
 
 (main)
 
-[[ "$(cat "$calls")" == $'codebase\ngithub\nterraform\nrepomix\nk3s' ]]
+[[ "$(cat "$calls")" == $'codebase\nai-memory\nthinking-skills\ngithub\nterraform\nrepomix\nk3s' ]]
 echo 'MCP setup checks passed'
