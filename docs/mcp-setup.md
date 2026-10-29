@@ -113,9 +113,10 @@ just setup-codebase-memory
 | **`fetch`** | stdio | `uvx mcp-server-fetch` | HTTP web requests and HTML-to-markdown conversion |
 | **`git`** | stdio | `uvx mcp-server-git` | Structured status, diff, log, branch, and commit operations on local repos |
 | **`playwright`** | stdio | `npx -y @playwright/mcp@latest` | Accessibility-tree browser automation and interaction |
-| **`chrome-devtools`** | stdio | `npx -y chrome-devtools-mcp@latest` | Performance traces, network inspection, and console access |
-| **`puppeteer`** | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
-| **`memory`** | stdio | `npx -y @modelcontextprotocol/server-memory` | Persistent knowledge graph in `~/.gemini/memory.json` |
+| **`chrome-devtools`** (disabled) | stdio | `npx -y chrome-devtools-mcp@latest` | Performance traces, network inspection, and console access (consolidated to Playwright) |
+| **`puppeteer`** (disabled) | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
+| **`memory`** (disabled) | stdio | `npx -y @modelcontextprotocol/server-memory` | Legacy JSON knowledge graph store (superseded by ai-memory) |
+| **`ai-memory`** | stdio | `~/.local/bin/ai-memory mcp-bridge --no-session-id --server-url http://127.0.0.1:49374/mcp` | Unified cross-agent memory, session tracking, handoffs, and durable wiki knowledge base |
 | **`codebase-memory-mcp`** | stdio | Pinned native binary | Local code indexing, structural search, call graphs, and architecture queries |
 | **`sequentialthinking`** | stdio | `npx -y @modelcontextprotocol/server-sequential-thinking` | Structured multi-step reasoning scratchpad |
 | **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
@@ -133,7 +134,7 @@ just setup-codebase-memory
 | **`uptime-kuma`** | stdio | `npx -y @davidfuchs/mcp-uptime-kuma` | Monitor healthchecks, status pages, and heartbeats |
 | **`healthchecks`**| stdio | `npx -y healthchecks-mcp` | Dead man's switch and scheduled cron task inspection |
 | **`filesystem`** | stdio | `npx -y @modelcontextprotocol/server-filesystem` | Scoped filesystem access for the user home directory |
-| **`server-services-configs`** | stdio | `@modelcontextprotocol/server-filesystem` | Scoped filesystem access to service configurations |
+| **`server-services-configs`** (disabled) | stdio | `@modelcontextprotocol/server-filesystem` | Scoped filesystem access (redundant with filesystem on $HOME) |
 | **`repomix`** | stdio | `repomix --mcp` | AI-optimized repository packing, remote git cloning, and output analysis |
 | **`caddy`** | stdio | `@yawlabs/caddy-mcp` | Caddy reverse proxy admin API for dynamic route inspection |
 | **`context7`** | stdio | `@upstash/context7-mcp` | Real-time library documentation and code reference search |
@@ -184,6 +185,25 @@ just lint
 Daemon startup and indexing errors are recorded in
 `~/.cache/codebase-memory-mcp/logs/cbm-daemon.log`. All clients must use the same
 runtime build and cache root to share the coordination daemon.
+
+### ai-memory
+
+`ai-memory` provides unified cross-agent conversation capture, turn tracking, handoffs, and a local wiki knowledge base across Antigravity CLI, Codex, and OpenCode.
+
+- **Daemon Architecture:** Runs a local background service on `http://127.0.0.1:49374` managed via launchd (`com.github.akitaonrails.ai-memory.plist` on macOS).
+- **Client Transport:** Clients connect via the stdio bridge:
+  `~/.local/bin/ai-memory mcp-bridge --no-session-id --server-url http://127.0.0.1:49374/mcp`
+- **Knowledge Storage:** Sessions, observations, and wiki markdown pages persist in SQLite under `~/Library/Application Support/ai-memory/` on macOS.
+- **Hook Integration:** Capture hooks are staged in `~/.local/share/ai-memory/hooks/` for automated session lifecycle recording.
+- **Setup & Verification:** `bin/mcp-sync` checks the binary stamp, extracts hooks if missing, and verifies service availability. Run `ai-memory status` or check `curl -fsSL http://127.0.0.1:49374/healthz` for daemon health.
+
+### cc-thinking-skills (Thinking Model Router)
+
+`tjboudreaux/cc-thinking-skills` contains specialized thinking skills for reasoning, architecture, debugging, and verification.
+
+- **Context Budget Protection:** Registering all 28 individual thinking skills directly into agent skill discovery paths overflows context window prompts (consuming substantial budget and displacing operational skills).
+- **Router Pattern:** The repository is cloned to `~/.local/share/cc-thinking-skills/`. Only `thinking-model-router` is symlinked into `~/.agents/skills/`.
+- **Workflow:** The single `thinking-model-router` skill inspects incoming tasks and activates or references the specific thinking model needed from `~/.local/share/cc-thinking-skills/skills/`.
 
 ### Everything Claude Code (ECC)
 
