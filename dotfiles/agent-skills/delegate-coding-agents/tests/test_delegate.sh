@@ -118,17 +118,13 @@ grep -q 'opencode plan default-variant complete' "$TMP/glm-fallback.out"
 # Automatic fallback from deepseek to glm when deepseek fails across each retained OpenCode v1.19.3 provider-error form
 for provider_err in \
   'timestamp=2026-11-03T16:57:10.019Z level=ERROR run=e048f2aa message=failed ref=err_5508aa4d error="ProviderModelNotFoundError: Model not found: opencode/deepseek-v4.1-flash-free."' \
-  'timestamp=2026-11-03T16:57:10.019Z level=ERROR run=e048f2aa message=failed ref=err_5508aa4d error="ProviderInitError: Failed to initialize provider"' \
   'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Rate limit exceeded"' \
   $'\x1b[91m\x1b[1mError: \x1b[0mModel not found: opencode/deepseek-v4.1-flash-free' \
-  $'\x1b[91m\x1b[1mError: \x1b[0mFailed to initialize provider "opencode". Check credentials and configuration.' \
   $'\x1b[91m\x1b[1mError: \x1b[0mFree usage exceeded, subscribe to Go' \
   $'\x1b[91m\x1b[1mError: \x1b[0mQuota exceeded. Check your plan and billing details.' \
   $'\x1b[91m\x1b[1mError: \x1b[0mProvider is overloaded' \
   'AI_APICallError: Rate limit exceeded for deepseek' \
-  'Error: ProviderInitError: provider failed to initialize' \
   'ProviderModelNotFoundError: model not found' \
-  'ProviderAuthError: authentication failed' \
   'APIError: upstream error' \
   'RetryError: max retries reached' \
   'HTTP 429 Too Many Requests' \
@@ -137,6 +133,35 @@ for provider_err in \
   grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback.out"
   grep -q 'opencode plan default-variant complete' "$TMP/auto-fallback.out"
   grep -q 'Exit: 0' "$TMP/auto-fallback.out"
+done
+# Authentication and provider initialization stop both OpenCode and Copilot fallback chains.
+for auth_agent in opencode copilot; do
+  if [[ $auth_agent == opencode ]]; then
+    auth_model=opencode/deepseek-v4.1-flash-free
+    auth_failure_env=OPENCODE_MOCK_FAIL_DEEPSEEK
+  else
+    auth_model=github-copilot/gpt-4.1
+    auth_failure_env=OPENCODE_MOCK_FAIL_GPT41
+  fi
+  for auth_err in \
+    'ProviderAuthError: authentication failed' \
+    'timestamp=2026-11-03T16:57:10.019Z level=ERROR run=e048f2aa message=failed ref=err_5508aa4d error="ProviderAuthError: invalid credentials"' \
+    'Error: Incorrect API key provided: redacted' \
+    'Error: No API key found for provider' \
+    'Error: ProviderInitError: provider failed to initialize' \
+    'Error: Failed to initialize provider "opencode". Check credentials and configuration.' \
+    'HTTP 401 Unauthorized'; do
+    if env "$auth_failure_env=1" OPENCODE_MOCK_FAIL_MSG="$auth_err" "$SCRIPT" --agent "$auth_agent" --mode plan --id auth-hard-stop --task 'Stop on invalid credentials' > "$TMP/auth-hard-stop.out" 2>&1; then
+      echo "Expected authentication error to stop $auth_agent delegation: $auth_err" >&2; exit 1
+    fi
+    grep -q "Model: $auth_model" "$TMP/auth-hard-stop.out"
+    grep -q 'Stopping fallback' "$TMP/auth-hard-stop.out"
+    grep -q 'Check the OpenCode login and provider API key/configuration' "$TMP/auth-hard-stop.out"
+    grep -q '/stderr.log' "$TMP/auth-hard-stop.out"
+    if grep -q 'falling back to next candidate' "$TMP/auth-hard-stop.out"; then
+      echo "Expected $auth_agent authentication failure not to trigger fallback" >&2; exit 1
+    fi
+  done
 done
 # Automatic fallback in build mode resets dirty worktree from failed candidate
 OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_DIRTY_ON_FAIL=1 "$SCRIPT" --agent opencode --mode build --id auto-fallback-build --task 'Test build fallback worktree reset' > "$TMP/auto-fallback-build.out"

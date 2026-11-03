@@ -70,5 +70,5 @@ The wrapper creates an external Git worktree from the **committed** base revisio
 - Automatic delegation requires explicit per-repository opt-in: `git config --local agents.delegationAllowed true`. This setting is in local Git config, not committed to the repository.
 - Worktrees do **not** sandbox host credentials, Git metadata, filesystem, or network. Keep narrowly scoped shell permissions; do not enable blanket unattended execution.
 - If there is no isolated, valid committed state, do not stash/reset or discard user changes to force delegation.
-- Run one external worker at a time. Avoid recursive delegation and indefinite retry loops. Fallback only on clear quota/rate-limit failures; if all free routes fail, report and continue with the orchestrator if possible.
+- Run one external worker at a time. Avoid recursive delegation and indefinite retry loops. Authentication and provider-initialization errors are hard stops: surface a login/credential-configuration hint and do not try another model or Gemini. Fall back only on explicitly classified quota, rate-limit, model-availability, or capacity failures; if all free routes fail, report and continue with the orchestrator if possible.
 - Never treat claimed passing tests as evidence without checking command output; agy headless may soft-deny shell commands.
