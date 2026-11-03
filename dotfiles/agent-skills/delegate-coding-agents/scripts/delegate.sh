@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'HELP'
-Usage: delegate.sh --agent opencode|gemini --mode plan|build --task '...' [options]
+Usage: delegate.sh --agent opencode|copilot|gemini --mode plan|build --task '...' [options]
 
 Options:
   --task-file PATH     Read task from file instead of --task
@@ -17,6 +17,8 @@ Options:
 Environment:
   OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
   OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
+  COPILOT_DELEGATE_MODEL    Default: github-copilot/gpt-4.1
+  COPILOT_DELEGATE_MODELS   Comma-separated Copilot fallback chain
   GEMINI_DELEGATE_MODEL     Optional Gemini CLI model override
   DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
 
@@ -31,7 +33,7 @@ is_provider_quota_error() {
   [[ -n $combined ]] || return 1
 
   grep -Eqi \
-    'rate[ -]?limit|quota|too many requests|resource.*exhausted|provider.*not.*found|model.*not.*found|provideriniterror|providermodelnotfounderror|providerautherror|temporarily unavailable|service unavailable|overloaded|(out of|over|at|server) capacity|capacity exceeded|gateway timeout|(status|code|error|http|response)[ :]+(429|502|503|504)\b' \
+    'rate[ -]?limit|usage[ -]?limit|quota|too many requests|resource.*exhausted|provider.*not.*found|model.*not.*found|model_not_supported|the requested model is not supported|provideriniterror|providermodelnotfounderror|providerautherror|temporarily unavailable|service unavailable|overloaded|(out of|over|at|server) capacity|capacity exceeded|gateway timeout|(status|code|error|http|response)[ :]+(429|502|503|504)\b' \
     <<< "$combined"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
@@ -50,7 +52,7 @@ while (($#)); do
     *) die "Unknown option: $1" ;;
   esac
 done
-[[ $AGENT == opencode || $AGENT == gemini ]] || die 'Use --agent opencode or gemini'
+[[ $AGENT == opencode || $AGENT == copilot || $AGENT == gemini ]] || die 'Use --agent opencode, copilot, or gemini'
 [[ $MODE == plan || $MODE == build ]] || die 'Use --mode plan or build'
 [[ $ORCHESTRATOR == codex || $ORCHESTRATOR == agy ]] || die 'Use --orchestrator codex or agy'
 [[ $ORCHESTRATOR != agy || $AGENT != gemini ]] || die 'Gemini CLI delegation is only enabled for Codex'
@@ -62,7 +64,9 @@ fi
 [[ -n ${TASK//[[:space:]]/} ]] || die 'Task is empty'
 [[ -z ${CODING_DELEGATE_ACTIVE:-} ]] || die 'Recursive delegation blocked'
 command -v git >/dev/null || die 'git is required'
-command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
+RUNNER_BIN=$AGENT
+if [[ $AGENT == copilot ]]; then RUNNER_BIN=opencode; fi
+command -v "$RUNNER_BIN" >/dev/null || die "Install/login to $RUNNER_BIN first"
 if [[ $AGENT == gemini ]]; then command -v jq >/dev/null || die 'jq is required for Gemini JSON output'; fi
 if [[ $AGENT == opencode ]]; then
   if [[ -n $MODEL ]]; then
@@ -75,6 +79,21 @@ if [[ $AGENT == opencode ]]; then
       "opencode/glm-5.3-flash-free"
       "opencode/minimax-m3.1-flash-free"
       "opencode/qwen3.6-plus-free"
+      "github-copilot/gpt-4.1"
+      "github-copilot/gpt-4o"
+      "github-copilot/gpt-4o-mini"
+    )
+  fi
+elif [[ $AGENT == copilot ]]; then
+  if [[ -n $MODEL ]]; then
+    CANDIDATE_MODELS=("$MODEL")
+  elif [[ -n ${COPILOT_DELEGATE_MODELS:-} ]]; then
+    IFS=',' read -ra CANDIDATE_MODELS <<< "$COPILOT_DELEGATE_MODELS"
+  else
+    CANDIDATE_MODELS=(
+      "${COPILOT_DELEGATE_MODEL:-github-copilot/gpt-4.1}"
+      "github-copilot/gpt-4o"
+      "github-copilot/gpt-4o-mini"
     )
   fi
 else
@@ -147,7 +166,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
   CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
   CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
-  if [[ $AGENT == opencode && -z $CURRENT_MODEL ]]; then continue; fi
+  if [[ ($AGENT == opencode || $AGENT == copilot) && -z $CURRENT_MODEL ]]; then continue; fi
 
   # Reset worktree if retrying after a prior failed candidate
   if (( idx > 0 )); then
@@ -155,7 +174,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     git -C "$WORKTREE" clean -fd >/dev/null 2>&1 || true
   fi
 
-  if [[ $AGENT == opencode ]]; then
+  if [[ $AGENT == opencode || $AGENT == copilot ]]; then
     ARGS=(run --agent "$MODE" --model "$CURRENT_MODEL")
     if [[ $CURRENT_MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
     ARGS+=("$PROMPT")
@@ -167,7 +186,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
 
   # Do not imply a successful invocation means all shell commands/tests were allowed.
   set +e
-  if [[ $AGENT == opencode ]]; then
+  if [[ $AGENT == opencode || $AGENT == copilot ]]; then
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   else
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" gemini "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"

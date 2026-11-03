@@ -837,6 +837,24 @@ sync_skills_and_instructions() {
       backup_with_collision_avoidance "${opencode_agents}" "${bak_file}"
     fi
     ln -sfn "${gemini_rules}" "${opencode_agents}"
+
+    local repo_plugins_dir="${REPO_DIR}/dotfiles/opencode/plugins"
+    if [[ -d "${repo_plugins_dir}" ]]; then
+      mkdir -p "${OPENCODE_DIR}/plugins"
+      for plugin_src in "${repo_plugins_dir}"/*.ts; do
+        if [[ -f "${plugin_src}" ]]; then
+          local plugin_name
+          plugin_name="$(basename "${plugin_src}")"
+          local plugin_dest="${OPENCODE_DIR}/plugins/${plugin_name}"
+          if [[ -e "${plugin_dest}" && ! -L "${plugin_dest}" ]]; then
+            local plugin_bak="${plugin_dest}.bak"
+            [[ -e "${plugin_bak}" || -L "${plugin_bak}" ]] && plugin_bak="${plugin_dest}.bak.$(date +%s)"
+            backup_with_collision_avoidance "${plugin_dest}" "${plugin_bak}"
+          fi
+          ln -sfn "${plugin_src}" "${plugin_dest}"
+        fi
+      done
+    fi
   fi
 
   # Link skills

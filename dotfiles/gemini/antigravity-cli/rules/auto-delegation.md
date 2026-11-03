@@ -9,7 +9,7 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
 
 ## Delegation-First Rules
 
-1. **Default to OpenCode:** Whenever an engineering task requires codebase exploration, design analysis, test drafting, or code modification, delegate the subtask to OpenCode before attempting to write code directly.
+1. **Default to OpenCode / Copilot:** Whenever an engineering task requires codebase exploration, design analysis, test drafting, or code modification, delegate the subtask to OpenCode (`--agent opencode`, cycling across OpenCode free models and 0x-included GitHub Copilot models) or directly to GitHub Copilot via OpenCode (`--agent copilot`) before attempting to write code directly.
 2. **Phase Routing:**
    - Use OpenCode `--mode plan` for initial repository exploration, architecture analysis, trade-off evaluation, and test plan creation.
    - Use OpenCode `--mode build` for generating tests, boilerplate, mechanical refactors, documentation, and separable implementation slices.

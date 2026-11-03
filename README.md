@@ -57,11 +57,15 @@ gh-dash notifications include New Comments, Review Requests, CI Activity,
 My PR Activity, and Mentions, refreshing every five minutes. My PR Activity
 also includes issues you opened because it uses `reason:author`.
 
-Codex delegates eligible work sequentially to OpenCode DeepSeek Flash Free,
-then OpenCode GLM Flash Free only on quota/rate-limit failures, then Gemini CLI
-if both OpenCode free routes are limited. It stops after a successful worker;
-Copilot CLI and Antigravity CLI as a Codex worker are not used. Automatic
-delegation requires the repository-local opt-in `agents.delegationAllowed=true`.
+Codex and Antigravity CLI delegate eligible work sequentially to OpenCode free
+models (`opencode/deepseek-v4.1-flash-free`, `opencode/glm-5.3-flash-free`,
+`opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`) and 0x-included
+GitHub Copilot models via OpenCode (`github-copilot/gpt-4.1`,
+`github-copilot/gpt-4o`, `github-copilot/gpt-4o-mini`), or directly via
+`--agent copilot`. Codex additionally falls back to Gemini CLI if all OpenCode
+and Copilot free routes are limited. It stops after a successful worker;
+Antigravity CLI as a Codex worker is not used. Automatic delegation requires the
+repository-local opt-in `agents.delegationAllowed=true`.
 See [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
 ### Installing and usage

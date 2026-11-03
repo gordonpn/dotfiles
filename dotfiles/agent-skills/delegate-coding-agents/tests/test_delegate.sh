@@ -54,6 +54,10 @@ if [[ ${OPENCODE_MOCK_FAIL_DEEPSEEK:-} == 1 && $model == opencode/deepseek-v4.1-
   echo 'Simulated quota error for deepseek' >&2
   exit 1
 fi
+if [[ ${OPENCODE_MOCK_FAIL_GPT41:-} == 1 && $model == github-copilot/gpt-4.1 ]]; then
+  echo 'AI_APICallError: Free usage limit reached' >&2
+  exit 1
+fi
 if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
   echo 'Simulated quota failure for all models' >&2
   exit 1
@@ -69,7 +73,7 @@ git config user.name 'Unit Test'
 git config user.email 'test@example.com'
 echo base > source.txt
 git add source.txt && git commit -qm init
-for agent in gemini opencode; do
+for agent in gemini opencode copilot; do
  for mode in plan build; do
    if [[ $agent == gemini ]]; then
       "$SCRIPT" --agent "$agent" --mode "$mode" --id "t-$agent-$mode" --task 'Do work' --model gemini-test-model > "$TMP/$agent-$mode.out"
@@ -92,6 +96,10 @@ for agent in gemini opencode; do
       [[ ! -f $WT/agent-change.txt ]]
       grep -q 'Branch: (detached)' "$TMP/$agent-$mode.out"
       if [[ $agent == opencode ]]; then grep -q 'opencode plan high complete' "$TMP/$agent-$mode.out"; fi
+      if [[ $agent == copilot ]]; then
+        grep -q 'Model: github-copilot/gpt-4.1' "$TMP/$agent-$mode.out"
+        grep -q 'opencode plan default-variant complete' "$TMP/$agent-$mode.out"
+      fi
    else
       [[ -f $WT/agent-change.txt ]]
       grep -q "Branch: delegate/$agent/" "$TMP/$agent-$mode.out"
@@ -119,12 +127,20 @@ WT_BUILD=$(sed -n 's/^  Worktree: //p' "$TMP/auto-fallback-build.out" | head -n 
 OPENCODE_DELEGATE_MODELS="opencode/qwen3.6-plus-free,opencode/glm-5.3-flash-free" "$SCRIPT" --agent opencode --mode plan --id custom-chain --task 'Test custom chain' > "$TMP/custom-chain.out"
 grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/custom-chain.out"
 grep -q 'Exit: 0' "$TMP/custom-chain.out"
+# Copilot fallback from gpt-4.1 to gpt-4o on usage limit error
+OPENCODE_MOCK_FAIL_GPT41=1 "$SCRIPT" --agent copilot --mode plan --id copilot-fallback --task 'Test copilot fallback' > "$TMP/copilot-fallback.out"
+grep -q 'Model: github-copilot/gpt-4o' "$TMP/copilot-fallback.out"
+grep -q 'Exit: 0' "$TMP/copilot-fallback.out"
+# Environment variable COPILOT_DELEGATE_MODELS override
+COPILOT_DELEGATE_MODELS="github-copilot/gpt-4o-mini,github-copilot/gpt-4o" "$SCRIPT" --agent copilot --mode plan --id copilot-custom --task 'Test copilot custom chain' > "$TMP/copilot-custom.out"
+grep -q 'Model: github-copilot/gpt-4o-mini' "$TMP/copilot-custom.out"
+grep -q 'Exit: 0' "$TMP/copilot-custom.out"
 # Failure when all candidate models fail
 if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
-grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/all-fail.out"
+grep -q 'Model: github-copilot/gpt-4o-mini' "$TMP/all-fail.out"
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
 grep -q 'Model: Gemini CLI default' "$TMP/gemini-default.out"
 if GEMINI_MOCK_INVALID=1 "$SCRIPT" --agent gemini --mode plan --id gemini-invalid --task 'Return no response' > "$TMP/gemini-invalid.out" 2>&1; then
@@ -164,6 +180,9 @@ grep -q 'agents.delegationAllowed true' "$TMP/not-opted-in.out"
 git config --local agents.delegationAllowed true
 "$SCRIPT" --agent opencode --mode plan --orchestrator agy --automatic --task 'Plan a change' > "$TMP/agy-to-opencode.out"
 grep -q 'Orchestrator: agy' "$TMP/agy-to-opencode.out"
+"$SCRIPT" --agent copilot --mode plan --orchestrator agy --automatic --task 'Plan a change with copilot' > "$TMP/agy-to-copilot.out"
+grep -q 'Orchestrator: agy' "$TMP/agy-to-copilot.out"
+grep -q 'Model: github-copilot/gpt-4.1' "$TMP/agy-to-copilot.out"
 if "$SCRIPT" --agent gemini --mode plan --orchestrator agy --automatic --task 'Unsupported route' > "$TMP/agy-to-gemini.out" 2>&1; then
  echo 'Expected agy-to-Gemini rejection' >&2; exit 1
 fi
@@ -171,7 +190,7 @@ grep -q 'only enabled for Codex' "$TMP/agy-to-gemini.out"
 if "$SCRIPT" --agent agy --mode plan --task 'Unsupported worker' > "$TMP/agy-worker.out" 2>&1; then
  echo 'Expected Antigravity worker rejection' >&2; exit 1
 fi
-grep -q 'Use --agent opencode or gemini' "$TMP/agy-worker.out"
+grep -q 'Use --agent opencode, copilot, or gemini' "$TMP/agy-worker.out"
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
 if "$SCRIPT" --agent gemini --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then
