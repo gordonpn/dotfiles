@@ -15,9 +15,10 @@ Options:
   --help               Display this help
 
 Environment:
-  OPENCODE_DELEGATE_MODEL  Default: opencode/deepseek-v4.1-flash-free
-  GEMINI_DELEGATE_MODEL    Optional Gemini CLI model override
-  DELEGATE_WORKTREE_ROOT  External directory for Git worktrees/logs
+  OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
+  OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
+  GEMINI_DELEGATE_MODEL     Optional Gemini CLI model override
+  DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
 
 Runs are isolated in Git worktrees. BUILD changes remain uncommitted on a
 new agent-specific branch. The caller (Codex or agy) reviews and integrates them.
@@ -55,9 +56,20 @@ command -v git >/dev/null || die 'git is required'
 command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
 if [[ $AGENT == gemini ]]; then command -v jq >/dev/null || die 'jq is required for Gemini JSON output'; fi
 if [[ $AGENT == opencode ]]; then
-  MODEL=${MODEL:-${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}}
+  if [[ -n $MODEL ]]; then
+    CANDIDATE_MODELS=("$MODEL")
+  elif [[ -n ${OPENCODE_DELEGATE_MODELS:-} ]]; then
+    IFS=',' read -ra CANDIDATE_MODELS <<< "$OPENCODE_DELEGATE_MODELS"
+  else
+    CANDIDATE_MODELS=(
+      "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
+      "opencode/glm-5.3-flash-free"
+      "opencode/minimax-m3.1-flash-free"
+      "opencode/qwen3.6-plus-free"
+    )
+  fi
 else
-  MODEL=${MODEL:-${GEMINI_DELEGATE_MODEL:-}}
+  CANDIDATE_MODELS=("${MODEL:-${GEMINI_DELEGATE_MODEL:-}}")
 fi
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
 if (( AUTOMATIC )); then
@@ -87,7 +99,7 @@ agent=$AGENT
 orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
 mode=$MODE
-model=${MODEL:-'(default)'}
+requested_model=${MODEL:-'(default)'}
 base=$BASE_SHA
 branch=$BRANCH
 worktree=$WORKTREE
@@ -118,34 +130,71 @@ RESPONSE:
 PROMPT_END
 )
 printf '%s\n' "$PROMPT" >"$LOG_DIR/prompt.txt"
-if [[ $AGENT == opencode ]]; then
-  ARGS=(run --agent "$MODE" --model "$MODEL")
-  if [[ $MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
-  ARGS+=("$PROMPT")
-else
-  ARGS=(-p "$PROMPT" --output-format json)
-  if [[ $MODE == build ]]; then ARGS+=(--approval-mode auto_edit); fi
-  if [[ -n $MODEL ]]; then ARGS+=(--model "$MODEL"); fi
-fi
-# Do not imply a successful invocation means all shell commands/tests were allowed.
-set +e
-if [[ $AGENT == opencode ]]; then
-  (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
-else
-  (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" gemini "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
-fi
-EXIT_CODE=$?
-set -e
-if [[ $AGENT == gemini ]]; then
-  if jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
-    jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
-  else
-    printf 'Gemini CLI did not return a JSON response.\n' >"$LOG_DIR/report.md"
-    EXIT_CODE=1
+EXIT_CODE=1
+SUCCESSFUL_MODEL=''
+CURRENT_MODEL=''
+TOTAL_CANDIDATES=${#CANDIDATE_MODELS[@]}
+for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
+  CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
+  CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
+  CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
+  if [[ $AGENT == opencode && -z $CURRENT_MODEL ]]; then continue; fi
+
+  # Reset worktree if retrying after a prior failed candidate
+  if (( idx > 0 )); then
+    git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 || true
+    git -C "$WORKTREE" clean -fd >/dev/null 2>&1 || true
   fi
-else
-  cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md"
-fi
+
+  if [[ $AGENT == opencode ]]; then
+    ARGS=(run --agent "$MODE" --model "$CURRENT_MODEL")
+    if [[ $CURRENT_MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
+    ARGS+=("$PROMPT")
+  else
+    ARGS=(-p "$PROMPT" --output-format json)
+    if [[ $MODE == build ]]; then ARGS+=(--approval-mode auto_edit); fi
+    if [[ -n $CURRENT_MODEL ]]; then ARGS+=(--model "$CURRENT_MODEL"); fi
+  fi
+
+  # Do not imply a successful invocation means all shell commands/tests were allowed.
+  set +e
+  if [[ $AGENT == opencode ]]; then
+    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+  else
+    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" gemini "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+  fi
+  RUN_EXIT=$?
+  set -e
+
+  if [[ $AGENT == gemini ]]; then
+    if jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
+      jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
+      EXIT_CODE=0
+      SUCCESSFUL_MODEL=$CURRENT_MODEL
+      break
+    else
+      printf 'Gemini CLI did not return a JSON response.\n' >"$LOG_DIR/report.md"
+      EXIT_CODE=1
+    fi
+  else
+    if [[ $RUN_EXIT -eq 0 && -s $LOG_DIR/stdout.log ]]; then
+      cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md"
+      EXIT_CODE=0
+      SUCCESSFUL_MODEL=$CURRENT_MODEL
+      break
+    else
+      cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md" 2>/dev/null || true
+      EXIT_CODE=$RUN_EXIT
+      [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
+      if (( idx + 1 < TOTAL_CANDIDATES )); then
+        printf 'Model %s failed (exit %s); falling back to next candidate...\n' "$CURRENT_MODEL" "$RUN_EXIT" >&2
+      fi
+    fi
+  fi
+done
+
+MODEL=${SUCCESSFUL_MODEL:-${CURRENT_MODEL:-}}
+printf 'resolved_model=%s\nexit_code=%s\n' "${MODEL:-'(default)'}" "$EXIT_CODE" >>"$LOG_DIR/manifest.txt"
 
 # Review both tracked and untracked changes: git diff alone omits new files.
 git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"

@@ -49,7 +49,7 @@ Use the script in **the current skill installation**. Codex default install: `~/
 
 Supported flags: `--orchestrator codex|agy`, `--agent opencode|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
 
-OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant. GLM fallback is passed explicitly with `--model opencode/glm-5.3-flash-free` and uses the model's default variant. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. OpenCode's `OPENCODE_DELEGATE_MODEL` is an intentional override, not an automatic fallback. Never silently fall back to paid models.
+OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`) if a model fails or encounters rate limits. Explicit overrides can be supplied with `--model` or `OPENCODE_DELEGATE_MODELS`. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
 
 ## Delegate specification
 

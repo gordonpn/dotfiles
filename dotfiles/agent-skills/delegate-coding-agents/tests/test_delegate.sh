@@ -25,12 +25,24 @@ cat > "$TMP/bin/opencode" <<'MOCK'
 #!/usr/bin/env bash
 [[ $1 == run ]] || exit 8
 shift
-mode=''
+mode=''; variant=''; model=''
 while (($#)); do
  if [[ $1 == --agent ]]; then shift; mode=$1; fi
  if [[ $1 == --variant ]]; then shift; variant=$1; fi
+ if [[ $1 == --model ]]; then shift; model=$1; fi
  shift
 done
+if [[ ${OPENCODE_MOCK_FAIL_DEEPSEEK:-} == 1 && $model == opencode/deepseek-v4.1-flash-free ]]; then
+  if [[ ${OPENCODE_MOCK_DIRTY_ON_FAIL:-} == 1 ]]; then
+    printf 'stale uncommitted modification\n' > failed-dirty.txt
+  fi
+  echo 'Simulated quota error for deepseek' >&2
+  exit 1
+fi
+if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
+  echo 'Simulated failure for all models' >&2
+  exit 1
+fi
 if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.txt; fi
 printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
@@ -76,6 +88,27 @@ done
 "$SCRIPT" --agent opencode --mode plan --model opencode/glm-5.3-flash-free --id glm-fallback --task 'Retry after a quota limit' > "$TMP/glm-fallback.out"
 grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/glm-fallback.out"
 grep -q 'opencode plan default-variant complete' "$TMP/glm-fallback.out"
+# Automatic fallback from deepseek to glm when deepseek fails
+OPENCODE_MOCK_FAIL_DEEPSEEK=1 "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out"
+grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback.out"
+grep -q 'opencode plan default-variant complete' "$TMP/auto-fallback.out"
+grep -q 'Exit: 0' "$TMP/auto-fallback.out"
+# Automatic fallback in build mode resets dirty worktree from failed candidate
+OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_DIRTY_ON_FAIL=1 "$SCRIPT" --agent opencode --mode build --id auto-fallback-build --task 'Test build fallback worktree reset' > "$TMP/auto-fallback-build.out"
+grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback-build.out"
+grep -q 'Exit: 0' "$TMP/auto-fallback-build.out"
+WT_BUILD=$(sed -n 's/^  Worktree: //p' "$TMP/auto-fallback-build.out" | head -n 1)
+[[ -f $WT_BUILD/agent-change.txt ]]
+[[ ! -f $WT_BUILD/failed-dirty.txt ]]
+# Environment variable OPENCODE_DELEGATE_MODELS override
+OPENCODE_DELEGATE_MODELS="opencode/qwen3.6-plus-free,opencode/glm-5.3-flash-free" "$SCRIPT" --agent opencode --mode plan --id custom-chain --task 'Test custom chain' > "$TMP/custom-chain.out"
+grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/custom-chain.out"
+grep -q 'Exit: 0' "$TMP/custom-chain.out"
+# Failure when all candidate models fail
+if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
+  echo 'Expected all models failure to return non-zero' >&2; exit 1
+fi
+grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
 grep -q 'Model: Gemini CLI default' "$TMP/gemini-default.out"
 if GEMINI_MOCK_INVALID=1 "$SCRIPT" --agent gemini --mode plan --id gemini-invalid --task 'Return no response' > "$TMP/gemini-invalid.out" 2>&1; then
