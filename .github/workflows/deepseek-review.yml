@@ -1,7 +1,7 @@
 name: DeepSeek Review
 
 on:
-  # Keep the workflow and checkout on the trusted base branch when secrets are used.
+  # Keep secret-bearing code on the base branch; the action fetches PR data through GitHub's API.
   pull_request_target:
     types: [ready_for_review]
 
@@ -21,6 +21,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     steps:
       - name: Checkout repository
+        # The action fetches the PR diff through the API; never check out its untrusted head here.
         uses: actions/checkout@v7
         with:
           persist-credentials: false
