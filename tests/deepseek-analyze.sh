@@ -343,4 +343,17 @@ assert_delegate_call "CALL" "${default_model}" "task with -h embedded"
 assert_failure 2 "Usage:" "$script" --
 assert_failure 2 "Usage:" "$script" -- "   "
 
+# Test 18: .github/scripts/check-deepseek-credentials.sh handles configured and missing credentials
+cred_script="${repo_dir}/.github/scripts/check-deepseek-credentials.sh"
+gh_out="${tmp_dir}/github_output"
+: >"${gh_out}"
+out_unconfigured="$(env -u DEEPSEEK_API_KEY GITHUB_OUTPUT="${gh_out}" "${cred_script}")"
+[[ "$(cat "${gh_out}")" == "configured=false" ]]
+[[ "${out_unconfigured}" == *"::warning::DEEPSEEK_API_KEY is not configured"* ]]
+
+: >"${gh_out}"
+out_configured="$(DEEPSEEK_API_KEY="test-key" GITHUB_OUTPUT="${gh_out}" "${cred_script}")"
+[[ "$(cat "${gh_out}")" == "configured=true" ]]
+[[ -z "${out_configured}" ]]
+
 echo "deepseek-analyze checks passed"
