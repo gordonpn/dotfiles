@@ -26,13 +26,13 @@ HELP
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 is_provider_quota_error() {
-  local combined
-  combined=$(cat "$LOG_DIR/stderr.log" "$LOG_DIR/stdout.log" 2>/dev/null || true)
-  [[ -n $combined ]] || return 1
+  local stderr_log
+  stderr_log=$(cat "$LOG_DIR/stderr.log" 2>/dev/null || true)
+  [[ -n $stderr_log ]] || return 1
 
   grep -Eqi \
-    'rate[ -]?limit|quota|too many requests|resource.*exhausted|provider.*not.*found|model.*not.*found|provideriniterror|providermodelnotfounderror|providerautherror|temporarily unavailable|service unavailable|overloaded|(out of|over|at|server) capacity|capacity exceeded|gateway timeout|(status|code|error|http|response)[ :]+(429|502|503|504)\b' \
-    <<< "$combined"
+    '(AI_APICallError|ProviderInitError|ProviderModelNotFoundError|ProviderAuthError|APIError|RetryError)|((error|failed|status|code|http|response)[ :]+[^\n]*(rate[ -]?limit|usage[ -]?limit|quota[ -]?(exceeded|exhausted|limit|reached)|too many requests|resource[ _-]?exhausted|provider[^\n]*not[^\n]*found|model[^\n]*not[^\n]*(found|supported)|the requested model is not supported|temporarily unavailable|service unavailable|server overloaded|\b(out of|over|at|server) capacity|capacity exceeded|gateway timeout|\b(429|502|503|504)\b))|(^(rate[ -]?limit|usage[ -]?limit|free usage limit|quota[ -]?(exceeded|exhausted|limit|reached)|too many requests|resource[ _-]?exhausted|the requested model is not supported|model_not_supported|service unavailable|gateway timeout))' \
+    <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
 while (($#)); do
@@ -151,8 +151,11 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
 
   # Reset worktree if retrying after a prior failed candidate
   if (( idx > 0 )); then
-    git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 || true
-    git -C "$WORKTREE" clean -fd >/dev/null 2>&1 || true
+    if ! git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 \
+      || ! git -C "$WORKTREE" clean -fdx >/dev/null 2>&1; then
+      printf 'Failed to reset worktree before retry; stopping fallback.\n' >&2
+      break
+    fi
   fi
 
   if [[ $AGENT == opencode ]]; then
@@ -202,7 +205,11 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
       [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
 
       # Fallback only on classified provider, quota, rate-limit, or model availability failures.
-      # Never advance to another candidate on task errors, test failures, or ambiguous results.
+      # Never advance to another candidate on task errors, test failures, or ambiguous results,
+      # or when a planning worker violated its read-only worktree contract.
+      if [[ $MODE == plan ]] && [[ -n $(git -C "$WORKTREE" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
+        break
+      fi
       if is_provider_quota_error; then
         if (( idx + 1 < TOTAL_CANDIDATES )); then
           printf 'Model %s encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_MODEL" "$RUN_EXIT" >&2

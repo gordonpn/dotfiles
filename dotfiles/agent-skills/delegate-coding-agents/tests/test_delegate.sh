@@ -40,6 +40,8 @@ if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
   echo 'AssertionError: expected capacity to be 10, got 8' >&2
+  echo 'FAIL test_quota_validation: expected rate limit quota 10, got 8' >&2
+  echo 'stdout report mentioning quota, rate limit, and model not found'
   exit 1
 fi
 if [[ ${OPENCODE_MOCK_TASK_ERROR:-} == 1 ]]; then
@@ -51,11 +53,11 @@ if [[ ${OPENCODE_MOCK_FAIL_DEEPSEEK:-} == 1 && $model == opencode/deepseek-v4.1-
   if [[ ${OPENCODE_MOCK_DIRTY_ON_FAIL:-} == 1 ]]; then
     printf 'stale uncommitted modification\n' > failed-dirty.txt
   fi
-  echo 'Simulated quota error for deepseek' >&2
+  echo "${OPENCODE_MOCK_FAIL_MSG:-AI_APICallError: Rate limit exceeded for deepseek}" >&2
   exit 1
 fi
 if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
-  echo 'Simulated quota failure for all models' >&2
+  echo 'AI_APICallError: Quota exceeded for all models' >&2
   exit 1
 fi
 if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.txt; fi
@@ -115,15 +117,36 @@ grep -q 'Exit: 0' "$TMP/auto-fallback-build.out"
 WT_BUILD=$(sed -n 's/^  Worktree: //p' "$TMP/auto-fallback-build.out" | head -n 1)
 [[ -f $WT_BUILD/agent-change.txt ]]
 [[ ! -f $WT_BUILD/failed-dirty.txt ]]
+# Plan mode mutation before provider error must not be wiped by retry and must fail read-only check
+if OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_DIRTY_ON_FAIL=1 "$SCRIPT" --agent opencode --mode plan --id plan-dirty-no-retry --task 'Test plan dirty no retry' > "$TMP/plan-dirty-no-retry.out" 2>&1; then
+  echo 'Expected plan mode mutation on failed candidate to return non-zero' >&2; exit 1
+fi
+grep -q 'Planning delegate modified its isolated worktree' "$TMP/plan-dirty-no-retry.out"
+grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/plan-dirty-no-retry.out"
 # Environment variable OPENCODE_DELEGATE_MODELS override
 OPENCODE_DELEGATE_MODELS="opencode/qwen3.6-plus-free,opencode/glm-5.3-flash-free" "$SCRIPT" --agent opencode --mode plan --id custom-chain --task 'Test custom chain' > "$TMP/custom-chain.out"
 grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/custom-chain.out"
 grep -q 'Exit: 0' "$TMP/custom-chain.out"
+# Empty and whitespace-only entries in OPENCODE_DELEGATE_MODELS are skipped
+OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_DELEGATE_MODELS="opencode/deepseek-v4.1-flash-free,, ,opencode/glm-5.3-flash-free" "$SCRIPT" --agent opencode --mode plan --id whitespace-chain --task 'Test whitespace chain' > "$TMP/whitespace-chain.out"
+grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/whitespace-chain.out"
+grep -q 'Exit: 0' "$TMP/whitespace-chain.out"
+# Explicit --model pins a single candidate and does not fallback on quota error
+if OPENCODE_MOCK_FAIL_DEEPSEEK=1 "$SCRIPT" --agent opencode --mode plan --model opencode/deepseek-v4.1-flash-free --id model-no-fallback --task 'Test explicit model' > "$TMP/model-no-fallback.out" 2>&1; then
+  echo 'Expected explicit model quota failure to return non-zero' >&2; exit 1
+fi
+grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/model-no-fallback.out"
+if grep -q 'falling back to next candidate' "$TMP/model-no-fallback.out"; then
+  echo 'Expected explicit model not to fall back' >&2; exit 1
+fi
 # Failure when all candidate models fail
 if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
+grep -q 'Model opencode/deepseek-v4.1-flash-free encountered provider/quota failure' "$TMP/all-fail.out"
+grep -q 'Model opencode/glm-5.3-flash-free encountered provider/quota failure' "$TMP/all-fail.out"
+grep -q 'Model opencode/minimax-m3.1-flash-free encountered provider/quota failure' "$TMP/all-fail.out"
 grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/all-fail.out"
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
 grep -q 'Model: Gemini CLI default' "$TMP/gemini-default.out"
