@@ -25,6 +25,15 @@ new agent-specific branch. The caller (Codex or agy) reviews and integrates them
 HELP
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
+is_provider_quota_error() {
+  local combined
+  combined=$(cat "$LOG_DIR/stderr.log" "$LOG_DIR/stdout.log" 2>/dev/null || true)
+  [[ -n $combined ]] || return 1
+
+  grep -Eqi \
+    'rate[ -]?limit|quota|too many requests|429|resource.*exhausted|provider.*not.*found|model.*not.*found|provideriniterror|providermodelnotfounderror|providerautherror|temporarily unavailable|service unavailable|overloaded|capacity|502|503|504|gateway timeout' \
+    <<< "$combined"
+}
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
 while (($#)); do
   case "$1" in
@@ -167,14 +176,19 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   set -e
 
   if [[ $AGENT == gemini ]]; then
-    if jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
+    if [[ $RUN_EXIT -eq 0 ]] && jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
       jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
       EXIT_CODE=0
       SUCCESSFUL_MODEL=$CURRENT_MODEL
       break
     else
-      printf 'Gemini CLI did not return a JSON response.\n' >"$LOG_DIR/report.md"
-      EXIT_CODE=1
+      if jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
+        jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
+      else
+        printf 'Gemini CLI did not return a JSON response.\n' >"$LOG_DIR/report.md"
+      fi
+      EXIT_CODE=$RUN_EXIT
+      [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
     fi
   else
     if [[ $RUN_EXIT -eq 0 && -s $LOG_DIR/stdout.log ]]; then
@@ -186,8 +200,15 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
       cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md" 2>/dev/null || true
       EXIT_CODE=$RUN_EXIT
       [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
-      if (( idx + 1 < TOTAL_CANDIDATES )); then
-        printf 'Model %s failed (exit %s); falling back to next candidate...\n' "$CURRENT_MODEL" "$RUN_EXIT" >&2
+
+      # Fallback only on classified provider, quota, rate-limit, or model availability failures.
+      # Never advance to another candidate on task errors, test failures, or ambiguous results.
+      if is_provider_quota_error; then
+        if (( idx + 1 < TOTAL_CANDIDATES )); then
+          printf 'Model %s encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_MODEL" "$RUN_EXIT" >&2
+        fi
+      else
+        break
       fi
     fi
   fi

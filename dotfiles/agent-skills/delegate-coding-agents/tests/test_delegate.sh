@@ -19,6 +19,10 @@ done
 [[ $output == json ]] || exit 8
 if [[ $approval == auto_edit ]]; then printf 'implemented by gemini\n' > agent-change.txt; fi
 if [[ ${GEMINI_MOCK_INVALID:-} == 1 ]]; then printf '{"error":"no response"}\n'; exit 0; fi
+if [[ -n ${GEMINI_MOCK_FAIL_EXIT:-} ]]; then
+  printf '{"response":"gemini failed output","model":"%s"}\n' "$model"
+  exit "$GEMINI_MOCK_FAIL_EXIT"
+fi
 printf '{"response":"gemini %s complete","model":"%s"}\n' "$approval" "$model"
 MOCK
 cat > "$TMP/bin/opencode" <<'MOCK'
@@ -32,6 +36,11 @@ while (($#)); do
  if [[ $1 == --model ]]; then shift; model=$1; fi
  shift
 done
+if [[ ${OPENCODE_MOCK_TASK_ERROR:-} == 1 ]]; then
+  if [[ $mode == build ]]; then printf 'task error uncommitted modification\n' > task-error-work.txt; fi
+  echo 'Simulated task execution failure (test error)' >&2
+  exit 1
+fi
 if [[ ${OPENCODE_MOCK_FAIL_DEEPSEEK:-} == 1 && $model == opencode/deepseek-v4.1-flash-free ]]; then
   if [[ ${OPENCODE_MOCK_DIRTY_ON_FAIL:-} == 1 ]]; then
     printf 'stale uncommitted modification\n' > failed-dirty.txt
@@ -115,6 +124,21 @@ if GEMINI_MOCK_INVALID=1 "$SCRIPT" --agent gemini --mode plan --id gemini-invali
  echo 'Expected invalid Gemini JSON response to fail' >&2; exit 1
 fi
 grep -q 'Gemini CLI did not return a JSON response' "$TMP/gemini-invalid.out"
+# Gemini nonzero exit with string response must preserve nonzero exit code
+if GEMINI_MOCK_FAIL_EXIT=42 "$SCRIPT" --agent gemini --mode plan --id gemini-nonzero --task 'Test nonzero exit' > "$TMP/gemini-nonzero.out" 2>&1; then
+  echo 'Expected nonzero exit for failing Gemini process' >&2; exit 1
+fi
+grep -q 'Exit: 42' "$TMP/gemini-nonzero.out"
+# OpenCode task error must not fallback to next candidate model and must preserve worktree
+if OPENCODE_MOCK_TASK_ERROR=1 "$SCRIPT" --agent opencode --mode build --id task-error --task 'Test task error' > "$TMP/task-error.out" 2>&1; then
+  echo 'Expected task error to return nonzero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/task-error.out"
+if grep -q 'falling back to next candidate' "$TMP/task-error.out"; then
+  echo 'Expected task error not to trigger fallback candidate retry' >&2; exit 1
+fi
+WT_TASK_ERROR=$(sed -n 's/^  Worktree: //p' "$TMP/task-error.out" | head -n 1)
+[[ -f $WT_TASK_ERROR/task-error-work.txt ]]
 # Automatic delegation must be explicitly opted in for this repository.
 if "$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --task 'Nope' >"$TMP/not-opted-in.out" 2>&1; then
  echo 'Expected automatic delegation opt-in gate' >&2; exit 1
