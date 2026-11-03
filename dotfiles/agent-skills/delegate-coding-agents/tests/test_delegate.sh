@@ -114,6 +114,7 @@ for provider_err in \
   $'\x1b[91m\x1b[1mError: \x1b[0mModel not found: opencode/deepseek-v4.1-flash-free' \
   $'\x1b[91m\x1b[1mError: \x1b[0mFree usage exceeded, subscribe to Go' \
   'Error: You have hit your usage limit' \
+  'Error: Usage limit reached' \
   'Error: Provider says quota exceeded for this model' \
   $'\x1b[91m\x1b[1mError: \x1b[0mQuota exceeded. Check your plan and billing details.' \
   $'\x1b[91m\x1b[1mError: \x1b[0mProvider is overloaded' \
@@ -235,7 +236,8 @@ for task_error in \
   'RetryError: max retries reached' \
   'AI_APICallError: status check failed at https://api.example.com/v1/403' \
   'AI_APICallError: code=req401abc' \
-  'AI_APICallError: 400 Bad Request'; do
+  'AI_APICallError: 400 Bad Request' \
+  'Error: Usage limits are configured in the project'; do
   if OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$task_error" "$SCRIPT" --agent opencode --mode build --id generic-error --task 'Do not retry unclassified errors' > "$TMP/generic-error.out" 2>&1; then
     echo "Expected unclassified error not to succeed by retrying: $task_error" >&2; exit 1
   fi
