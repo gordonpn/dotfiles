@@ -60,7 +60,7 @@ also includes issues you opened because it uses `reason:author`.
 Codex delegates eligible work sequentially to OpenCode DeepSeek Flash Free,
 then OpenCode GLM Flash Free only on quota/rate-limit failures, then Gemini CLI
 if both OpenCode free routes are limited. It stops after a successful worker;
-Copilot CLI and Antigravity CLI as a Codex worker are not used. Automatic
+Antigravity CLI as a Codex worker is not used under a consumer plan. Automatic
 delegation requires the repository-local opt-in `agents.delegationAllowed=true`.
 See [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
