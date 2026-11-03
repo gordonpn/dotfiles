@@ -31,7 +31,7 @@ is_provider_auth_error() {
   [[ -n $stderr_log ]] || return 1
 
   if grep -Eqi \
-    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status|http|code)[^"]*(401|403)[^"]*")|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status|http|code)[^[:cntrl:]]*(401|403)([^0-9]|$))' \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status|code)[^0-9"]*(401|403)([^0-9]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status|code)[^0-9[:cntrl:]]*(401|403)([^0-9]|$))' \
     <<< "$stderr_log"; then
     return 0
   fi
