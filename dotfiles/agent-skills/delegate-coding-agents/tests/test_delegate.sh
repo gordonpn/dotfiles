@@ -36,6 +36,7 @@ while (($#)); do
  if [[ $1 == --model ]]; then shift; model=$1; fi
  shift
 done
+[[ -z ${OPENCODE_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$mode" "$model" >>"$OPENCODE_MOCK_CALL_LOG"
 if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
@@ -66,7 +67,7 @@ if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.
 printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
 chmod +x "$TMP/bin/gemini" "$TMP/bin/opencode"
-export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees"
+export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees" OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
 cd "$TMP/repo"
 git init -q
 git config user.name 'Unit Test'
@@ -191,10 +192,15 @@ if grep -q 'falling back to next candidate' "$TMP/model-no-fallback.out"; then
 fi
 # Failure when all candidate models fail
 : >"$OPENCODE_MOCK_CALL_LOG"
-if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
+if env -u OPENCODE_DELEGATE_MODEL -u OPENCODE_DELEGATE_MODELS OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
-[[ $(<"$OPENCODE_MOCK_CALL_LOG") == $'plan opencode/deepseek-v4.1-flash-free\nplan opencode/glm-5.3-flash-free\nplan opencode/mimo-v2.6-flash-free\nplan opencode/nemotron-3.5-lightning-free' ]]
+expected_calls=$'plan opencode/deepseek-v4.1-flash-free\nplan opencode/glm-5.3-flash-free\nplan opencode/mimo-v2.6-flash-free\nplan opencode/nemotron-3.5-lightning-free'
+actual_calls=$(<"$OPENCODE_MOCK_CALL_LOG")
+if [[ $actual_calls != "$expected_calls" ]]; then
+  printf 'Unexpected fallback chain.\nExpected:\n%s\nActual:\n%s\n' "$expected_calls" "$actual_calls" >&2
+  exit 1
+fi
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
 grep -q 'Model opencode/deepseek-v4.1-flash-free encountered provider/quota failure' "$TMP/all-fail.out"
 grep -q 'Model opencode/glm-5.3-flash-free encountered provider/quota failure' "$TMP/all-fail.out"
