@@ -4,6 +4,6 @@ set -euo pipefail
 if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
   echo "configured=true" >> "$GITHUB_OUTPUT"
 else
-  echo "configured=false" >> "$GITHUB_OUTPUT"
-  echo "::warning::DEEPSEEK_API_KEY is not configured; skipping DeepSeek workflow"
+  echo "DEEPSEEK_API_KEY is not configured; cannot run DeepSeek workflow" >&2
+  exit 1
 fi
