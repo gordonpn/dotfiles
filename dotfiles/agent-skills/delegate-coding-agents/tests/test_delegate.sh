@@ -190,9 +190,11 @@ if grep -q 'falling back to next candidate' "$TMP/model-no-fallback.out"; then
   echo 'Expected explicit model not to fall back' >&2; exit 1
 fi
 # Failure when all candidate models fail
+: >"$OPENCODE_MOCK_CALL_LOG"
 if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
+[[ $(<"$OPENCODE_MOCK_CALL_LOG") == $'plan opencode/deepseek-v4.1-flash-free\nplan opencode/glm-5.3-flash-free\nplan opencode/mimo-v2.6-flash-free\nplan opencode/nemotron-3.5-lightning-free' ]]
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
 grep -q 'Model opencode/deepseek-v4.1-flash-free encountered provider/quota failure' "$TMP/all-fail.out"
 grep -q 'Model opencode/glm-5.3-flash-free encountered provider/quota failure' "$TMP/all-fail.out"

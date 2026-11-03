@@ -99,18 +99,19 @@ fi
 command -v git >/dev/null || die 'git is required'
 command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
 if [[ $AGENT == gemini ]]; then command -v jq >/dev/null || die 'jq is required for Gemini JSON output'; fi
+DEFAULT_FALLBACK_MODELS=(
+  "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
+  "opencode/glm-5.3-flash-free"
+  "opencode/mimo-v2.6-flash-free"
+  "opencode/nemotron-3.5-lightning-free"
+)
 if [[ $AGENT == opencode ]]; then
   if [[ -n $MODEL ]]; then
     CANDIDATE_MODELS=("$MODEL")
   elif [[ -n ${OPENCODE_DELEGATE_MODELS:-} ]]; then
     IFS=',' read -ra CANDIDATE_MODELS <<< "$OPENCODE_DELEGATE_MODELS"
   else
-    CANDIDATE_MODELS=(
-      "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
-      "opencode/glm-5.3-flash-free"
-      "opencode/mimo-v2.6-flash-free"
-      "opencode/nemotron-3.5-lightning-free"
-    )
+    CANDIDATE_MODELS=("${DEFAULT_FALLBACK_MODELS[@]}")
   fi
 else
   CANDIDATE_MODELS=("${MODEL:-${GEMINI_DELEGATE_MODEL:-}}")
