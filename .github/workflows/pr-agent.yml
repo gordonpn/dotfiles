@@ -1,7 +1,8 @@
 name: PR-Agent
 
 on:
-  pull_request:
+  # Keep the workflow and checkout on the trusted base branch when secrets are used.
+  pull_request_target:
     types: [ready_for_review]
   issue_comment:
     types: [created, edited]
@@ -17,7 +18,7 @@ jobs:
     if: |
       github.event.sender.type != 'Bot' &&
       github.actor != 'dependabot[bot]' &&
-      ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      ((github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository) ||
         (github.event_name == 'issue_comment' &&
          github.event.issue.pull_request &&
          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
@@ -33,13 +34,11 @@ jobs:
           persist-credentials: false
 
       - name: Check DeepSeek credentials
-        id: check-credentials
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: ./.github/scripts/check-deepseek-credentials.sh
 
       - name: PR Agent Action
-        if: steps.check-credentials.outputs.configured == 'true'
         uses: The-PR-Agent/pr-agent@1d01f24f455bb879c1d9c557ad7de3d72dcc7975 # v0.46.0
         env:
           CONFIG.MODEL: "deepseek/deepseek-chat"

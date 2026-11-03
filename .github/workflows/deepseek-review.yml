@@ -1,7 +1,8 @@
 name: DeepSeek Review
 
 on:
-  pull_request:
+  # Keep the workflow and checkout on the trusted base branch when secrets are used.
+  pull_request_target:
     types: [ready_for_review]
 
 concurrency:
@@ -25,7 +26,6 @@ jobs:
           persist-credentials: false
 
       - name: Check DeepSeek credentials
-        id: check-credentials
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: ./.github/scripts/check-deepseek-credentials.sh
@@ -35,8 +35,7 @@ jobs:
         run: ./.github/scripts/write-deepseek-review-prompt.sh .github/prompts/deepseek-review.md
 
       - name: DeepSeek Code Review
-        if: steps.check-credentials.outputs.configured == 'true'
-        uses: hustcer/deepseek-review@v1
+        uses: hustcer/deepseek-review@eccde2e9781008d795e366b951e313e37af88dd5 # v1
         with:
           chat-token: ${{ secrets.DEEPSEEK_API_KEY }}
           sys-prompt: ${{ steps.load-prompt.outputs.prompt }}
