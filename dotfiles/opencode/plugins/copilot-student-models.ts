@@ -3,6 +3,7 @@ const MAX_COPILOT_TOOLS = 128
 const ALLOWED_TOOL_PREFIXES = ["codebase-memory-mcp_", "context7_"] as const
 
 const BUILTIN_TOOLS = new Set([
+  "StructuredOutput",
   "bash",
   "read",
   "glob",
