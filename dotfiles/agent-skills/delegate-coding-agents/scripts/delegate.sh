@@ -31,7 +31,13 @@ is_provider_auth_error() {
   [[ -n $stderr_log ]] || return 1
 
   if grep -Eqi \
-    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status|code)[^0-9"]*(401|403)([^0-9]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status|code)[^0-9[:cntrl:]]*(401|403)([^0-9]|$))' \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status([[:space:]]*code)?|code)[[:space:]:=]*(401|403)([^[:alnum:]]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status([[:space:]]*code)?|code)[[:space:]:=]*(401|403)([^[:alnum:]]|$))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  if grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[[:space:]]*(401|403)([^[:alnum:]]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[[:space:]]*(401|403)([^[:alnum:]]|$))' \
     <<< "$stderr_log"; then
     return 0
   fi
@@ -45,18 +51,22 @@ is_provider_quota_error() {
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
   [[ -n $stderr_log ]] || return 1
 
-  # OpenCode v1.19.3 provider-error contract on stderr (`packages/opencode/src/cli/cmd/run.ts`,
-  # `packages/opencode/src/cli/error.ts`, `packages/opencode/src/session/message-v2.ts`,
-  # `packages/opencode/src/session/retry.ts`):
-  # 1. Structured `--print-logs --log-level ERROR` records:
-  #    - `level=ERROR ... error="ProviderModelNotFoundError: ..."`
-  #    - `level=ERROR ... (error.error|stack)="AI_APICallError: ..."`
-  # 2. `UI.error(...)` lines emitted for `FormatError` or `session.error` (`MessageV2.fromError`):
-  #    - `Error: Model not found: <provider>/<model>...` (`ProviderModelNotFoundError`)
-  #    - `Error: (AI_APICallError|ProviderModelNotFoundError|APIError|RetryError): ...`
-  #    - `Error: (Free usage exceeded|.*usage limit reached|Quota exceeded|Too Many Requests|Provider is overloaded|Bad Request:.*"model_not_supported"|(HTTP |Status:? |Response:? )?(429|502|503|504)\b)`
+  local retryable_terms='(Free usage (exceeded|limit)|usage limit reached|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
+
+  if grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)=.*ProviderModelNotFoundError:)|(^[[:space:]]*(error:[[:space:]]*)?ProviderModelNotFoundError:)|(^[[:space:]]*error:[[:space:]]*Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+)' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  if grep -Eqi \
+    "(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\\.error|stack|cause)=.*(AI_APICallError|APIError|RetryError):.*${retryable_terms})|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError|RetryError):[^[:cntrl:]]*${retryable_terms})|(^[[:space:]]*error:[[:space:]]*${retryable_terms})" \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
   grep -Eqi \
-    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError):)|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*(Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+|Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|Bad Request:[[:space:]]*\{[^[:cntrl:]]*"model_not_supported"|The requested model is not supported))|(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^0-9]|$))' \
+    '(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))' \
     <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
@@ -104,6 +114,16 @@ if [[ $AGENT == opencode ]]; then
   fi
 else
   CANDIDATE_MODELS=("${MODEL:-${GEMINI_DELEGATE_MODEL:-}}")
+fi
+if [[ $AGENT == opencode ]]; then
+  FILTERED_MODELS=()
+  for candidate_model in "${CANDIDATE_MODELS[@]}"; do
+    candidate_model="${candidate_model#"${candidate_model%%[![:space:]]*}"}"
+    candidate_model="${candidate_model%"${candidate_model##*[![:space:]]}"}"
+    if [[ -n $candidate_model ]]; then FILTERED_MODELS+=("$candidate_model"); fi
+  done
+  CANDIDATE_MODELS=("${FILTERED_MODELS[@]}")
+  ((${#CANDIDATE_MODELS[@]} > 0)) || die 'No usable OpenCode delegate models; check OPENCODE_DELEGATE_MODELS or --model'
 fi
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
 if (( AUTOMATIC )); then
