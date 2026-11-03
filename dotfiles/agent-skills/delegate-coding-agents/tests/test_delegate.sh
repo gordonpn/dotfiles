@@ -40,6 +40,7 @@ if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
   echo 'error: rate limit validation failed' >&2
+  echo 'timestamp=2026-11-03T16:58:09.362Z level=ERROR run=08956276 message="MCP server log" server=uptime-kuma logger=undefined level=error data="Failed to authenticate with Uptime Kuma: authInvalidToken"' >&2
   echo 'AssertionError: expected AI_APICallError handler capacity to be 10, got 8' >&2
   echo 'FAIL test_quota_validation: expected rate limit quota 10, got 8' >&2
   echo 'stdout report mentioning quota, rate limit, and model not found'
@@ -114,8 +115,16 @@ done
 "$SCRIPT" --agent opencode --mode plan --model opencode/glm-5.3-flash-free --id glm-fallback --task 'Retry after a quota limit' > "$TMP/glm-fallback.out"
 grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/glm-fallback.out"
 grep -q 'opencode plan default-variant complete' "$TMP/glm-fallback.out"
-# Automatic fallback from deepseek to glm when deepseek fails across each retained provider-error form
+# Automatic fallback from deepseek to glm when deepseek fails across each retained OpenCode v1.19.3 provider-error form
 for provider_err in \
+  'timestamp=2026-11-03T16:57:10.019Z level=ERROR run=e048f2aa message=failed ref=err_5508aa4d error="ProviderModelNotFoundError: Model not found: opencode/deepseek-v4.1-flash-free."' \
+  'timestamp=2026-11-03T16:57:10.019Z level=ERROR run=e048f2aa message=failed ref=err_5508aa4d error="ProviderInitError: Failed to initialize provider"' \
+  'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Rate limit exceeded"' \
+  $'\x1b[91m\x1b[1mError: \x1b[0mModel not found: opencode/deepseek-v4.1-flash-free' \
+  $'\x1b[91m\x1b[1mError: \x1b[0mFailed to initialize provider "opencode". Check credentials and configuration.' \
+  $'\x1b[91m\x1b[1mError: \x1b[0mFree usage exceeded, subscribe to Go' \
+  $'\x1b[91m\x1b[1mError: \x1b[0mQuota exceeded. Check your plan and billing details.' \
+  $'\x1b[91m\x1b[1mError: \x1b[0mProvider is overloaded' \
   'AI_APICallError: Rate limit exceeded for deepseek' \
   'Error: ProviderInitError: provider failed to initialize' \
   'ProviderModelNotFoundError: model not found' \
@@ -161,6 +170,7 @@ fi
 # Copilot fallback from gpt-4.1 to gpt-4o on usage limit, model_not_supported, HTTP 429, and service unavailable
 for err_msg in \
   'AI_APICallError: Free usage limit reached' \
+  $'\x1b[91m\x1b[1mError: \x1b[0mBad Request: {"error":{"message":"The requested model is not supported.","code":"model_not_supported","param":"model","type":"invalid_request_error"}}' \
   'ProviderModelNotFoundError: The requested model is not supported' \
   'HTTP 429 Too Many Requests' \
   'Status: 503 Service Unavailable'; do
