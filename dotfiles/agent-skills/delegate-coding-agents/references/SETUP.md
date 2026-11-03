@@ -10,8 +10,8 @@ local copies are backed up by the sync script.
 Codex delegates sequentially to OpenCode DeepSeek Flash Free, OpenCode GLM
 Flash Free only after an explicit quota/rate-limit failure, then Gemini CLI if
 both OpenCode free routes are limited. Codex does not delegate to Antigravity
-CLI or Copilot CLI. Gemini CLI must be installed and authenticated before that
-fallback can run.
+CLI under a consumer plan. Gemini CLI must be installed and authenticated
+before that fallback can run.
 
 Automatic delegation requires explicit opt-in in each eligible repository:
 

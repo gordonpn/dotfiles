@@ -23,7 +23,7 @@ For Codex, route sequentially and stop after the first worker completes successf
 3. If that is also explicitly quota/rate limited, use Gemini CLI with its configured account/model.
 4. If Gemini CLI is unavailable, quota-limited, or cannot complete, continue with Codex directly.
 
-Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. These OpenCode free offers can change; confirm the selected model remains available before use. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan. Copilot CLI is not part of this route.
+Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. These OpenCode free offers can change; confirm the selected model remains available before use. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
 
 ## Calling the script
 
