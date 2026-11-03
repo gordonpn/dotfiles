@@ -152,15 +152,14 @@ for provider_err in \
   $'\x1b[91m\x1b[1mError: \x1b[0mProvider is overloaded' \
   'AI_APICallError: Rate limit exceeded for deepseek' \
   'ProviderModelNotFoundError: model not found' \
-  'APIError: upstream error' \
-  'RetryError: max retries reached' \
   'AI_APICallError: Too Many Requests status 429 url https://api.example.com/v1 request_id=a1403ms' \
   'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Too Many Requests status 429 url https://api.example.com/v1 request_id=a1403ms"' \
   'AI_APICallError: Too Many Requests at https://api.example.com/v1/403' \
   'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Too Many Requests at https://api.example.com/v1/403"' \
   'HTTP 429 Too Many Requests' \
   'Status: 503 Service Unavailable'; do
-  OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$provider_err" "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out"
+  OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$provider_err" "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out" 2>&1 || { echo "Fallback case failed: $provider_err" >&2; exit 1; }
+  grep -q 'falling back to next candidate' "$TMP/auto-fallback.out" || { echo "No fallback triggered for: $provider_err" >&2; exit 1; }
   grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback.out"
   grep -q 'opencode plan default-variant complete' "$TMP/auto-fallback.out"
   grep -q 'Exit: 0' "$TMP/auto-fallback.out"
@@ -184,6 +183,7 @@ for auth_agent in opencode copilot; do
     'Error: ProviderInitError: provider failed to initialize' \
     'Error: Failed to initialize provider "opencode". Check credentials and configuration.' \
     'Error: AI_APICallError: Request failed with status code 401' \
+    'Error: AI_APICallError: 401' \
     'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Request failed with status code 403"' \
     'Error: You are not signed in. Please run copilot login.' \
     'HTTP 401 Unauthorized'; do
@@ -204,7 +204,8 @@ for auth_agent in opencode copilot; do
   done
 done
 # Automatic fallback in build mode resets dirty worktree from failed candidate
-OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_DIRTY_ON_FAIL=1 "$SCRIPT" --agent opencode --mode build --id auto-fallback-build --task 'Test build fallback worktree reset' > "$TMP/auto-fallback-build.out"
+OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_DIRTY_ON_FAIL=1 "$SCRIPT" --agent opencode --mode build --id auto-fallback-build --task 'Test build fallback worktree reset' > "$TMP/auto-fallback-build.out" 2>&1
+grep -q 'falling back to next candidate' "$TMP/auto-fallback-build.out"
 grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback-build.out"
 grep -q 'Exit: 0' "$TMP/auto-fallback-build.out"
 WT_BUILD=$(sed -n 's/^  Worktree: //p' "$TMP/auto-fallback-build.out" | head -n 1)
@@ -291,11 +292,37 @@ if OPENCODE_MOCK_COMPILER_ERROR=1 "$SCRIPT" --agent opencode --mode build --id c
   echo 'Expected compiler error to return nonzero' >&2; exit 1
 fi
 grep -q 'Exit: 1' "$TMP/compiler-error.out"
+if grep -q 'Stopping fallback' "$TMP/compiler-error.out"; then
+  echo 'Expected auth-looking compiler output not to be treated as an authentication failure' >&2; exit 1
+fi
 if grep -q 'falling back to next candidate' "$TMP/compiler-error.out"; then
   echo 'Expected compiler line numbers and capacity terms not to trigger fallback candidate retry' >&2; exit 1
 fi
 WT_COMPILER_ERROR=$(sed -n 's/^  Worktree: //p' "$TMP/compiler-error.out" | head -n 1)
 [[ -f $WT_COMPILER_ERROR/compiler-error.txt ]]
+# Generic API failures and auth-looking digits in URLs/request IDs do not trigger retries.
+for task_error in \
+  'APIError: upstream error' \
+  'RetryError: max retries reached' \
+  'AI_APICallError: status check failed at https://api.example.com/v1/403' \
+  'AI_APICallError: code=req401abc' \
+  'AI_APICallError: 400 Bad Request'; do
+  if OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$task_error" "$SCRIPT" --agent opencode --mode build --id generic-error --task 'Do not retry unclassified errors' > "$TMP/generic-error.out" 2>&1; then
+    echo "Expected unclassified error not to succeed by retrying: $task_error" >&2; exit 1
+  fi
+  if grep -q 'Stopping fallback' "$TMP/generic-error.out" || grep -q 'falling back to next candidate' "$TMP/generic-error.out"; then
+    echo "Expected unclassified error not to be classified as auth/provider failure: $task_error" >&2; exit 1
+  fi
+done
+# Reject configured model chains with no usable OpenCode candidates.
+if OPENCODE_DELEGATE_MODELS=',  , ' "$SCRIPT" --agent opencode --mode plan --id empty-chain --task 'Reject an empty model chain' > "$TMP/empty-chain.out" 2>&1; then
+  echo 'Expected an empty OpenCode model chain to be rejected' >&2; exit 1
+fi
+grep -q 'No usable OpenCode delegate models' "$TMP/empty-chain.out"
+if OPENCODE_DELEGATE_MODELS=',  , ' "$SCRIPT" --agent copilot --mode plan --id empty-fallback --task 'Reject an empty Copilot fallback chain' > "$TMP/empty-fallback.out" 2>&1; then
+  echo 'Expected an empty Copilot fallback chain to be rejected' >&2; exit 1
+fi
+grep -q 'No usable OpenCode fallback models' "$TMP/empty-fallback.out"
 # Automatic delegation must be explicitly opted in for this repository.
 if "$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --task 'Nope' >"$TMP/not-opted-in.out" 2>&1; then
  echo 'Expected automatic delegation opt-in gate' >&2; exit 1
