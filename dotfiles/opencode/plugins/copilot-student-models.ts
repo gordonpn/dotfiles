@@ -50,6 +50,7 @@ interface ToolEntry {
 
 interface ChatCompletionPayload {
   tools?: ToolEntry[]
+  tool_choice?: unknown
   [key: string]: unknown
 }
 
@@ -67,49 +68,103 @@ function extractUrl(input: RequestInfo | URL): string {
   return input.url
 }
 
+function parseUrl(input: RequestInfo | URL): URL | undefined {
+  try {
+    return new URL(extractUrl(input))
+  } catch {
+    return undefined
+  }
+}
+
+function isCopilotEndpoint(url: URL | undefined, pathname: string): boolean {
+  return url?.hostname === "api.githubcopilot.com" && url.pathname === pathname
+}
+
+function getToolName(tool: ToolEntry): string {
+  return tool.function?.name ?? tool.name ?? "(unnamed)"
+}
+
+function isToolEntry(value: unknown): value is ToolEntry {
+  if (!isObjectRecord(value)) return false
+  if (value.name !== undefined && typeof value.name !== "string") return false
+  if (value.function === undefined) return true
+  return isObjectRecord(value.function) && (value.function.name === undefined || typeof value.function.name === "string")
+}
+
 function isBuiltinCopilotTool(tool: ToolEntry): boolean {
-  const name = tool.function?.name ?? tool.name ?? ""
-  return BUILTIN_TOOLS.has(name)
+  return BUILTIN_TOOLS.has(getToolName(tool))
 }
 
 function isPreferredMcpTool(tool: ToolEntry): boolean {
-  const name = tool.function?.name ?? tool.name ?? ""
+  const name = getToolName(tool)
   return !BUILTIN_TOOLS.has(name) && ALLOWED_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix))
 }
 
-function selectCopilotTools(tools: readonly ToolEntry[]): ToolEntry[] {
-  const builtins = tools.filter(isBuiltinCopilotTool)
-  const preferredMcp = tools.filter(isPreferredMcpTool)
-  return [...builtins, ...preferredMcp].slice(0, MAX_COPILOT_TOOLS)
+function getToolChoiceName(toolChoice: unknown): string | undefined {
+  if (!isObjectRecord(toolChoice) || !isObjectRecord(toolChoice.function)) return undefined
+  return typeof toolChoice.function.name === "string" ? toolChoice.function.name : undefined
 }
 
-const originalFetch = globalThis.fetch
+function selectCopilotTools(tools: readonly ToolEntry[], pinnedToolName?: string): ToolEntry[] {
+  const pinnedTool = pinnedToolName ? tools.find((tool) => getToolName(tool) === pinnedToolName) : undefined
+  const remaining = tools.filter((tool) => tool !== pinnedTool)
+  const builtins = remaining.filter(isBuiltinCopilotTool)
+  const preferredMcp = remaining.filter(isPreferredMcpTool)
+  return [...(pinnedTool ? [pinnedTool] : []), ...builtins, ...preferredMcp].slice(0, MAX_COPILOT_TOOLS)
+}
+
+const originalFetch = globalThis.fetch.bind(globalThis)
 
 // GitHub Copilot Student (edu) plans return model_picker_enabled: false on /models,
 // which causes OpenCode to filter out all Copilot models. Additionally, Copilot
 // /chat/completions rejects payloads exceeding 128 tools.
 const patchedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  const url = extractUrl(input)
+  const url = parseUrl(input)
+  let requestInput: RequestInfo | URL = input
   let requestInit = init
 
-  if (url.includes("githubcopilot.com") && typeof requestInit?.body === "string") {
+  if (isCopilotEndpoint(url, "/chat/completions")) {
     try {
-      const parsed: unknown = JSON.parse(requestInit.body)
+      const request = new Request(input, init)
+      const parsed: unknown = await request.clone().json()
       if (isObjectRecord(parsed) && Array.isArray(parsed.tools) && parsed.tools.length > MAX_COPILOT_TOOLS) {
-        const payload = parsed as ChatCompletionPayload
-        const filtered = selectCopilotTools(payload.tools ?? [])
-        requestInit = {
-          ...requestInit,
-          body: JSON.stringify({ ...payload, tools: filtered }),
+        const rawTools = parsed.tools
+        const tools = rawTools.filter(isToolEntry)
+        if (tools.length !== rawTools.length) {
+          console.warn("Copilot plugin found an invalid tool entry; forwarding the request unchanged.")
+        } else {
+          const payload: ChatCompletionPayload = { ...parsed, tools }
+          const filtered = selectCopilotTools(tools, getToolChoiceName(payload.tool_choice))
+          const dropped = tools.filter((tool) => !filtered.includes(tool)).map(getToolName)
+          if (dropped.length > 0) {
+            console.warn(`Copilot plugin dropped ${dropped.length} tool(s) to meet the 128-tool limit: ${dropped.join(", ")}`)
+          }
+          const headers = new Headers(request.headers)
+          headers.delete("content-length")
+          requestInput = new Request(request.url, {
+            method: request.method,
+            headers,
+            body: JSON.stringify({ ...payload, tools: filtered }),
+            signal: request.signal,
+            mode: request.mode,
+            credentials: request.credentials,
+            cache: request.cache,
+            redirect: request.redirect,
+            referrer: request.referrer,
+            referrerPolicy: request.referrerPolicy,
+            integrity: request.integrity,
+            keepalive: request.keepalive,
+          })
+          requestInit = undefined
         }
       }
     } catch {
-      // Preserve original body when request payload is not JSON
+      console.warn("Copilot plugin could not inspect the chat request; forwarding it unchanged.")
     }
   }
 
-  const response = await originalFetch(input, requestInit)
-  if (!url.includes("githubcopilot.com/models") || !response.ok) {
+  const response = await originalFetch(requestInput, requestInit)
+  if (!isCopilotEndpoint(url, "/models") || !response.ok) {
     return response
   }
 
@@ -122,14 +177,17 @@ const patchedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promi
           model.model_picker_enabled = true
         }
       }
+      const headers = new Headers(response.headers)
+      headers.delete("content-encoding")
+      headers.delete("content-length")
       return new Response(JSON.stringify(body), {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
+        headers,
       })
     }
   } catch {
-    // Fall back to original response if JSON parsing fails
+    console.warn("Copilot plugin could not inspect the models response; forwarding it unchanged.")
   }
 
   return response
