@@ -35,13 +35,13 @@ Use the script in **the current skill installation**. Codex default install: `~/
   --orchestrator codex --automatic --agent opencode --mode plan \
   --id pagination-plan --task 'Inspect cursor handling; propose concrete design and tests.'
 
-# After an explicit OpenCode quota/rate-limit failure, try the free GLM model
+# After a classified provider, quota, rate-limit, or model-availability failure, try GLM explicitly
 "$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
   --orchestrator codex --automatic --agent opencode --mode build \
   --model opencode/glm-5.3-flash-free \
   --id pagination-api --task 'Implement cursor-based pagination and tests in API module.'
 
-# After an explicit OpenCode quota/rate-limit failure, use Gemini CLI
+# After all OpenCode free candidates fail with classified errors, use Gemini CLI
 "$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
   --orchestrator codex --automatic --agent gemini --mode build \
   --id validation-tests --task 'Implement the assigned acceptance criteria and tests.'
@@ -67,5 +67,5 @@ The wrapper creates an external Git worktree from the **committed** base revisio
 - Automatic delegation requires explicit per-repository opt-in: `git config --local agents.delegationAllowed true`. This setting is in local Git config, not committed to the repository.
 - Worktrees do **not** sandbox host credentials, Git metadata, filesystem, or network. Keep narrowly scoped shell permissions; do not enable blanket unattended execution.
 - If there is no isolated, valid committed state, do not stash/reset or discard user changes to force delegation.
-- Run one external worker at a time. Avoid recursive delegation and indefinite retry loops. Fallback only on clear quota/rate-limit failures; if all free routes fail, report and continue with the orchestrator if possible.
+- Run one external worker at a time. Avoid recursive delegation and indefinite retry loops. Fallback only on classified provider, quota, rate-limit, or model-availability failures; if all eligible routes fail, report and continue with the orchestrator if possible.
 - Never treat claimed passing tests as evidence without checking command output; agy headless may soft-deny shell commands.

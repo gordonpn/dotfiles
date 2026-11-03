@@ -7,12 +7,14 @@ to link them into `~/.agents/skills/` and
 OpenCode, and Antigravity's skill discovery directory. Existing conflicting
 local copies are backed up by the sync script.
 
-Codex delegates sequentially to OpenCode DeepSeek Flash Free, OpenCode GLM
-Flash Free only after an explicit quota/rate-limit failure, then Gemini CLI if
-both OpenCode free routes are limited. Authentication and provider setup errors
-stop delegation with a message to check login and credentials/configuration.
-Codex does not delegate to Antigravity CLI under a consumer plan. Gemini CLI
-must be installed and authenticated before that fallback can run.
+Codex tries OpenCode DeepSeek Flash Free (high), GLM-5.3 Flash Free, MiniMax
+M3.1 Flash Free, and Qwen 3.6 Plus Free in order. It advances only after a
+classified provider, quota, rate-limit, or model-availability failure. After
+all OpenCode candidates fail that way, Codex may use Gemini CLI. Authentication
+and provider-initialization errors stop delegation with a message to check
+login and credentials/configuration. Gemini CLI must be installed and
+authenticated before that fallback can run. Codex does not delegate to
+Antigravity CLI under a consumer plan.
 
 Automatic delegation requires explicit opt-in in each eligible repository:
 
