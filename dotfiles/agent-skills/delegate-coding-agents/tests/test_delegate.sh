@@ -267,10 +267,15 @@ fi
 grep -q 'automatic model selection only' "$TMP/copilot-no-pin.out"
 # Failure when all candidate models fail
 : >"$OPENCODE_MOCK_CALL_LOG"
-if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
+if env -u OPENCODE_DELEGATE_MODEL -u OPENCODE_DELEGATE_MODELS OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
-[[ $(<"$OPENCODE_MOCK_CALL_LOG") == $'plan opencode/deepseek-v4.1-flash-free\nplan opencode/glm-5.3-flash-free\nplan opencode/mimo-v2.6-flash-free\nplan opencode/nemotron-3.5-lightning-free' ]]
+expected_calls=$'plan opencode/deepseek-v4.1-flash-free\nplan opencode/glm-5.3-flash-free\nplan opencode/mimo-v2.6-flash-free\nplan opencode/nemotron-3.5-lightning-free'
+actual_calls=$(<"$OPENCODE_MOCK_CALL_LOG")
+if [[ $actual_calls != "$expected_calls" ]]; then
+  printf 'Unexpected fallback chain.\nExpected:\n%s\nActual:\n%s\n' "$expected_calls" "$actual_calls" >&2
+  exit 1
+fi
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
 grep -q 'Model: opencode/nemotron-3.5-lightning-free' "$TMP/all-fail.out"
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
