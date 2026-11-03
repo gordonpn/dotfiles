@@ -343,4 +343,10 @@ assert_delegate_call "CALL" "${default_model}" "task with -h embedded"
 assert_failure 2 "Usage:" "$script" --
 assert_failure 2 "Usage:" "$script" -- "   "
 
+# Test 18: .github/scripts/check-deepseek-credentials.sh fails when credentials are missing
+cred_script="${repo_dir}/.github/scripts/check-deepseek-credentials.sh"
+assert_failure 1 "DEEPSEEK_API_KEY is not configured" env -u DEEPSEEK_API_KEY "${cred_script}"
+assert_failure 1 "DEEPSEEK_API_KEY is not configured" env DEEPSEEK_API_KEY=$' \t\n' "${cred_script}"
+assert_success env DEEPSEEK_API_KEY="test-key" "${cred_script}"
+
 echo "deepseek-analyze checks passed"

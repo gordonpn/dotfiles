@@ -309,6 +309,8 @@ install_thinking_skills() { echo thinking-skills >>"$calls"; }
 install_github_mcp_server() { echo github >>"$calls"; }
 install_terraform_mcp_server() { echo terraform >>"$calls"; }
 install_repomix() { echo repomix >>"$calls"; }
+install_semgrep() { echo semgrep >>"$calls"; }
+install_sonarqube_mcp_server() { echo sonarqube >>"$calls"; }
 sync_ssh_profiles() { :; }
 sync_docker_profiles() { :; }
 sync_k3s_cluster() { echo k3s >>"$calls"; }
@@ -330,5 +332,5 @@ opencode() { :; }
 
 (main)
 
-[[ "$(cat "$calls")" == $'codebase\nai-memory\nthinking-skills\ngithub\nterraform\nrepomix\nk3s' ]]
+[[ "$(cat "$calls")" == $'codebase\nai-memory\nthinking-skills\ngithub\nterraform\nrepomix\nsemgrep\nsonarqube\nk3s' ]]
 echo 'MCP setup checks passed'

@@ -1,0 +1,42 @@
+name: DeepSeek Review
+
+on:
+  # Keep secret-bearing code on the base branch; the action fetches PR data through GitHub's API.
+  pull_request_target:
+    types: [ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: runner / deepseek-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout repository
+        # The action fetches the PR diff through the API; never check out its untrusted head here.
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check DeepSeek credentials
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: ./.github/scripts/check-deepseek-credentials.sh
+
+      - name: Load DeepSeek review prompt
+        id: load-prompt
+        run: ./.github/scripts/write-deepseek-review-prompt.sh .github/prompts/deepseek-review.md
+
+      - name: DeepSeek Code Review
+        uses: hustcer/deepseek-review@eccde2e9781008d795e366b951e313e37af88dd5 # v1
+        with:
+          chat-token: ${{ secrets.DEEPSEEK_API_KEY }}
+          sys-prompt: ${{ steps.load-prompt.outputs.prompt }}
