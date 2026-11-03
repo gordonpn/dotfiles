@@ -60,7 +60,7 @@ also includes issues you opened because it uses `reason:author`.
 Codex and Antigravity CLI try first-party GitHub Copilot CLI with `--model auto`
 first, then OpenCode's zero-cost models (`opencode/deepseek-v4.1-flash-free`
 with high variant, `opencode/glm-5.3-flash-free`,
-`opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`) after
+`opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) after
 classified provider, quota, rate-limit, model-availability, or capacity failures.
 Copilot Student supports Auto model selection only, so this route uses Copilot
 CLI rather than explicit model IDs through a third-party client. Authentication

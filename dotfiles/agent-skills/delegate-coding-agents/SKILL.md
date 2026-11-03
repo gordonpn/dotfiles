@@ -19,7 +19,7 @@ Do **not** call a harness from inside its delegated invocation, recursively dele
 For Codex and Antigravity CLI, route sequentially and stop after the first worker completes successfully:
 
 1. First-party GitHub Copilot CLI (`--agent copilot`) with `--model auto`.
-2. On classified provider, quota, rate-limit, model-availability, or capacity failures only, fall back to OpenCode free models: `opencode/deepseek-v4.1-flash-free` at high variant, then `opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, and `opencode/qwen3.6-plus-free`.
+2. On classified provider, quota, rate-limit, model-availability, or capacity failures only, fall back to OpenCode free models: `opencode/deepseek-v4.1-flash-free` at high variant, then `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free`.
 3. For Codex only: after all OpenCode candidates fail with classified provider, quota, rate-limit, model-availability, or capacity errors, use Gemini CLI with its configured account/model.
 4. If all permitted routes are unavailable or cannot complete, continue with the orchestrator directly.
 
@@ -52,7 +52,7 @@ Use the script in **the current skill installation**. Codex default install: `~/
 
 Supported flags: `--orchestrator codex|agy`, `--agent opencode|copilot|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
 
-GitHub Copilot (`--agent copilot`) runs first-party Copilot CLI with `--model auto`; Student-plan access is Auto-only. Plans deny write and shell tools. Builds allow file edits but deny shell commands, so the orchestrator must run verification. Classified provider, quota, rate-limit, model-availability, or capacity failures advance to OpenCode. OpenCode (`--agent opencode`) defaults to `opencode/deepseek-v4.1-flash-free` with high variant, then tries `opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, and `opencode/qwen3.6-plus-free` on those same classified failures. `--model` pins an OpenCode model; `OPENCODE_DELEGATE_MODEL` overrides its first candidate and `OPENCODE_DELEGATE_MODELS` replaces its chain with comma-separated models. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
+GitHub Copilot (`--agent copilot`) runs first-party Copilot CLI with `--model auto`; Student-plan access is Auto-only. Plans deny write and shell tools. Builds allow file edits but deny shell commands, so the orchestrator must run verification. Classified provider, quota, rate-limit, model-availability, or capacity failures advance to OpenCode. OpenCode (`--agent opencode`) defaults to `opencode/deepseek-v4.1-flash-free` with high variant, then tries `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free` on those same classified failures. `--model` pins an OpenCode model; `OPENCODE_DELEGATE_MODEL` overrides its first candidate and `OPENCODE_DELEGATE_MODELS` replaces its chain with comma-separated models. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
 
 ## Delegate specification
 

@@ -13,8 +13,8 @@ Codex and Antigravity CLI use first-party GitHub Copilot CLI with `--model auto`
 first, then fall back on classified provider, quota, rate-limit,
 model-availability, or capacity failures to OpenCode zero-cost models:
 `opencode/deepseek-v4.1-flash-free` (high variant),
-`opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, then
-`opencode/qwen3.6-plus-free`. Copilot Student access supports automatic model
+`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, then
+`opencode/nemotron-3.5-lightning-free`. Copilot Student access supports automatic model
 selection only and excludes third-party agents, so do not route it through
 OpenCode or pin Copilot model IDs. Authentication and provider-initialization
 errors are hard stops with a login/credential-configuration hint. Codex may use

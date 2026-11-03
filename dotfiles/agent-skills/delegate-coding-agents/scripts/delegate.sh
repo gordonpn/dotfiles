@@ -135,8 +135,8 @@ if [[ $AGENT == opencode ]]; then
     CANDIDATE_MODELS=(
       "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
       "opencode/glm-5.3-flash-free"
-      "opencode/minimax-m3.1-flash-free"
-      "opencode/qwen3.6-plus-free"
+      "opencode/mimo-v2.6-flash-free"
+      "opencode/nemotron-3.5-lightning-free"
     )
   fi
 elif [[ $AGENT == copilot ]]; then
@@ -149,8 +149,8 @@ elif [[ $AGENT == copilot ]]; then
     FALLBACK_MODELS=(
       "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
       "opencode/glm-5.3-flash-free"
-      "opencode/minimax-m3.1-flash-free"
-      "opencode/qwen3.6-plus-free"
+      "opencode/mimo-v2.6-flash-free"
+      "opencode/nemotron-3.5-lightning-free"
     )
   fi
   for fallback_model in "${FALLBACK_MODELS[@]}"; do

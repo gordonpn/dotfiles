@@ -5,7 +5,7 @@ description: Automatically delegate engineering subtasks to Copilot CLI and Open
 
 # Delegation-First Routing when Antigravity is the orchestrator
 
-When a useful bounded subtask is available, Antigravity delegates first to first-party GitHub Copilot CLI with `--model auto`. In repositories where delegation is permitted (`agents.delegationAllowed=true`), classified provider, quota, rate-limit, model-availability, or capacity failures fall back sequentially to OpenCode's zero-cost models: DeepSeek V4.1 Flash Free (high), GLM-5.3 Flash Free, MiniMax M3.1 Flash Free, then Qwen3.6 Plus Free. Copilot Student supports Auto selection only and excludes third-party agents, so never invoke Copilot models through OpenCode. Authentication and provider-initialization errors are hard stops. Antigravity supervises, reviews, integrates, and verifies the final changes.
+When a useful bounded subtask is available, Antigravity delegates first to first-party GitHub Copilot CLI with `--model auto`. In repositories where delegation is permitted (`agents.delegationAllowed=true`), classified provider, quota, rate-limit, model-availability, or capacity failures fall back sequentially to OpenCode's zero-cost models: DeepSeek V4.1 Flash Free (high), GLM-5.3 Flash Free, MiMo-V2.6-Flash Free, then Nemotron 3.5 Lightning Free. Copilot Student supports Auto selection only and excludes third-party agents, so never invoke Copilot models through OpenCode. Authentication and provider-initialization errors are hard stops. Antigravity supervises, reviews, integrates, and verifies the final changes.
 
 ## Delegation-First Rules
 
