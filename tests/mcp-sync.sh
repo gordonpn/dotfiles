@@ -202,7 +202,9 @@ printf 'colliding codex skill file\n' >"${CODEX_DIR}/skills/shared-skill"
 mkdir -p "${OPENCODE_DIR}/plugins"
 printf 'preexisting backup\n' >"${OPENCODE_DIR}/AGENTS.md.bak"
 printf 'old opencode instructions\n' >"${OPENCODE_DIR}/AGENTS.md"
+printf 'preexisting plugin backup\n' >"${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak"
 ln -s "${HOME}/external-plugin.ts" "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+ln -s "${repo_dir}/dotfiles/opencode/plugins/removed-plugin.ts" "${OPENCODE_DIR}/plugins/stale-plugin.ts"
 
 mkdir -p "${CODEX_DIR}"
 printf 'preexisting codex backup\n' >"${CODEX_DIR}/AGENTS.md.bak"
@@ -232,8 +234,12 @@ sync_skills_and_instructions
 [[ "$(readlink "${OPENCODE_DIR}/AGENTS.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
 [[ -L "${OPENCODE_DIR}/plugins/copilot-student-models.ts" ]]
 [[ "$(readlink "${OPENCODE_DIR}/plugins/copilot-student-models.ts")" == "${repo_dir}/dotfiles/opencode/plugins/copilot-student-models.ts" ]]
-[[ -L "${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak" ]]
-[[ "$(readlink "${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak")" == "${HOME}/external-plugin.ts" ]]
+[[ -f "${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak" ]]
+[[ "$(<"${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak")" == 'preexisting plugin backup' ]]
+plugin_backups=("${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak."*)
+[[ ${#plugin_backups[@]} -ge 1 && -L "${plugin_backups[0]}" ]]
+[[ "$(readlink "${plugin_backups[0]}")" == "${HOME}/external-plugin.ts" ]]
+[[ ! -e "${OPENCODE_DIR}/plugins/stale-plugin.ts" && ! -L "${OPENCODE_DIR}/plugins/stale-plugin.ts" ]]
 [[ -f "${OPENCODE_DIR}/AGENTS.md.bak" ]]
 [[ "$(<"${OPENCODE_DIR}/AGENTS.md.bak")" == 'preexisting backup' ]]
 agent_backups=("${OPENCODE_DIR}/AGENTS.md.bak."*)
@@ -293,11 +299,39 @@ codex_skill_backups=("${GEMINI_DIR}/skill-backups/shared-skill.bak."*)
 [[ ! -e "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill" && ! -L "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/renamed-stale-skill" && ! -L "${OPENCODE_DIR}/skills/renamed-stale-skill" ]]
 
+# A regular plugin file is backed up before the managed symlink replaces it.
+rm -f "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+printf 'manual plugin file\n' >"${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+sync_skills_and_instructions
+[[ -L "${OPENCODE_DIR}/plugins/copilot-student-models.ts" ]]
+[[ "$(readlink "${OPENCODE_DIR}/plugins/copilot-student-models.ts")" == "${repo_dir}/dotfiles/opencode/plugins/copilot-student-models.ts" ]]
+manual_plugin_backup_found=0
+for plugin_backup in "${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak."*; do
+  if [[ -f "${plugin_backup}" && ! -L "${plugin_backup}" ]] && [[ "$(<"${plugin_backup}")" == 'manual plugin file' ]]; then
+    manual_plugin_backup_found=1
+  fi
+done
+[[ "${manual_plugin_backup_found}" -eq 1 ]]
+
 # Verify sync_skills_and_instructions is idempotent and creates no additional backups
 backup_count_before=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
+plugin_backup_count_before=$(find "${OPENCODE_DIR}/plugins" -mindepth 1 -maxdepth 1 -name '*.bak*' | wc -l)
 sync_skills_and_instructions
 backup_count_after=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
+plugin_backup_count_after=$(find "${OPENCODE_DIR}/plugins" -mindepth 1 -maxdepth 1 -name '*.bak*' | wc -l)
 [[ "${backup_count_before}" -eq "${backup_count_after}" ]]
+[[ "${plugin_backup_count_before}" -eq "${plugin_backup_count_after}" ]]
+
+# Managed plugin links are pruned even when their source directory has been removed.
+(
+  missing_repo="${test_tmp_dir}/removed-repo"
+  missing_plugins="${missing_repo}/dotfiles/opencode/plugins"
+  stale_plugin="${OPENCODE_DIR}/plugins/stale-source-plugin.ts"
+  ln -s "${missing_plugins}/removed.ts" "${stale_plugin}"
+  REPO_DIR="${missing_repo}"
+  sync_skills_and_instructions
+  [[ ! -e "${stale_plugin}" && ! -L "${stale_plugin}" ]]
+)
 
 # Verify sync_skills_and_instructions leaves OPENCODE_DIR absent when opencode is absent
 (
