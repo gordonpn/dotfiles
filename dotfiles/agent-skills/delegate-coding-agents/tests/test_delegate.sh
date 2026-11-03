@@ -39,7 +39,8 @@ done
 if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
-  echo 'AssertionError: expected capacity to be 10, got 8' >&2
+  echo 'error: rate limit validation failed' >&2
+  echo 'AssertionError: expected AI_APICallError handler capacity to be 10, got 8' >&2
   echo 'FAIL test_quota_validation: expected rate limit quota 10, got 8' >&2
   echo 'stdout report mentioning quota, rate limit, and model not found'
   exit 1
@@ -113,11 +114,21 @@ done
 "$SCRIPT" --agent opencode --mode plan --model opencode/glm-5.3-flash-free --id glm-fallback --task 'Retry after a quota limit' > "$TMP/glm-fallback.out"
 grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/glm-fallback.out"
 grep -q 'opencode plan default-variant complete' "$TMP/glm-fallback.out"
-# Automatic fallback from deepseek to glm when deepseek fails
-OPENCODE_MOCK_FAIL_DEEPSEEK=1 "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out"
-grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback.out"
-grep -q 'opencode plan default-variant complete' "$TMP/auto-fallback.out"
-grep -q 'Exit: 0' "$TMP/auto-fallback.out"
+# Automatic fallback from deepseek to glm when deepseek fails across each retained provider-error form
+for provider_err in \
+  'AI_APICallError: Rate limit exceeded for deepseek' \
+  'Error: ProviderInitError: provider failed to initialize' \
+  'ProviderModelNotFoundError: model not found' \
+  'ProviderAuthError: authentication failed' \
+  'APIError: upstream error' \
+  'RetryError: max retries reached' \
+  'HTTP 429 Too Many Requests' \
+  'Status: 503 Service Unavailable'; do
+  OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$provider_err" "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out"
+  grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback.out"
+  grep -q 'opencode plan default-variant complete' "$TMP/auto-fallback.out"
+  grep -q 'Exit: 0' "$TMP/auto-fallback.out"
+done
 # Automatic fallback in build mode resets dirty worktree from failed candidate
 OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_DIRTY_ON_FAIL=1 "$SCRIPT" --agent opencode --mode build --id auto-fallback-build --task 'Test build fallback worktree reset' > "$TMP/auto-fallback-build.out"
 grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback-build.out"
@@ -150,9 +161,9 @@ fi
 # Copilot fallback from gpt-4.1 to gpt-4o on usage limit, model_not_supported, HTTP 429, and service unavailable
 for err_msg in \
   'AI_APICallError: Free usage limit reached' \
-  'model_not_supported: The requested model is not supported' \
-  'Error: HTTP 429 Too Many Requests' \
-  'Error: 503 Service Unavailable'; do
+  'ProviderModelNotFoundError: The requested model is not supported' \
+  'HTTP 429 Too Many Requests' \
+  'Status: 503 Service Unavailable'; do
   OPENCODE_MOCK_FAIL_GPT41=1 OPENCODE_MOCK_FAIL_MSG="$err_msg" "$SCRIPT" --agent copilot --mode plan --id copilot-fallback --task 'Test copilot fallback' > "$TMP/copilot-fallback.out"
   grep -q 'Model: github-copilot/gpt-4o' "$TMP/copilot-fallback.out"
   grep -q 'Exit: 0' "$TMP/copilot-fallback.out"

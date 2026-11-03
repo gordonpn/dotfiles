@@ -33,7 +33,7 @@ is_provider_quota_error() {
   [[ -n $stderr_log ]] || return 1
 
   grep -Eqi \
-    '(AI_APICallError|ProviderInitError|ProviderModelNotFoundError|ProviderAuthError|APIError|RetryError)|((error|failed|status|code|http|response)[ :]+[^\n]*(rate[ -]?limit|usage[ -]?limit|quota[ -]?(exceeded|exhausted|limit|reached)|too many requests|resource[ _-]?exhausted|provider[^\n]*not[^\n]*found|model[^\n]*not[^\n]*(found|supported)|the requested model is not supported|temporarily unavailable|service unavailable|server overloaded|\b(out of|over|at|server) capacity|capacity exceeded|gateway timeout|\b(429|502|503|504)\b))|(^(rate[ -]?limit|usage[ -]?limit|free usage limit|quota[ -]?(exceeded|exhausted|limit|reached)|too many requests|resource[ _-]?exhausted|the requested model is not supported|model_not_supported|service unavailable|gateway timeout))' \
+    '^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|ProviderInitError|ProviderModelNotFoundError|ProviderAuthError|APIError|RetryError)[[:space:]]*:|^[[:space:]]*(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^0-9]|$)' \
     <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
