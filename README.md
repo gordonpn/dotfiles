@@ -58,7 +58,7 @@ My PR Activity, and Mentions, refreshing every five minutes. My PR Activity
 also includes issues you opened because it uses `reason:author`.
 
 Codex delegates eligible work sequentially to OpenCode DeepSeek Flash Free
-(high), GLM-5.3 Flash Free, MiniMax M3.1 Flash Free, and Qwen 3.6 Plus Free.
+(high), GLM-5.3 Flash Free, MiMo-V2.6-Flash Free, and Nemotron 3.5 Lightning Free.
 It advances only after a classified provider, quota, rate-limit, or
 model-availability failure; after all OpenCode candidates fail that way, Codex
 may use Gemini CLI. Authentication and provider-initialization errors are hard

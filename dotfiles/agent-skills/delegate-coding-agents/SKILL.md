@@ -19,7 +19,7 @@ Do **not** call a harness from inside its delegated invocation, recursively dele
 For Codex, route sequentially and stop after the first worker completes successfully:
 
 1. OpenCode with `opencode/deepseek-v4.1-flash-free` at high variant.
-2. Only after a classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`).
+2. Only after a classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`).
 3. If all OpenCode free candidates fail with classified provider, quota, rate-limit, or availability errors, use Gemini CLI with its configured account/model.
 4. If Gemini CLI is unavailable, quota-limited, or cannot complete, continue with Codex directly.
 
@@ -49,7 +49,7 @@ Use the script in **the current skill installation**. Codex default install: `~/
 
 Supported flags: `--orchestrator codex|agy`, `--agent opencode|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
 
-OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`) only on classified provider, quota, rate-limit, or model-availability failures. `--model` pins a single candidate with no fallback; `OPENCODE_DELEGATE_MODEL` overrides only the first candidate in the default chain; `OPENCODE_DELEGATE_MODELS` replaces the entire chain with a comma-separated list. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
+OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) only on classified provider, quota, rate-limit, or model-availability failures. `--model` pins a single candidate with no fallback; `OPENCODE_DELEGATE_MODEL` overrides only the first candidate in the default chain; `OPENCODE_DELEGATE_MODELS` replaces the entire chain with a comma-separated list. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
 
 ## Delegate specification
 
