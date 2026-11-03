@@ -9,6 +9,7 @@ lint:
     set -euo pipefail
     scripts=(
         ".github/scripts/check-deepseek-credentials.sh"
+        ".github/scripts/install-actionlint.sh"
         ".github/scripts/write-deepseek-review-prompt.sh"
         "bin/mcp-sync"
         "tests/mcp-sync.sh"
