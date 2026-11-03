@@ -8,9 +8,10 @@ fi
 
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
 delimiter="DEEPSEEK_PROMPT_$$_${RANDOM}_${RANDOM}"
+prompt="$(cat -- "$1")"
 
 {
   printf 'prompt<<%s\n' "$delimiter"
-  cat -- "$1"
+  printf '%s\n' "$prompt"
   printf '%s\n' "$delimiter"
 } >>"$GITHUB_OUTPUT"
