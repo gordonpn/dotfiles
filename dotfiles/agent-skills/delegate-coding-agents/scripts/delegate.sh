@@ -74,7 +74,7 @@ is_provider_quota_error() {
     <<< "$stderr_log"; then
     return 0
   fi
-  local retryable_terms='(Free usage (exceeded|limit)|usage limit( reached)?|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
+  local retryable_terms='(Free usage (exceeded|limit)|(hit( your)? usage limit|usage limit (has been )?(reached|exceeded)|reached your usage limit)([^[:alnum:]]|$)|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
 
   if grep -Eqi \
     '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)=.*ProviderModelNotFoundError:)|(^[[:space:]]*(error:[[:space:]]*)?ProviderModelNotFoundError:)|(^[[:space:]]*error:[[:space:]]*Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+)' \
