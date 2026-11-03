@@ -148,7 +148,8 @@ for provider_err in \
   'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Rate limit exceeded"' \
   $'\x1b[91m\x1b[1mError: \x1b[0mModel not found: opencode/deepseek-v4.1-flash-free' \
   $'\x1b[91m\x1b[1mError: \x1b[0mFree usage exceeded, subscribe to Go' \
-  'Error: You have hit your usage limit reached' \
+  'Error: You have hit your usage limit' \
+  'Error: Provider says quota exceeded for this model' \
   $'\x1b[91m\x1b[1mError: \x1b[0mQuota exceeded. Check your plan and billing details.' \
   $'\x1b[91m\x1b[1mError: \x1b[0mProvider is overloaded' \
   'AI_APICallError: Rate limit exceeded for deepseek' \

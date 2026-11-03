@@ -68,13 +68,13 @@ is_provider_quota_error() {
   # 2. `UI.error(...)` lines emitted for `FormatError` or `session.error` (`MessageV2.fromError`):
   #    - `Error: Model not found: <provider>/<model>...` (`ProviderModelNotFoundError`)
   #    - `Error: (AI_APICallError|APIError|RetryError): <retryable provider/quota diagnostic>`
-  #    - `Error: (Free usage exceeded|.*usage limit reached|Quota exceeded|Too Many Requests|Provider is overloaded|Bad Request:.*"model_not_supported"|(HTTP |Status:? |Response:? )?(429|502|503|504)\b)`
+  #    - `Error: <quota/model-availability term, optionally preceded by diagnostic text>`
   if [[ $worker == copilot ]] && grep -Eqi \
     '^[[:space:]]*(error:[[:space:]]*)?(AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported)' \
     <<< "$stderr_log"; then
     return 0
   fi
-  local retryable_terms='(Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
+  local retryable_terms='(Free usage (exceeded|limit)|usage limit( reached)?|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
 
   if grep -Eqi \
     '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)=.*ProviderModelNotFoundError:)|(^[[:space:]]*(error:[[:space:]]*)?ProviderModelNotFoundError:)|(^[[:space:]]*error:[[:space:]]*Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+)' \
@@ -83,7 +83,7 @@ is_provider_quota_error() {
   fi
 
   if grep -Eqi \
-    "(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\\.error|stack|cause)=.*(AI_APICallError|APIError|RetryError):.*${retryable_terms})|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError|RetryError):[^[:cntrl:]]*${retryable_terms})|(^[[:space:]]*error:[[:space:]]*${retryable_terms})" \
+    "(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\\.error|stack|cause)=.*(AI_APICallError|APIError|RetryError):.*${retryable_terms})|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError|RetryError):[^[:cntrl:]]*${retryable_terms})|(^[[:space:]]*error:[[:space:]]*[^[:cntrl:]]*${retryable_terms})" \
     <<< "$stderr_log"; then
     return 0
   fi
