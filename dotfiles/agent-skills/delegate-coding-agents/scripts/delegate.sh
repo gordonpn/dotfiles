@@ -32,6 +32,12 @@ is_provider_auth_error() {
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
   [[ -n $stderr_log ]] || return 1
 
+  if grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status|http|code)[^"]*(401|403)[^"]*")|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status|http|code)[^[:cntrl:]]*(401|403)([^0-9]|$))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
   grep -Eqi \
     '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(ProviderAuthError|ProviderInitError|AuthenticationError):)|(^[[:space:]]*(error:[[:space:]]*)?(ProviderAuthError|ProviderInitError|AuthenticationError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*Failed to initialize provider)|(^[[:space:]]*(error:[[:space:]]*)?(Incorrect|Invalid|Bad) API key([[:space:]:]|$))|(^[[:space:]]*(error:[[:space:]]*)?(Missing|No) API key)|(^[[:space:]]*error:[[:space:]]*API key (is )?(missing|required|invalid|incorrect))|(^[[:space:]]*(error:[[:space:]]*)?(Unauthorized|Forbidden|Unauthenticated)(:|[[:space:]]))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):.*(unauthori[sz]ed|forbidden|invalid api key|incorrect api key|missing api key|no api key|authentication failed))|(^[[:space:]]*(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(401|403)([^0-9]|$))|(^[[:space:]]*error:[[:space:]]*(HTTP |Status:? |Response:? )?(401|403)([^0-9]|$))' \
     <<< "$stderr_log"

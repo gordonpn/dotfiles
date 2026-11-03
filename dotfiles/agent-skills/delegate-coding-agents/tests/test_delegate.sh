@@ -150,6 +150,8 @@ for auth_agent in opencode copilot; do
     'Error: No API key found for provider' \
     'Error: ProviderInitError: provider failed to initialize' \
     'Error: Failed to initialize provider "opencode". Check credentials and configuration.' \
+    'Error: AI_APICallError: Request failed with status code 401' \
+    'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Request failed with status code 403"' \
     'HTTP 401 Unauthorized'; do
     if env "$auth_failure_env=1" OPENCODE_MOCK_FAIL_MSG="$auth_err" "$SCRIPT" --agent "$auth_agent" --mode plan --id auth-hard-stop --task 'Stop on invalid credentials' > "$TMP/auth-hard-stop.out" 2>&1; then
       echo "Expected authentication error to stop $auth_agent delegation: $auth_err" >&2; exit 1
