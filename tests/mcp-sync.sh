@@ -199,9 +199,10 @@ mkdir -p "${CODEX_DIR}/skills"
 printf 'colliding codex skill file\n' >"${CODEX_DIR}/skills/shared-skill"
 
 # Pre-existing backup file to verify collision-avoidance logic
-mkdir -p "${OPENCODE_DIR}"
+mkdir -p "${OPENCODE_DIR}/plugins"
 printf 'preexisting backup\n' >"${OPENCODE_DIR}/AGENTS.md.bak"
 printf 'old opencode instructions\n' >"${OPENCODE_DIR}/AGENTS.md"
+ln -s "${HOME}/external-plugin.ts" "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
 
 mkdir -p "${CODEX_DIR}"
 printf 'preexisting codex backup\n' >"${CODEX_DIR}/AGENTS.md.bak"
@@ -231,6 +232,8 @@ sync_skills_and_instructions
 [[ "$(readlink "${OPENCODE_DIR}/AGENTS.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
 [[ -L "${OPENCODE_DIR}/plugins/copilot-student-models.ts" ]]
 [[ "$(readlink "${OPENCODE_DIR}/plugins/copilot-student-models.ts")" == "${repo_dir}/dotfiles/opencode/plugins/copilot-student-models.ts" ]]
+[[ -L "${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak" ]]
+[[ "$(readlink "${OPENCODE_DIR}/plugins/copilot-student-models.ts.bak")" == "${HOME}/external-plugin.ts" ]]
 [[ -f "${OPENCODE_DIR}/AGENTS.md.bak" ]]
 [[ "$(<"${OPENCODE_DIR}/AGENTS.md.bak")" == 'preexisting backup' ]]
 agent_backups=("${OPENCODE_DIR}/AGENTS.md.bak."*)

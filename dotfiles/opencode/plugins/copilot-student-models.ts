@@ -10,6 +10,7 @@ const BUILTIN_TOOLS = new Set([
   "edit",
   "write",
   "patch",
+  "apply_patch",
   "multiedit",
   "ls",
   "list",
@@ -65,12 +66,20 @@ function extractUrl(input: RequestInfo | URL): string {
   return input.url
 }
 
-function isAllowedCopilotTool(tool: ToolEntry): boolean {
+function isBuiltinCopilotTool(tool: ToolEntry): boolean {
   const name = tool.function?.name ?? tool.name ?? ""
-  if (BUILTIN_TOOLS.has(name)) {
-    return true
-  }
-  return ALLOWED_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix))
+  return BUILTIN_TOOLS.has(name)
+}
+
+function isPreferredMcpTool(tool: ToolEntry): boolean {
+  const name = tool.function?.name ?? tool.name ?? ""
+  return !BUILTIN_TOOLS.has(name) && ALLOWED_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix))
+}
+
+function selectCopilotTools(tools: readonly ToolEntry[]): ToolEntry[] {
+  const builtins = tools.filter(isBuiltinCopilotTool)
+  const preferredMcp = tools.filter(isPreferredMcpTool)
+  return [...builtins, ...preferredMcp].slice(0, MAX_COPILOT_TOOLS)
 }
 
 const originalFetch = globalThis.fetch
@@ -87,7 +96,7 @@ const patchedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promi
       const parsed: unknown = JSON.parse(requestInit.body)
       if (isObjectRecord(parsed) && Array.isArray(parsed.tools) && parsed.tools.length > MAX_COPILOT_TOOLS) {
         const payload = parsed as ChatCompletionPayload
-        const filtered = (payload.tools ?? []).filter(isAllowedCopilotTool).slice(0, MAX_COPILOT_TOOLS)
+        const filtered = selectCopilotTools(payload.tools ?? [])
         requestInit = {
           ...requestInit,
           body: JSON.stringify({ ...payload, tools: filtered }),

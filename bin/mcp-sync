@@ -846,7 +846,7 @@ sync_skills_and_instructions() {
           local plugin_name
           plugin_name="$(basename "${plugin_src}")"
           local plugin_dest="${OPENCODE_DIR}/plugins/${plugin_name}"
-          if [[ -e "${plugin_dest}" && ! -L "${plugin_dest}" ]]; then
+          if [[ ( -e "${plugin_dest}" || -L "${plugin_dest}" ) && "$(readlink "${plugin_dest}" 2>/dev/null || true)" != "${plugin_src}" ]]; then
             local plugin_bak="${plugin_dest}.bak"
             [[ -e "${plugin_bak}" || -L "${plugin_bak}" ]] && plugin_bak="${plugin_dest}.bak.$(date +%s)"
             backup_with_collision_avoidance "${plugin_dest}" "${plugin_bak}"
