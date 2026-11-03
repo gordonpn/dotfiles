@@ -149,7 +149,9 @@ for provider_err in \
   $'\x1b[91m\x1b[1mError: \x1b[0mModel not found: opencode/deepseek-v4.1-flash-free' \
   $'\x1b[91m\x1b[1mError: \x1b[0mFree usage exceeded, subscribe to Go' \
   'Error: You have hit your usage limit' \
+  'Error: You have hit your usage limits' \
   'Error: Usage limit reached' \
+  'Error: You have reached the usage limit' \
   'Error: Provider says quota exceeded for this model' \
   $'\x1b[91m\x1b[1mError: \x1b[0mQuota exceeded. Check your plan and billing details.' \
   $'\x1b[91m\x1b[1mError: \x1b[0mProvider is overloaded' \
