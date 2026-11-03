@@ -13,10 +13,12 @@ Codex and Antigravity CLI delegate to OpenCode free models (`opencode/deepseek-v
 and 0x-included GitHub Copilot models via OpenCode (`github-copilot/gpt-4.1`,
 `github-copilot/gpt-4o`, `github-copilot/gpt-4o-mini`), or directly via `--agent copilot`.
 Codex additionally falls back to Gemini CLI if all OpenCode and Copilot free
-routes are quota-limited. Codex does not delegate to Antigravity CLI. OpenCode
-must be authenticated with GitHub Copilot (`opencode auth login`) for Copilot
-models, and Gemini CLI must be installed and authenticated before the Gemini
-fallback can run.
+routes are quota-limited. Authentication and provider-initialization errors
+stop delegation with a message to check login and credentials/configuration.
+Codex does not delegate to Antigravity CLI under a consumer plan. OpenCode must
+be authenticated with GitHub Copilot (`opencode auth login`) for Copilot models,
+and Gemini CLI must be installed and authenticated before the Gemini fallback
+can run.
 
 Automatic delegation requires explicit opt-in in each eligible repository:
 

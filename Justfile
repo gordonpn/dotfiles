@@ -1,15 +1,20 @@
 test:
     bash tests/mcp-sync.sh
     bash tests/deepseek-analyze.sh
+    bash tests/deepseek-review-prompt.sh
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
 
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
     scripts=(
+        ".github/scripts/check-deepseek-credentials.sh"
+        ".github/scripts/install-actionlint.sh"
+        ".github/scripts/write-deepseek-review-prompt.sh"
         "bin/mcp-sync"
         "tests/mcp-sync.sh"
         "tests/deepseek-analyze.sh"
+        "tests/deepseek-review-prompt.sh"
         "scripts/deepseek-analyze.sh"
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh"
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-analyze.sh"
@@ -20,6 +25,9 @@ lint:
         bash -n "$f"
     done
     shellcheck -x "${scripts[@]}"
+    if command -v actionlint >/dev/null 2>&1; then
+        actionlint
+    fi
     uvx ruff check --target-version py311 tests/verify_mcp.py
     uvx --with mcp==1.1.2 mypy --strict tests/verify_mcp.py
     git diff --check

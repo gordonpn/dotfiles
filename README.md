@@ -63,9 +63,11 @@ models (`opencode/deepseek-v4.1-flash-free`, `opencode/glm-5.3-flash-free`,
 GitHub Copilot models via OpenCode (`github-copilot/gpt-4.1`,
 `github-copilot/gpt-4o`, `github-copilot/gpt-4o-mini`), or directly via
 `--agent copilot`. Codex additionally falls back to Gemini CLI if all OpenCode
-and Copilot free routes are limited. It stops after a successful worker;
-Antigravity CLI as a Codex worker is not used. Automatic delegation requires the
-repository-local opt-in `agents.delegationAllowed=true`.
+and Copilot free routes are limited. Authentication and provider-initialization
+errors are hard stops with actionable login/credential/configuration guidance;
+do not try another model or Gemini. It stops after a successful worker.
+Antigravity CLI as a Codex worker is not used under a consumer plan. Automatic
+delegation requires the repository-local opt-in `agents.delegationAllowed=true`.
 See [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
 ### Installing and usage

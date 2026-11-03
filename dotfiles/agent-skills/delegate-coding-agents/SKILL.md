@@ -18,10 +18,14 @@ Do **not** call a harness from inside its delegated invocation, recursively dele
 
 For Codex and Antigravity CLI, route sequentially and stop after the first worker completes successfully:
 
-1. OpenCode with `opencode/deepseek-v4.1-flash-free` at high variant, automatically cycling through OpenCode free models (`opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`) and 0x-included GitHub Copilot models (`github-copilot/gpt-4.1`, `github-copilot/gpt-4o`, `github-copilot/gpt-4o-mini`) on classified provider, authentication, quota, rate-limit, model-availability, capacity/overload, or HTTP 429/502/503/504 failures.
+1. OpenCode with `opencode/deepseek-v4.1-flash-free` at high variant, automatically cycling through OpenCode free models (`opencode/glm-5.3-flash-free`, `opencode/minimax-m3.1-flash-free`, `opencode/qwen3.6-plus-free`) and 0x-included GitHub Copilot models (`github-copilot/gpt-4.1`, `github-copilot/gpt-4o`, `github-copilot/gpt-4o-mini`) on classified provider, quota, rate-limit, model-availability, capacity/overload, or HTTP 429/502/503/504 failures.
 2. Direct GitHub Copilot delegation (`--agent copilot`) is also available for both Codex and Antigravity CLI, cycling through `github-copilot/gpt-4.1`, `github-copilot/gpt-4o`, and `github-copilot/gpt-4o-mini`.
 3. For Codex only: if all OpenCode and Copilot free routes fail with classified provider, quota, rate-limit, model-availability, or service/capacity errors, use Gemini CLI with its configured account/model.
 4. If all permitted routes are unavailable, quota-limited, or cannot complete, continue with the orchestrator directly.
+
+Authentication and provider-initialization errors are hard stops: surface a
+message directing the user to check login and provider credentials/configuration,
+and do not try another model or Gemini.
 
 Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. These OpenCode and Copilot free offers can change; confirm the selected model remains available before use. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
 
