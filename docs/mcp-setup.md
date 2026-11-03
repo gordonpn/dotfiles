@@ -100,7 +100,7 @@ just setup-codebase-memory
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
 7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` and `~/.codex/config.toml` (36 total servers).
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories. The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
-   Codex uses OpenCode DeepSeek Flash Free, then GLM Flash Free only after an explicit quota/rate-limit failure, and Gemini CLI if both OpenCode free routes are limited. The Gemini CLI fallback requires a separately installed and authenticated `gemini` command.
+   Codex uses OpenCode DeepSeek Flash Free, then GLM Flash Free only after an explicit quota/rate-limit failure, and Gemini CLI if both OpenCode free routes are limited. Authentication or provider-initialization errors are hard stops with actionable credential/configuration guidance. The Gemini CLI fallback requires a separately installed and authenticated `gemini` command.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 
 ---

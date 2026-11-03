@@ -25,6 +25,15 @@ new agent-specific branch. The caller (Codex or agy) reviews and integrates them
 HELP
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
+is_provider_auth_error() {
+  local stderr_log
+  stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
+  [[ -n $stderr_log ]] || return 1
+
+  grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(ProviderAuthError|ProviderInitError|AuthenticationError):)|(^[[:space:]]*(error:[[:space:]]*)?(ProviderAuthError|ProviderInitError|AuthenticationError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*Failed to initialize provider)|(^[[:space:]]*(error:[[:space:]]*)?(Incorrect|Invalid|Bad) API key([[:space:]:]|$))|(^[[:space:]]*(error:[[:space:]]*)?(Missing|No) API key)|(^[[:space:]]*error:[[:space:]]*API key (is )?(missing|required|invalid|incorrect))|(^[[:space:]]*(error:[[:space:]]*)?(Unauthorized|Forbidden|Unauthenticated)(:|[[:space:]]))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):.*(unauthori[sz]ed|forbidden|invalid api key|incorrect api key|missing api key|no api key|authentication failed))|(^[[:space:]]*(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(401|403)([^0-9]|$))|(^[[:space:]]*error:[[:space:]]*(HTTP |Status:? |Response:? )?(401|403)([^0-9]|$))' \
+    <<< "$stderr_log"
+}
 is_provider_quota_error() {
   local stderr_log
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
@@ -34,15 +43,14 @@ is_provider_quota_error() {
   # `packages/opencode/src/cli/error.ts`, `packages/opencode/src/session/message-v2.ts`,
   # `packages/opencode/src/session/retry.ts`):
   # 1. Structured `--print-logs --log-level ERROR` records:
-  #    - `level=ERROR ... error="ProviderModelNotFoundError: ..." | "ProviderInitError: ..." | "ProviderAuthError: ..."`
+  #    - `level=ERROR ... error="ProviderModelNotFoundError: ..."`
   #    - `level=ERROR ... (error.error|stack)="AI_APICallError: ..."`
   # 2. `UI.error(...)` lines emitted for `FormatError` or `session.error` (`MessageV2.fromError`):
   #    - `Error: Model not found: <provider>/<model>...` (`ProviderModelNotFoundError`)
-  #    - `Error: Failed to initialize provider "<provider>"...` (`ProviderInitError`)
-  #    - `Error: (AI_APICallError|ProviderModelNotFoundError|ProviderInitError|ProviderAuthError|APIError|RetryError): ...`
-  #    - `Error: (Free usage exceeded|.*usage limit reached|Quota exceeded|Too Many Requests|Provider is overloaded|Bad Request:.*"model_not_supported"|Unauthorized:.*|Forbidden:.*|Incorrect API key provided:.*|(HTTP |Status:? |Response:? )?(429|502|503|504)\b)`
+  #    - `Error: (AI_APICallError|ProviderModelNotFoundError|APIError|RetryError): ...`
+  #    - `Error: (Free usage exceeded|.*usage limit reached|Quota exceeded|Too Many Requests|Provider is overloaded|Bad Request:.*"model_not_supported"|(HTTP |Status:? |Response:? )?(429|502|503|504)\b)`
   grep -Eqi \
-    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(AI_APICallError|ProviderInitError|ProviderModelNotFoundError|ProviderAuthError|APIError|RetryError):)|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|ProviderInitError|ProviderModelNotFoundError|ProviderAuthError|APIError|RetryError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*(Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+|Failed to initialize provider "[^"]+"|Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|Bad Request:[[:space:]]*\{[^[:cntrl:]]*"model_not_supported"|The requested model is not supported|Unauthorized:|Forbidden:|Incorrect API key provided:))|(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^0-9]|$))' \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError):)|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*(Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+|Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|Bad Request:[[:space:]]*\{[^[:cntrl:]]*"model_not_supported"|The requested model is not supported))|(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^0-9]|$))' \
     <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
@@ -153,6 +161,7 @@ printf '%s\n' "$PROMPT" >"$LOG_DIR/prompt.txt"
 EXIT_CODE=1
 SUCCESSFUL_MODEL=''
 CURRENT_MODEL=''
+AUTH_FAILURE=0
 TOTAL_CANDIDATES=${#CANDIDATE_MODELS[@]}
 for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
@@ -218,6 +227,10 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
       # Fallback only on classified provider, quota, rate-limit, or model availability failures.
       # Never advance to another candidate on task errors, test failures, or ambiguous results,
       # or when a planning worker violated its read-only worktree contract.
+      if is_provider_auth_error; then
+        AUTH_FAILURE=1
+        break
+      fi
       if [[ $MODE == plan ]] && [[ -n $(git -C "$WORKTREE" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
         break
       fi
@@ -270,6 +283,10 @@ printf '\n--- Delegate report ---\n'
 cat "$LOG_DIR/report.md"
 printf '\n--- End report ---\n'
 if [[ $EXIT_CODE -ne 0 ]]; then
-  printf 'Delegate failed or requires manual verification; inspect stderr and status logs.\n' >&2
+  if (( AUTH_FAILURE )); then
+    printf 'Authentication/provider setup failed for model %s. Stopping fallback. Check the OpenCode login and provider API key/configuration, then rerun. Details: %s/stderr.log\n' "$MODEL" "$LOG_DIR" >&2
+  else
+    printf 'Delegate failed or requires manual verification; inspect stderr and status logs.\n' >&2
+  fi
 fi
 exit "$EXIT_CODE"
