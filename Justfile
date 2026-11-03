@@ -2,7 +2,6 @@ test:
     bash tests/mcp-sync.sh
     bash tests/deepseek-analyze.sh
     bash tests/deepseek-review-prompt.sh
-    bun test tests/copilot-student-models.test.ts
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
 
 lint:

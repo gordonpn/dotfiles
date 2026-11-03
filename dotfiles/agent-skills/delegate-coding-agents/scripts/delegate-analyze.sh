@@ -4,7 +4,7 @@ set -euo pipefail
 # Convenience wrapper for read-only repository analysis
 # Usage:
 #   delegate-analyze.sh '<task>'                 # defaults to opencode (DeepSeek Flash Free)
-#   delegate-analyze.sh copilot '<task>'         # uses GitHub Copilot via OpenCode
+#   delegate-analyze.sh copilot '<task>'         # uses first-party Copilot CLI Auto
 #   delegate-analyze.sh gemini '<task>'          # uses Gemini CLI
 #   delegate-analyze.sh opencode '<task>'        # explicitly uses OpenCode
 

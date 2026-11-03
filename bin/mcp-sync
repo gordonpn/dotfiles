@@ -838,26 +838,12 @@ sync_skills_and_instructions() {
     fi
     ln -sfn "${gemini_rules}" "${opencode_agents}"
 
-    local repo_plugins_dir="${REPO_DIR}/dotfiles/opencode/plugins"
-    local valid_plugins=" "
-    if [[ -d "${repo_plugins_dir}" ]]; then
-      mkdir -p "${OPENCODE_DIR}/plugins"
-      for plugin_src in "${repo_plugins_dir}"/*.ts; do
-        if [[ -f "${plugin_src}" ]]; then
-          local plugin_name
-          plugin_name="$(basename "${plugin_src}")"
-          local plugin_dest="${OPENCODE_DIR}/plugins/${plugin_name}"
-          if [[ ( -e "${plugin_dest}" || -L "${plugin_dest}" ) && "$(readlink "${plugin_dest}" 2>/dev/null || true)" != "${plugin_src}" ]]; then
-            local plugin_bak="${plugin_dest}.bak"
-            [[ -e "${plugin_bak}" || -L "${plugin_bak}" ]] && plugin_bak="${plugin_dest}.bak.$(date +%s)"
-            backup_with_collision_avoidance "${plugin_dest}" "${plugin_bak}"
-          fi
-          ln -sfn "${plugin_src}" "${plugin_dest}"
-          valid_plugins="${valid_plugins}${plugin_name} "
-        fi
-      done
+    local removed_copilot_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+    local removed_copilot_target
+    removed_copilot_target="$(readlink "${removed_copilot_plugin}" 2>/dev/null || true)"
+    if [[ -L "${removed_copilot_plugin}" && "${removed_copilot_target}" == */dotfiles/opencode/plugins/copilot-student-models.ts ]]; then
+      rm -f "${removed_copilot_plugin}"
     fi
-    prune_managed_skill_symlinks "${OPENCODE_DIR}/plugins" "${valid_plugins}" "${repo_plugins_dir}"
   fi
 
   # Link skills

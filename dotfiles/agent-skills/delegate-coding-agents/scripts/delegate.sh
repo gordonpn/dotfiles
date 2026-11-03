@@ -17,8 +17,6 @@ Options:
 Environment:
   OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
   OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
-  COPILOT_DELEGATE_MODEL    Default: github-copilot/gpt-4.1
-  COPILOT_DELEGATE_MODELS   Comma-separated Copilot fallback chain
   GEMINI_DELEGATE_MODEL     Optional Gemini CLI model override
   DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
 
@@ -28,12 +26,19 @@ HELP
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 is_provider_auth_error() {
+  local worker=${1:-opencode}
   local stderr_log
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
   [[ -n $stderr_log ]] || return 1
 
   if grep -Eqi \
-    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status|http|code)[^"]*(401|403)[^"]*")|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status|http|code)[^[:cntrl:]]*(401|403)([^0-9]|$))' \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status|code)[^0-9"]*(401|403)([^0-9]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status|code)[^0-9[:cntrl:]]*(401|403)([^0-9]|$))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  if [[ $worker == copilot ]] && grep -Eqi \
+    '(^[[:space:]]*(error:[[:space:]]*)?((you are )?(not signed in|not authenticated|not logged in)|authentication (required|failed)|failed to authenticate|invalid (copilot )?token|expired (copilot )?token|please run copilot login))' \
     <<< "$stderr_log"; then
     return 0
   fi
@@ -43,6 +48,7 @@ is_provider_auth_error() {
     <<< "$stderr_log"
 }
 is_provider_quota_error() {
+  local worker=${1:-opencode}
   local stderr_log
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
   [[ -n $stderr_log ]] || return 1
@@ -57,8 +63,13 @@ is_provider_quota_error() {
   #    - `Error: Model not found: <provider>/<model>...` (`ProviderModelNotFoundError`)
   #    - `Error: (AI_APICallError|ProviderModelNotFoundError|APIError|RetryError): ...`
   #    - `Error: (Free usage exceeded|.*usage limit reached|Quota exceeded|Too Many Requests|Provider is overloaded|Bad Request:.*"model_not_supported"|(HTTP |Status:? |Response:? )?(429|502|503|504)\b)`
+  if [[ $worker == copilot ]] && grep -Eqi \
+    '^[[:space:]]*(AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported)' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
   grep -Eqi \
-    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError):)|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*(Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+|Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|Bad Request:[[:space:]]*\{[^[:cntrl:]]*"model_not_supported"|The requested model is not supported))|(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^0-9]|$))' \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError):)|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|ProviderModelNotFoundError|APIError|RetryError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*(Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+|Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|Bad Request:[[:space:]]*\{[^[:cntrl:]]*"model_not_supported"|The requested model is not supported))|(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^0-9]|$))' \
     <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
@@ -89,9 +100,11 @@ fi
 [[ -n ${TASK//[[:space:]]/} ]] || die 'Task is empty'
 [[ -z ${CODING_DELEGATE_ACTIVE:-} ]] || die 'Recursive delegation blocked'
 command -v git >/dev/null || die 'git is required'
-RUNNER_BIN=$AGENT
-if [[ $AGENT == copilot ]]; then RUNNER_BIN=opencode; fi
-command -v "$RUNNER_BIN" >/dev/null || die "Install/login to $RUNNER_BIN first"
+if [[ $AGENT == copilot ]]; then
+  command -v copilot >/dev/null || die 'Install GitHub Copilot CLI and authenticate with copilot login first'
+else
+  command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
+fi
 if [[ $AGENT == gemini ]]; then command -v jq >/dev/null || die 'jq is required for Gemini JSON output'; fi
 if [[ $AGENT == opencode ]]; then
   if [[ -n $MODEL ]]; then
@@ -104,25 +117,33 @@ if [[ $AGENT == opencode ]]; then
       "opencode/glm-5.3-flash-free"
       "opencode/minimax-m3.1-flash-free"
       "opencode/qwen3.6-plus-free"
-      "github-copilot/gpt-4.1"
-      "github-copilot/gpt-4o"
-      "github-copilot/gpt-4o-mini"
     )
   fi
 elif [[ $AGENT == copilot ]]; then
-  if [[ -n $MODEL ]]; then
-    CANDIDATE_MODELS=("$MODEL")
-  elif [[ -n ${COPILOT_DELEGATE_MODELS:-} ]]; then
-    IFS=',' read -ra CANDIDATE_MODELS <<< "$COPILOT_DELEGATE_MODELS"
+  [[ -z $MODEL || $MODEL == auto ]] || die 'Copilot Student supports automatic model selection only; use --model auto'
+  CANDIDATE_AGENTS=(copilot)
+  CANDIDATE_MODELS=(auto)
+  if [[ -n ${OPENCODE_DELEGATE_MODELS:-} ]]; then
+    IFS=',' read -ra FALLBACK_MODELS <<< "$OPENCODE_DELEGATE_MODELS"
   else
-    CANDIDATE_MODELS=(
-      "${COPILOT_DELEGATE_MODEL:-github-copilot/gpt-4.1}"
-      "github-copilot/gpt-4o"
-      "github-copilot/gpt-4o-mini"
+    FALLBACK_MODELS=(
+      "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
+      "opencode/glm-5.3-flash-free"
+      "opencode/minimax-m3.1-flash-free"
+      "opencode/qwen3.6-plus-free"
     )
   fi
+  for fallback_model in "${FALLBACK_MODELS[@]}"; do
+    CANDIDATE_AGENTS+=(opencode)
+    CANDIDATE_MODELS+=("$fallback_model")
+  done
 else
+  CANDIDATE_AGENTS=(gemini)
   CANDIDATE_MODELS=("${MODEL:-${GEMINI_DELEGATE_MODEL:-}}")
+fi
+if [[ $AGENT == opencode ]]; then
+  CANDIDATE_AGENTS=()
+  for ((candidate_idx=0; candidate_idx<${#CANDIDATE_MODELS[@]}; candidate_idx++)); do CANDIDATE_AGENTS+=(opencode); done
 fi
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
 if (( AUTOMATIC )); then
@@ -189,10 +210,15 @@ SUCCESSFUL_MODEL=''
 CURRENT_MODEL=''
 TOTAL_CANDIDATES=${#CANDIDATE_MODELS[@]}
 for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
+  CURRENT_AGENT="${CANDIDATE_AGENTS[idx]}"
   CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
   CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
   CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
   if [[ ($AGENT == opencode || $AGENT == copilot) && -z $CURRENT_MODEL ]]; then continue; fi
+  if [[ $CURRENT_AGENT == opencode ]] && ! command -v opencode >/dev/null; then
+    printf 'OpenCode fallback is unavailable: install or authenticate OpenCode before retrying.\n' >&2
+    break
+  fi
 
   # Reset worktree if retrying after a prior failed candidate
   if (( idx > 0 )); then
@@ -203,7 +229,14 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     fi
   fi
 
-  if [[ $AGENT == opencode || $AGENT == copilot ]]; then
+  if [[ $CURRENT_AGENT == copilot ]]; then
+    ARGS=(-p "$PROMPT" --model auto --no-ask-user --output-format text)
+    if [[ $MODE == plan ]]; then
+      ARGS+=(--mode plan "--available-tools=view,grep,glob" --deny-tool=write --deny-tool=shell)
+    else
+      ARGS+=("--available-tools=edit,view,grep,glob" --allow-tool=write --deny-tool=shell)
+    fi
+  elif [[ $CURRENT_AGENT == opencode ]]; then
     ARGS=(run --print-logs --log-level ERROR --agent "$MODE" --model "$CURRENT_MODEL")
     if [[ $CURRENT_MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
     ARGS+=("$PROMPT")
@@ -215,15 +248,17 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
 
   # Do not imply a successful invocation means all shell commands/tests were allowed.
   set +e
-  if [[ $AGENT == opencode || $AGENT == copilot ]]; then
+  if [[ $CURRENT_AGENT == opencode ]]; then
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+  elif [[ $CURRENT_AGENT == copilot ]]; then
+    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" copilot "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   else
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" gemini "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   fi
   RUN_EXIT=$?
   set -e
 
-  if [[ $AGENT == gemini ]]; then
+  if [[ $CURRENT_AGENT == gemini ]]; then
     if [[ $RUN_EXIT -eq 0 ]] && jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
       jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
       EXIT_CODE=0
@@ -252,14 +287,14 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
       # Fallback only on classified provider, quota, rate-limit, or model availability failures.
       # Never advance to another candidate on task errors, test failures, or ambiguous results,
       # or when a planning worker violated its read-only worktree contract.
-      if is_provider_auth_error; then
+      if is_provider_auth_error "$CURRENT_AGENT"; then
         AUTH_FAILURE=1
         break
       fi
       if [[ $MODE == plan ]] && [[ -n $(git -C "$WORKTREE" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
         break
       fi
-      if is_provider_quota_error; then
+      if is_provider_quota_error "$CURRENT_AGENT"; then
         if (( idx + 1 < TOTAL_CANDIDATES )); then
           printf 'Model %s encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_MODEL" "$RUN_EXIT" >&2
         fi
@@ -296,6 +331,7 @@ if [[ $MODE == plan && -s $LOG_DIR/git-status.txt ]]; then
 fi
 printf '\nDELEGATION_RESULT\n'
 printf '  Agent: %s (%s)\n' "$AGENT" "$MODE"
+printf '  Worker: %s\n' "$CURRENT_AGENT"
 printf '  Orchestrator: %s\n' "$ORCHESTRATOR"
 printf '  Model: %s\n' "${MODEL:-Gemini CLI default}"
 printf '  Worktree: %s\n' "$WORKTREE"
@@ -309,7 +345,11 @@ cat "$LOG_DIR/report.md"
 printf '\n--- End report ---\n'
 if [[ $EXIT_CODE -ne 0 ]]; then
   if (( AUTH_FAILURE )); then
-    printf 'Authentication/provider setup failed for model %s. Stopping fallback. Check the OpenCode login and provider API key/configuration, then rerun. Details: %s/stderr.log\n' "$MODEL" "$LOG_DIR" >&2
+    if [[ $CURRENT_AGENT == copilot ]]; then
+      printf 'GitHub Copilot authentication/setup failed. Stopping fallback. Check your Copilot Student entitlement and run copilot login, then rerun. Details: %s/stderr.log\n' "$LOG_DIR" >&2
+    else
+      printf 'Authentication/provider setup failed for model %s. Stopping fallback. Check the OpenCode login and provider API key/configuration, then rerun. Details: %s/stderr.log\n' "$MODEL" "$LOG_DIR" >&2
+    fi
   else
     printf 'Delegate failed or requires manual verification; inspect stderr and status logs.\n' >&2
   fi

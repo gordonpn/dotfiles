@@ -36,6 +36,7 @@ while (($#)); do
  if [[ $1 == --model ]]; then shift; model=$1; fi
  shift
 done
+[[ -z ${OPENCODE_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$mode" "$model" >>"$OPENCODE_MOCK_CALL_LOG"
 if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
@@ -58,10 +59,6 @@ if [[ ${OPENCODE_MOCK_FAIL_DEEPSEEK:-} == 1 && $model == opencode/deepseek-v4.1-
   echo "${OPENCODE_MOCK_FAIL_MSG:-AI_APICallError: Rate limit exceeded for deepseek}" >&2
   exit 1
 fi
-if [[ ${OPENCODE_MOCK_FAIL_GPT41:-} == 1 && $model == github-copilot/gpt-4.1 ]]; then
-  echo "${OPENCODE_MOCK_FAIL_MSG:-AI_APICallError: Free usage limit reached}" >&2
-  exit 1
-fi
 if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
   echo 'AI_APICallError: Quota exceeded for all models' >&2
   exit 1
@@ -69,8 +66,27 @@ fi
 if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.txt; fi
 printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
-chmod +x "$TMP/bin/gemini" "$TMP/bin/opencode"
-export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees"
+cat > "$TMP/bin/copilot" <<'MOCK'
+#!/usr/bin/env bash
+mode=''; model=''; args="$*"
+while (($#)); do
+ case "$1" in
+  --mode) shift; mode=$1 ;;
+  --model) shift; model=$1 ;;
+ esac
+ shift
+done
+[[ -z ${COPILOT_MOCK_CALL_LOG:-} ]] || printf '%s\n' "$args" >>"$COPILOT_MOCK_CALL_LOG"
+if [[ ${COPILOT_MOCK_DIRTY_ON_FAIL:-} == 1 ]]; then printf 'partial Copilot edit\n' >copilot-partial.txt; fi
+if [[ ${COPILOT_MOCK_FAIL:-} == 1 ]]; then
+  printf '%s\n' "${COPILOT_MOCK_FAIL_MSG:-AI credits limit reached}" >&2
+  exit 1
+fi
+if [[ $mode != plan && $args == *'--allow-tool=write'* ]]; then printf 'implemented by copilot\n' >agent-change.txt; fi
+printf 'copilot %s %s complete\n' "$model" "$mode"
+MOCK
+chmod +x "$TMP/bin/gemini" "$TMP/bin/opencode" "$TMP/bin/copilot"
+export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees" COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls" OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
 cd "$TMP/repo"
 git init -q
 git config user.name 'Unit Test'
@@ -79,6 +95,7 @@ echo base > source.txt
 git add source.txt && git commit -qm init
 for agent in gemini opencode copilot; do
  for mode in plan build; do
+   : >"$COPILOT_MOCK_CALL_LOG"
    if [[ $agent == gemini ]]; then
       "$SCRIPT" --agent "$agent" --mode "$mode" --id "t-$agent-$mode" --task 'Do work' --model gemini-test-model > "$TMP/$agent-$mode.out"
    else
@@ -101,12 +118,22 @@ for agent in gemini opencode copilot; do
       grep -q 'Branch: (detached)' "$TMP/$agent-$mode.out"
       if [[ $agent == opencode ]]; then grep -q 'opencode plan high complete' "$TMP/$agent-$mode.out"; fi
       if [[ $agent == copilot ]]; then
-        grep -q 'Model: github-copilot/gpt-4.1' "$TMP/$agent-$mode.out"
-        grep -q 'opencode plan default-variant complete' "$TMP/$agent-$mode.out"
+        grep -q 'Model: auto' "$TMP/$agent-$mode.out"
+        grep -q 'copilot auto plan complete' "$TMP/$agent-$mode.out"
+        grep -q -- '--mode plan' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--available-tools=view,grep,glob' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--deny-tool=write' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--deny-tool=shell' "$COPILOT_MOCK_CALL_LOG"
       fi
    else
       [[ -f $WT/agent-change.txt ]]
       grep -q "Branch: delegate/$agent/" "$TMP/$agent-$mode.out"
+      if [[ $agent == copilot ]]; then
+        grep -q 'Model: auto' "$TMP/$agent-$mode.out"
+        grep -q -- '--available-tools=edit,view,grep,glob' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--allow-tool=write' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--deny-tool=shell' "$COPILOT_MOCK_CALL_LOG"
+      fi
    fi
    [[ ! -e agent-change.txt ]]
  done
@@ -127,6 +154,10 @@ for provider_err in \
   'ProviderModelNotFoundError: model not found' \
   'APIError: upstream error' \
   'RetryError: max retries reached' \
+  'AI_APICallError: Too Many Requests status 429 url https://api.example.com/v1 request_id=a1403ms' \
+  'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Too Many Requests status 429 url https://api.example.com/v1 request_id=a1403ms"' \
+  'AI_APICallError: Too Many Requests at https://api.example.com/v1/403' \
+  'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Too Many Requests at https://api.example.com/v1/403"' \
   'HTTP 429 Too Many Requests' \
   'Status: 503 Service Unavailable'; do
   OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$provider_err" "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out"
@@ -139,9 +170,11 @@ for auth_agent in opencode copilot; do
   if [[ $auth_agent == opencode ]]; then
     auth_model=opencode/deepseek-v4.1-flash-free
     auth_failure_env=OPENCODE_MOCK_FAIL_DEEPSEEK
+    auth_message='Check the OpenCode login and provider API key/configuration'
   else
-    auth_model=github-copilot/gpt-4.1
-    auth_failure_env=OPENCODE_MOCK_FAIL_GPT41
+    auth_model=auto
+    auth_failure_env=COPILOT_MOCK_FAIL
+    auth_message='Check your Copilot Student entitlement and run copilot login'
   fi
   for auth_err in \
     'ProviderAuthError: authentication failed' \
@@ -152,14 +185,19 @@ for auth_agent in opencode copilot; do
     'Error: Failed to initialize provider "opencode". Check credentials and configuration.' \
     'Error: AI_APICallError: Request failed with status code 401' \
     'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Request failed with status code 403"' \
+    'Error: You are not signed in. Please run copilot login.' \
     'HTTP 401 Unauthorized'; do
-    if env "$auth_failure_env=1" OPENCODE_MOCK_FAIL_MSG="$auth_err" "$SCRIPT" --agent "$auth_agent" --mode plan --id auth-hard-stop --task 'Stop on invalid credentials' > "$TMP/auth-hard-stop.out" 2>&1; then
+    : >"$OPENCODE_MOCK_CALL_LOG"
+    if env "$auth_failure_env=1" OPENCODE_MOCK_FAIL_MSG="$auth_err" COPILOT_MOCK_FAIL_MSG="$auth_err" "$SCRIPT" --agent "$auth_agent" --mode plan --id auth-hard-stop --task 'Stop on invalid credentials' > "$TMP/auth-hard-stop.out" 2>&1; then
       echo "Expected authentication error to stop $auth_agent delegation: $auth_err" >&2; exit 1
     fi
     grep -q "Model: $auth_model" "$TMP/auth-hard-stop.out"
     grep -q 'Stopping fallback' "$TMP/auth-hard-stop.out"
-    grep -q 'Check the OpenCode login and provider API key/configuration' "$TMP/auth-hard-stop.out"
+    grep -q "$auth_message" "$TMP/auth-hard-stop.out"
     grep -q '/stderr.log' "$TMP/auth-hard-stop.out"
+    if [[ $auth_agent == copilot && -s $OPENCODE_MOCK_CALL_LOG ]]; then
+      echo 'Expected Copilot authentication failure not to invoke OpenCode fallback' >&2; exit 1
+    fi
     if grep -q 'falling back to next candidate' "$TMP/auth-hard-stop.out"; then
       echo "Expected $auth_agent authentication failure not to trigger fallback" >&2; exit 1
     fi
@@ -194,27 +232,39 @@ grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/model-no-fallback.out"
 if grep -q 'falling back to next candidate' "$TMP/model-no-fallback.out"; then
   echo 'Expected explicit model not to fall back' >&2; exit 1
 fi
-# Copilot fallback from gpt-4.1 to gpt-4o on usage limit, model_not_supported, HTTP 429, and service unavailable
+# Copilot Auto falls back only on classified credit, provider, or availability errors.
 for err_msg in \
-  'AI_APICallError: Free usage limit reached' \
-  $'\x1b[91m\x1b[1mError: \x1b[0mBad Request: {"error":{"message":"The requested model is not supported.","code":"model_not_supported","param":"model","type":"invalid_request_error"}}' \
-  'ProviderModelNotFoundError: The requested model is not supported' \
+  'AI credits limit reached' \
   'HTTP 429 Too Many Requests' \
-  'Status: 503 Service Unavailable'; do
-  OPENCODE_MOCK_FAIL_GPT41=1 OPENCODE_MOCK_FAIL_MSG="$err_msg" "$SCRIPT" --agent copilot --mode plan --id copilot-fallback --task 'Test copilot fallback' > "$TMP/copilot-fallback.out"
-  grep -q 'Model: github-copilot/gpt-4o' "$TMP/copilot-fallback.out"
+  'Error: Model is temporarily unavailable' \
+  'Error: Provider is overloaded'; do
+  : >"$OPENCODE_MOCK_CALL_LOG"
+  COPILOT_MOCK_FAIL=1 COPILOT_MOCK_FAIL_MSG="$err_msg" "$SCRIPT" --agent copilot --mode plan --id copilot-fallback --task 'Test Copilot Auto fallback' >"$TMP/copilot-fallback.out"
+  grep -q 'Worker: opencode' "$TMP/copilot-fallback.out"
+  grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/copilot-fallback.out"
+  grep -q 'opencode plan high complete' "$TMP/copilot-fallback.out"
+  grep -q 'opencode plan opencode/deepseek-v4.1-flash-free' "$OPENCODE_MOCK_CALL_LOG"
   grep -q 'Exit: 0' "$TMP/copilot-fallback.out"
 done
-# Environment variable COPILOT_DELEGATE_MODELS override
-COPILOT_DELEGATE_MODELS="github-copilot/gpt-4o-mini,github-copilot/gpt-4o" "$SCRIPT" --agent copilot --mode plan --id copilot-custom --task 'Test copilot custom chain' > "$TMP/copilot-custom.out"
-grep -q 'Model: github-copilot/gpt-4o-mini' "$TMP/copilot-custom.out"
-grep -q 'Exit: 0' "$TMP/copilot-custom.out"
+# A quota failure after a partial Copilot build resets its worktree before OpenCode writes.
+: >"$OPENCODE_MOCK_CALL_LOG"
+COPILOT_MOCK_FAIL=1 COPILOT_MOCK_DIRTY_ON_FAIL=1 COPILOT_MOCK_FAIL_MSG='AI credits limit reached' "$SCRIPT" --agent copilot --mode build --id copilot-build-fallback --task 'Test Copilot build fallback' >"$TMP/copilot-build-fallback.out"
+grep -q 'Worker: opencode' "$TMP/copilot-build-fallback.out"
+grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/copilot-build-fallback.out"
+WT_COPILOT_BUILD=$(sed -n 's/^  Worktree: //p' "$TMP/copilot-build-fallback.out" | head -n 1)
+[[ -f $WT_COPILOT_BUILD/agent-change.txt ]]
+[[ ! -f $WT_COPILOT_BUILD/copilot-partial.txt ]]
+# Copilot models other than Auto are rejected for Student-plan routing.
+if "$SCRIPT" --agent copilot --mode plan --model gpt-4.1 --id copilot-no-pin --task 'Reject explicit Student model' >"$TMP/copilot-no-pin.out" 2>&1; then
+  echo 'Expected explicit non-Auto Copilot model to be rejected' >&2; exit 1
+fi
+grep -q 'automatic model selection only' "$TMP/copilot-no-pin.out"
 # Failure when all candidate models fail
 if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail --task 'Test all fail' > "$TMP/all-fail.out" 2>&1; then
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
-grep -q 'Model: github-copilot/gpt-4o-mini' "$TMP/all-fail.out"
+grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/all-fail.out"
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
 grep -q 'Model: Gemini CLI default' "$TMP/gemini-default.out"
 if GEMINI_MOCK_INVALID=1 "$SCRIPT" --agent gemini --mode plan --id gemini-invalid --task 'Return no response' > "$TMP/gemini-invalid.out" 2>&1; then
@@ -256,7 +306,7 @@ git config --local agents.delegationAllowed true
 grep -q 'Orchestrator: agy' "$TMP/agy-to-opencode.out"
 "$SCRIPT" --agent copilot --mode plan --orchestrator agy --automatic --task 'Plan a change with copilot' > "$TMP/agy-to-copilot.out"
 grep -q 'Orchestrator: agy' "$TMP/agy-to-copilot.out"
-grep -q 'Model: github-copilot/gpt-4.1' "$TMP/agy-to-copilot.out"
+grep -q 'Model: auto' "$TMP/agy-to-copilot.out"
 if "$SCRIPT" --agent gemini --mode plan --orchestrator agy --automatic --task 'Unsupported route' > "$TMP/agy-to-gemini.out" 2>&1; then
  echo 'Expected agy-to-Gemini rejection' >&2; exit 1
 fi
