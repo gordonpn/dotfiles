@@ -51,7 +51,7 @@ is_provider_quota_error() {
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
   [[ -n $stderr_log ]] || return 1
 
-  local retryable_terms='(Free usage (exceeded|limit)|usage limit reached|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
+  local retryable_terms='(Free usage (exceeded|limit)|[^[:cntrl:]]*usage limit reached|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
 
   if grep -Eqi \
     '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)=.*ProviderModelNotFoundError:)|(^[[:space:]]*(error:[[:space:]]*)?ProviderModelNotFoundError:)|(^[[:space:]]*error:[[:space:]]*Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+)' \
@@ -122,8 +122,8 @@ if [[ $AGENT == opencode ]]; then
     candidate_model="${candidate_model%"${candidate_model##*[![:space:]]}"}"
     if [[ -n $candidate_model ]]; then FILTERED_MODELS+=("$candidate_model"); fi
   done
+  ((${#FILTERED_MODELS[@]} > 0)) || die 'No usable OpenCode delegate models; check OPENCODE_DELEGATE_MODELS or --model'
   CANDIDATE_MODELS=("${FILTERED_MODELS[@]}")
-  ((${#CANDIDATE_MODELS[@]} > 0)) || die 'No usable OpenCode delegate models; check OPENCODE_DELEGATE_MODELS or --model'
 fi
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
 if (( AUTOMATIC )); then
