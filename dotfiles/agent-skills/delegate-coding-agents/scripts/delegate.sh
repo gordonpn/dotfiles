@@ -31,7 +31,7 @@ is_provider_quota_error() {
   [[ -n $combined ]] || return 1
 
   grep -Eqi \
-    'rate[ -]?limit|quota|too many requests|429|resource.*exhausted|provider.*not.*found|model.*not.*found|provideriniterror|providermodelnotfounderror|providerautherror|temporarily unavailable|service unavailable|overloaded|capacity|502|503|504|gateway timeout' \
+    'rate[ -]?limit|quota|too many requests|resource.*exhausted|provider.*not.*found|model.*not.*found|provideriniterror|providermodelnotfounderror|providerautherror|temporarily unavailable|service unavailable|overloaded|(out of|over|at|server) capacity|capacity exceeded|gateway timeout|(status|code|error|http|response)[ :]+(429|502|503|504)\b' \
     <<< "$combined"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0

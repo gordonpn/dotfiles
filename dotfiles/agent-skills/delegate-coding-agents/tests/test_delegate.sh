@@ -36,6 +36,12 @@ while (($#)); do
  if [[ $1 == --model ]]; then shift; model=$1; fi
  shift
 done
+if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
+  if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
+  echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
+  echo 'AssertionError: expected capacity to be 10, got 8' >&2
+  exit 1
+fi
 if [[ ${OPENCODE_MOCK_TASK_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'task error uncommitted modification\n' > task-error-work.txt; fi
   echo 'Simulated task execution failure (test error)' >&2
@@ -49,7 +55,7 @@ if [[ ${OPENCODE_MOCK_FAIL_DEEPSEEK:-} == 1 && $model == opencode/deepseek-v4.1-
   exit 1
 fi
 if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
-  echo 'Simulated failure for all models' >&2
+  echo 'Simulated quota failure for all models' >&2
   exit 1
 fi
 if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.txt; fi
@@ -118,6 +124,7 @@ if OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode plan --id all-fail
   echo 'Expected all models failure to return non-zero' >&2; exit 1
 fi
 grep -q 'Delegate failed or requires manual verification' "$TMP/all-fail.out"
+grep -q 'Model: opencode/qwen3.6-plus-free' "$TMP/all-fail.out"
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
 grep -q 'Model: Gemini CLI default' "$TMP/gemini-default.out"
 if GEMINI_MOCK_INVALID=1 "$SCRIPT" --agent gemini --mode plan --id gemini-invalid --task 'Return no response' > "$TMP/gemini-invalid.out" 2>&1; then
@@ -139,6 +146,16 @@ if grep -q 'falling back to next candidate' "$TMP/task-error.out"; then
 fi
 WT_TASK_ERROR=$(sed -n 's/^  Worktree: //p' "$TMP/task-error.out" | head -n 1)
 [[ -f $WT_TASK_ERROR/task-error-work.txt ]]
+# OpenCode compiler/line-number error with numbers like 502 or term capacity must not trigger fallback
+if OPENCODE_MOCK_COMPILER_ERROR=1 "$SCRIPT" --agent opencode --mode build --id compiler-error --task 'Test compiler error' > "$TMP/compiler-error.out" 2>&1; then
+  echo 'Expected compiler error to return nonzero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/compiler-error.out"
+if grep -q 'falling back to next candidate' "$TMP/compiler-error.out"; then
+  echo 'Expected compiler line numbers and capacity terms not to trigger fallback candidate retry' >&2; exit 1
+fi
+WT_COMPILER_ERROR=$(sed -n 's/^  Worktree: //p' "$TMP/compiler-error.out" | head -n 1)
+[[ -f $WT_COMPILER_ERROR/compiler-error.txt ]]
 # Automatic delegation must be explicitly opted in for this repository.
 if "$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --task 'Nope' >"$TMP/not-opted-in.out" 2>&1; then
  echo 'Expected automatic delegation opt-in gate' >&2; exit 1
