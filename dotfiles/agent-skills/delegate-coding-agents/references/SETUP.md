@@ -7,8 +7,8 @@ to link them into `~/.agents/skills/` and
 OpenCode, and Antigravity's skill discovery directory. Existing conflicting
 local copies are backed up by the sync script.
 
-Codex tries OpenCode DeepSeek Flash Free (high), GLM-5.3 Flash Free, MiniMax
-M3.1 Flash Free, and Qwen 3.6 Plus Free in order. It advances only after a
+Codex tries OpenCode DeepSeek Flash Free (high), GLM-5.3 Flash Free, MiMo-V2.6
+Flash Free, and Nemotron-3.5 Lightning Free in order. It advances only after a
 classified provider, quota, rate-limit, or model-availability failure. After
 all OpenCode candidates fail that way, Codex may use Gemini CLI. Authentication
 and provider-initialization errors stop delegation with a message to check

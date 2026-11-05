@@ -68,6 +68,7 @@ printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
 chmod +x "$TMP/bin/gemini" "$TMP/bin/opencode"
 export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees" OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS GEMINI_DELEGATE_MODEL
 cd "$TMP/repo"
 git init -q
 git config user.name 'Unit Test'
