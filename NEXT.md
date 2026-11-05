@@ -12,7 +12,7 @@
 - **Effort:** S
 - **Readiness:** READY
 - **Why now:** Directly resolves the 5 to 8 second cold-start latency and infinite context compaction loops experienced by delegated subagents on 64k-prompt models during `delegate.sh` runs. Local repository tasks do not require the 33 external homelab MCP servers.
-- **First action:** In `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh`, supply a clean configuration override (or an empty `mcpServers: {}` configuration) when invoking `opencode run` for delegated workers.
+- **First action:** In `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh`, supply a clean configuration override (or an isolated OpenCode configuration with empty `mcp: {}`) when invoking `opencode run` for delegated workers.
 - **Definition of Done:**
   - `delegate.sh --agent opencode --mode plan --task "..."` launches with an isolated MCP configuration that does not spawn external homelab MCP servers.
   - Delegated OpenCode tasks complete without context compaction loops on 64k models.
