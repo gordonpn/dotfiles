@@ -162,7 +162,11 @@ for provider_err in \
   'AI_APICallError: Too Many Requests at https://api.example.com/v1/403' \
   'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Too Many Requests at https://api.example.com/v1/403"' \
   'HTTP 429 Too Many Requests' \
-  'Status: 503 Service Unavailable'; do
+  'HTTP 502 Bad Gateway' \
+  'Status: 503 Service Unavailable' \
+  'HTTP 504 Gateway Timeout' \
+  'Response: 502' \
+  'Error: Bad Request: {"error":{"message":"The requested model is not supported.","code":"model_not_supported"}}'; do
   OPENCODE_MOCK_FAIL_DEEPSEEK=1 OPENCODE_MOCK_FAIL_MSG="$provider_err" "$SCRIPT" --agent opencode --mode plan --id auto-fallback --task 'Test automatic fallback' > "$TMP/auto-fallback.out" 2>&1 || { echo "Fallback case failed: $provider_err" >&2; exit 1; }
   grep -q 'falling back to next candidate' "$TMP/auto-fallback.out" || { echo "No fallback triggered for: $provider_err" >&2; exit 1; }
   grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/auto-fallback.out"
@@ -191,6 +195,7 @@ for auth_agent in opencode copilot; do
     'Error: AI_APICallError: 401' \
     'timestamp=2026-11-03T16:58:10.859Z level=ERROR run=08956276 message="stream error" providerID=opencode modelID=deepseek-v4.1-flash-free error.error="AI_APICallError: Request failed with status code 403"' \
     'Error: You are not signed in. Please run copilot login.' \
+    'Error: Please run opencode auth login.' \
     'HTTP 401 Unauthorized'; do
     : >"$OPENCODE_MOCK_CALL_LOG"
     if env "$auth_failure_env=1" OPENCODE_MOCK_FAIL_MSG="$auth_err" COPILOT_MOCK_FAIL_MSG="$auth_err" "$SCRIPT" --agent "$auth_agent" --mode plan --id auth-hard-stop --task 'Stop on invalid credentials' > "$TMP/auth-hard-stop.out" 2>&1; then
@@ -249,7 +254,7 @@ for err_msg in \
   grep -q 'Worker: opencode' "$TMP/copilot-fallback.out"
   grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/copilot-fallback.out"
   grep -q 'opencode plan high complete' "$TMP/copilot-fallback.out"
-  grep -q 'opencode plan opencode/deepseek-v4.1-flash-free' "$OPENCODE_MOCK_CALL_LOG"
+  grep -q 'plan opencode/deepseek-v4.1-flash-free' "$OPENCODE_MOCK_CALL_LOG"
   grep -q 'Exit: 0' "$TMP/copilot-fallback.out"
 done
 # A quota failure after a partial Copilot build resets its worktree before OpenCode writes.

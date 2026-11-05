@@ -26,7 +26,6 @@ HELP
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 is_provider_auth_error() {
-  local worker=${1:-opencode}
   local stderr_log
   stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
   [[ -n $stderr_log ]] || return 1
@@ -43,8 +42,8 @@ is_provider_auth_error() {
     return 0
   fi
 
-  if [[ $worker == copilot ]] && grep -Eqi \
-    '(^[[:space:]]*(error:[[:space:]]*)?((you are )?(not signed in|not authenticated|not logged in)|authentication (required|failed)|failed to authenticate|invalid (copilot )?token|expired (copilot )?token|please run copilot login))' \
+  if grep -Eqi \
+    '(^[[:space:]]*(error:[[:space:]]*)?((you are )?(not signed in|not authenticated|not logged in)|authentication (is )?(required|failed|missing|expired)|failed to authenticate|invalid (copilot )?token|expired (copilot )?token|(please[[:space:]]+)?run[[:space:]]+[[:punct:]]?[[:alnum:]_-]+([[:space:]]+[[:alnum:]_-]+)*[[:space:]]+login[[:punct:]]?))' \
     <<< "$stderr_log"; then
     return 0
   fi
