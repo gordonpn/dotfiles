@@ -14,7 +14,7 @@
 - **Why now:** Directly resolves the 5 to 8 second cold-start latency and infinite context compaction loops experienced by delegated subagents on 64k-prompt models during `delegate.sh` runs. Local repository tasks do not require the 33 external homelab MCP servers.
 - **First action:** In `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh`, supply a clean configuration override (or an empty `mcpServers: {}` configuration) when invoking `opencode run` for delegated workers.
 - **Definition of Done:**
-  - `delegate.sh --agent opencode` launches with an isolated MCP configuration that does not spawn external homelab MCP servers.
+  - `delegate.sh --agent opencode --mode plan --task "..."` launches with an isolated MCP configuration that does not spawn external homelab MCP servers.
   - Delegated OpenCode tasks complete without context compaction loops on 64k models.
   - `bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh` and `just test` pass cleanly.
 - **Unblocks:** Reduces token and process load ahead of broader client-tiering in #19.
@@ -33,7 +33,7 @@
    - **Effort:** M
    - **Readiness:** READY
    - **Dependencies:** None (can follow #23)
-   - **Rationale:** Solves the root eager-loading tool bloat across interactive OpenCode and Codex sessions. Keeps all 37 servers enabled for Antigravity CLI (which lazy-loads tools from disk), while defaulting OpenCode and Codex to core daily-driver servers (`context7`, `codebase-memory-mcp`, `ai-memory`, `github`), staying well below the 128-tool limit.
+   - **Rationale:** Solves the root eager-loading tool bloat across interactive OpenCode and Codex sessions. Keeps all 37 servers from `dotfiles/gemini/mcp_config.template.json` enabled for Antigravity CLI (which lazy-loads tools from disk), while defaulting OpenCode and Codex to core daily-driver servers (`context7`, `codebase-memory-mcp`, `ai-memory`, `github`), staying well below the 128-tool limit.
 
 3. **[#17: perf(mcp): reduce 547 eager MCP tool schemas across 37 configured servers in OpenCode and Codex](https://github.com/gordonpn/dotfiles/issues/17)**
    - **Priority:** P1
@@ -44,7 +44,7 @@
 
 ## BLOCKERS
 
-None. All upcoming tasks are unblocked and ready for immediate implementation.
+None. Issues #31 and #19 are unblocked and ready for immediate implementation; #17 is in progress and tracks completion of #23, #31, and #19.
 
 ## LATER
 
