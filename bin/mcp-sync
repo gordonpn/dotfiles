@@ -837,6 +837,13 @@ sync_skills_and_instructions() {
       backup_with_collision_avoidance "${opencode_agents}" "${bak_file}"
     fi
     ln -sfn "${gemini_rules}" "${opencode_agents}"
+
+    local removed_copilot_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+    local removed_copilot_target
+    removed_copilot_target="$(readlink "${removed_copilot_plugin}" 2>/dev/null || true)"
+    if [[ -L "${removed_copilot_plugin}" && "${removed_copilot_target}" == "${REPO_DIR}/dotfiles/opencode/plugins/copilot-student-models.ts" ]]; then
+      rm -f "${removed_copilot_plugin}"
+    fi
   fi
 
   # Link skills

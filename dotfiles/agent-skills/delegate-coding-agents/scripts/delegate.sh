@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'HELP'
-Usage: delegate.sh --agent opencode|gemini --mode plan|build --task '...' [options]
+Usage: delegate.sh --agent opencode|copilot|gemini --mode plan|build --task '...' [options]
 
 Options:
   --task-file PATH     Read task from file instead of --task
@@ -15,15 +15,82 @@ Options:
   --help               Display this help
 
 Environment:
-  OPENCODE_DELEGATE_MODEL  Default: opencode/deepseek-v4.1-flash-free
-  GEMINI_DELEGATE_MODEL    Optional Gemini CLI model override
-  DELEGATE_WORKTREE_ROOT  External directory for Git worktrees/logs
+  OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
+  OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
+  GEMINI_DELEGATE_MODEL     Optional Gemini CLI model override
+  DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
 
 Runs are isolated in Git worktrees. BUILD changes remain uncommitted on a
 new agent-specific branch. The caller (Codex or agy) reviews and integrates them.
 HELP
 }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
+is_provider_auth_error() {
+  local stderr_log
+  stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
+  [[ -n $stderr_log ]] || return 1
+
+  if grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[^"]*(status([[:space:]]*code)?|code)[[:space:]:=]*(401|403)([^[:alnum:]]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[^[:cntrl:]]*(status([[:space:]]*code)?|code)[[:space:]:=]*(401|403)([^[:alnum:]]|$))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  if grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="AI_APICallError:[[:space:]]*(401|403)([^[:alnum:]]|$))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):[[:space:]]*(401|403)([^[:alnum:]]|$))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  if grep -Eqi \
+    '(^[[:space:]]*(error:[[:space:]]*)?((you are )?(not signed in|not authenticated|not logged in)|authentication (is )?(required|failed|missing|expired)|failed to authenticate|invalid (copilot )?token|expired (copilot )?token|(please[[:space:]]+)?run[[:space:]]+[[:punct:]]?[[:alnum:]_-]+([[:space:]]+[[:alnum:]_-]+)*[[:space:]]+login[[:punct:]]?))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(ProviderAuthError|ProviderInitError|AuthenticationError):)|(^[[:space:]]*(error:[[:space:]]*)?(ProviderAuthError|ProviderInitError|AuthenticationError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*Failed to initialize provider)|(^[[:space:]]*(error:[[:space:]]*)?(Incorrect|Invalid|Bad) API key([[:space:]:]|$))|(^[[:space:]]*(error:[[:space:]]*)?(Missing|No) API key)|(^[[:space:]]*error:[[:space:]]*API key (is )?(missing|required|invalid|incorrect))|(^[[:space:]]*(error:[[:space:]]*)?(Unauthorized|Forbidden|Unauthenticated)(:|[[:space:]]))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):.*(unauthori[sz]ed|forbidden|invalid api key|incorrect api key|missing api key|no api key|authentication failed))|(^[[:space:]]*(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(401|403)([^0-9]|$))|(^[[:space:]]*error:[[:space:]]*(HTTP |Status:? |Response:? )?(401|403)([^0-9]|$))' \
+    <<< "$stderr_log"
+}
+is_provider_quota_error() {
+  local worker=${1:-opencode}
+  local stderr_log
+  stderr_log=$(sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$LOG_DIR/stderr.log" 2>/dev/null || true)
+  [[ -n $stderr_log ]] || return 1
+
+  # OpenCode v1.19.3 provider-error contract on stderr (`packages/opencode/src/cli/cmd/run.ts`,
+  # `packages/opencode/src/cli/error.ts`, `packages/opencode/src/session/message-v2.ts`,
+  # `packages/opencode/src/session/retry.ts`):
+  # 1. Structured `--print-logs --log-level ERROR` records:
+  #    - `level=ERROR ... error="ProviderModelNotFoundError: ..."`
+  #    - `level=ERROR ... (error.error|stack)="AI_APICallError: ..."`
+  # 2. `UI.error(...)` lines emitted for `FormatError` or `session.error` (`MessageV2.fromError`):
+  #    - `Error: Model not found: <provider>/<model>...` (`ProviderModelNotFoundError`)
+  #    - `Error: (AI_APICallError|APIError|RetryError): <retryable provider/quota diagnostic>`
+  #    - `Error: <quota/model-availability term, optionally preceded by diagnostic text>`
+  if [[ $worker == copilot ]] && grep -Eqi \
+    '^[[:space:]]*(error:[[:space:]]*)?(AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported)' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+  local retryable_terms='(Free usage (exceeded|limit)|(hit( your)? usage limits?|usage limits? (has been )?(reached|exceeded)|reached (the |your )?usage limits?)([^[:alnum:]]|$)|AI credits? (limit reached|exhausted|quota exceeded)|Quota exceeded|Rate limit exceeded|Too Many Requests|Provider is overloaded|model (is )?(temporarily )?unavailable|No available models|The requested model is not supported|model_not_supported|Bad Request:[^[:cntrl:]]*model_not_supported|(HTTP|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))'
+
+  if grep -Eqi \
+    '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)=.*ProviderModelNotFoundError:)|(^[[:space:]]*(error:[[:space:]]*)?ProviderModelNotFoundError:)|(^[[:space:]]*error:[[:space:]]*Model not found:[[:space:]]+[^[:space:]]+/[^[:space:]]+)' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  if grep -Eqi \
+    "(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\\.error|stack|cause)=.*(AI_APICallError|APIError|RetryError):.*${retryable_terms})|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError|RetryError):[^[:cntrl:]]*${retryable_terms})|(^[[:space:]]*error:[[:space:]]*[^[:cntrl:]]*${retryable_terms})" \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
+  grep -Eqi \
+    '(^[[:space:]]*(error:[[:space:]]*)?(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(429|502|503|504)([^[:alnum:]]|$))' \
+    <<< "$stderr_log"
+}
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
 while (($#)); do
   case "$1" in
@@ -40,7 +107,7 @@ while (($#)); do
     *) die "Unknown option: $1" ;;
   esac
 done
-[[ $AGENT == opencode || $AGENT == gemini ]] || die 'Use --agent opencode or gemini'
+[[ $AGENT == opencode || $AGENT == copilot || $AGENT == gemini ]] || die 'Use --agent opencode, copilot, or gemini'
 [[ $MODE == plan || $MODE == build ]] || die 'Use --mode plan or build'
 [[ $ORCHESTRATOR == codex || $ORCHESTRATOR == agy ]] || die 'Use --orchestrator codex or agy'
 [[ $ORCHESTRATOR != agy || $AGENT != gemini ]] || die 'Gemini CLI delegation is only enabled for Codex'
@@ -52,12 +119,61 @@ fi
 [[ -n ${TASK//[[:space:]]/} ]] || die 'Task is empty'
 [[ -z ${CODING_DELEGATE_ACTIVE:-} ]] || die 'Recursive delegation blocked'
 command -v git >/dev/null || die 'git is required'
-command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
-if [[ $AGENT == gemini ]]; then command -v jq >/dev/null || die 'jq is required for Gemini JSON output'; fi
-if [[ $AGENT == opencode ]]; then
-  MODEL=${MODEL:-${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}}
+if [[ $AGENT == copilot ]]; then
+  command -v copilot >/dev/null || die 'Install GitHub Copilot CLI and authenticate with copilot login first'
 else
-  MODEL=${MODEL:-${GEMINI_DELEGATE_MODEL:-}}
+  command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
+fi
+if [[ $AGENT == gemini ]]; then command -v jq >/dev/null || die 'jq is required for Gemini JSON output'; fi
+DEFAULT_FALLBACK_MODELS=(
+  "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
+  "opencode/glm-5.3-flash-free"
+  "opencode/mimo-v2.6-flash-free"
+  "opencode/nemotron-3.5-lightning-free"
+)
+if [[ $AGENT == opencode ]]; then
+  if [[ -n $MODEL ]]; then
+    CANDIDATE_MODELS=("$MODEL")
+  elif [[ -n ${OPENCODE_DELEGATE_MODELS:-} ]]; then
+    IFS=',' read -ra CANDIDATE_MODELS <<< "$OPENCODE_DELEGATE_MODELS"
+  else
+    CANDIDATE_MODELS=("${DEFAULT_FALLBACK_MODELS[@]}")
+  fi
+elif [[ $AGENT == copilot ]]; then
+  [[ -z $MODEL || $MODEL == auto ]] || die 'Copilot Student supports automatic model selection only; use --model auto'
+  CANDIDATE_AGENTS=(copilot)
+  CANDIDATE_MODELS=(auto)
+  if [[ -n ${OPENCODE_DELEGATE_MODELS:-} ]]; then
+    IFS=',' read -ra FALLBACK_MODELS <<< "$OPENCODE_DELEGATE_MODELS"
+  else
+    FALLBACK_MODELS=("${DEFAULT_FALLBACK_MODELS[@]}")
+  fi
+  for fallback_model in "${FALLBACK_MODELS[@]}"; do
+    fallback_model="${fallback_model#"${fallback_model%%[![:space:]]*}"}"
+    fallback_model="${fallback_model%"${fallback_model##*[![:space:]]}"}"
+    if [[ -n $fallback_model ]]; then
+      CANDIDATE_AGENTS+=(opencode)
+      CANDIDATE_MODELS+=("$fallback_model")
+    fi
+  done
+  ((${#CANDIDATE_MODELS[@]} > 1)) || die 'No usable OpenCode fallback models; check OPENCODE_DELEGATE_MODELS'
+else
+  CANDIDATE_AGENTS=(gemini)
+  CANDIDATE_MODELS=("${MODEL:-${GEMINI_DELEGATE_MODEL:-}}")
+fi
+if [[ $AGENT == opencode ]]; then
+  CANDIDATE_AGENTS=()
+  FILTERED_MODELS=()
+  for candidate_model in "${CANDIDATE_MODELS[@]}"; do
+    candidate_model="${candidate_model#"${candidate_model%%[![:space:]]*}"}"
+    candidate_model="${candidate_model%"${candidate_model##*[![:space:]]}"}"
+    if [[ -n $candidate_model ]]; then
+      FILTERED_MODELS+=("$candidate_model")
+      CANDIDATE_AGENTS+=(opencode)
+    fi
+  done
+  ((${#FILTERED_MODELS[@]} > 0)) || die 'No usable OpenCode delegate models; check OPENCODE_DELEGATE_MODELS or --model'
+  CANDIDATE_MODELS=("${FILTERED_MODELS[@]}")
 fi
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
 if (( AUTOMATIC )); then
@@ -87,7 +203,7 @@ agent=$AGENT
 orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
 mode=$MODE
-model=${MODEL:-'(default)'}
+requested_model=${MODEL:-'(default)'}
 base=$BASE_SHA
 branch=$BRANCH
 worktree=$WORKTREE
@@ -118,34 +234,109 @@ RESPONSE:
 PROMPT_END
 )
 printf '%s\n' "$PROMPT" >"$LOG_DIR/prompt.txt"
-if [[ $AGENT == opencode ]]; then
-  ARGS=(run --agent "$MODE" --model "$MODEL")
-  if [[ $MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
-  ARGS+=("$PROMPT")
-else
-  ARGS=(-p "$PROMPT" --output-format json)
-  if [[ $MODE == build ]]; then ARGS+=(--approval-mode auto_edit); fi
-  if [[ -n $MODEL ]]; then ARGS+=(--model "$MODEL"); fi
-fi
-# Do not imply a successful invocation means all shell commands/tests were allowed.
-set +e
-if [[ $AGENT == opencode ]]; then
-  (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
-else
-  (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" gemini "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
-fi
-EXIT_CODE=$?
-set -e
-if [[ $AGENT == gemini ]]; then
-  if jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
-    jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
-  else
-    printf 'Gemini CLI did not return a JSON response.\n' >"$LOG_DIR/report.md"
-    EXIT_CODE=1
+EXIT_CODE=1
+AUTH_FAILURE=0
+SUCCESSFUL_MODEL=''
+CURRENT_MODEL=''
+TOTAL_CANDIDATES=${#CANDIDATE_MODELS[@]}
+for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
+  CURRENT_AGENT="${CANDIDATE_AGENTS[idx]}"
+  CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
+  CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
+  CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
+  if [[ ($AGENT == opencode || $AGENT == copilot) && -z $CURRENT_MODEL ]]; then continue; fi
+  if [[ $CURRENT_AGENT == opencode ]] && ! command -v opencode >/dev/null; then
+    printf 'OpenCode fallback is unavailable: install or authenticate OpenCode before retrying.\n' >&2
+    break
   fi
-else
-  cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md"
-fi
+
+  # Reset worktree if retrying after a prior failed candidate
+  if (( idx > 0 )); then
+    if ! git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 \
+      || ! git -C "$WORKTREE" clean -fdx >/dev/null 2>&1; then
+      printf 'Failed to reset worktree before retry; stopping fallback.\n' >&2
+      break
+    fi
+  fi
+
+  if [[ $CURRENT_AGENT == copilot ]]; then
+    ARGS=(-p "$PROMPT" --model auto --no-ask-user --output-format text)
+    if [[ $MODE == plan ]]; then
+      ARGS+=(--mode plan "--available-tools=view,grep,glob" --deny-tool=write --deny-tool=shell)
+    else
+      ARGS+=("--available-tools=edit,view,grep,glob" --allow-tool=write --deny-tool=shell)
+    fi
+  elif [[ $CURRENT_AGENT == opencode ]]; then
+    ARGS=(run --print-logs --log-level ERROR --agent "$MODE" --model "$CURRENT_MODEL")
+    if [[ $CURRENT_MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
+    ARGS+=("$PROMPT")
+  else
+    ARGS=(-p "$PROMPT" --output-format json)
+    if [[ $MODE == build ]]; then ARGS+=(--approval-mode auto_edit); fi
+    if [[ -n $CURRENT_MODEL ]]; then ARGS+=(--model "$CURRENT_MODEL"); fi
+  fi
+
+  # Do not imply a successful invocation means all shell commands/tests were allowed.
+  set +e
+  if [[ $CURRENT_AGENT == opencode ]]; then
+    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+  elif [[ $CURRENT_AGENT == copilot ]]; then
+    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" copilot "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+  else
+    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" gemini "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+  fi
+  RUN_EXIT=$?
+  set -e
+
+  if [[ $CURRENT_AGENT == gemini ]]; then
+    if [[ $RUN_EXIT -eq 0 ]] && jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
+      jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
+      EXIT_CODE=0
+      SUCCESSFUL_MODEL=$CURRENT_MODEL
+      break
+    else
+      if jq -e '.response | type == "string"' "$LOG_DIR/stdout.log" >/dev/null 2>&1; then
+        jq -r '.response' "$LOG_DIR/stdout.log" >"$LOG_DIR/report.md"
+      else
+        printf 'Gemini CLI did not return a JSON response.\n' >"$LOG_DIR/report.md"
+      fi
+      EXIT_CODE=$RUN_EXIT
+      [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
+    fi
+  else
+    if [[ $RUN_EXIT -eq 0 && -s $LOG_DIR/stdout.log ]]; then
+      cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md"
+      EXIT_CODE=0
+      SUCCESSFUL_MODEL=$CURRENT_MODEL
+      break
+    else
+      cp "$LOG_DIR/stdout.log" "$LOG_DIR/report.md" 2>/dev/null || true
+      EXIT_CODE=$RUN_EXIT
+      [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
+
+      # Fallback only on classified provider, quota, rate-limit, or model availability failures.
+      # Never advance to another candidate on task errors, test failures, or ambiguous results,
+      # or when a planning worker violated its read-only worktree contract.
+      if is_provider_auth_error "$CURRENT_AGENT"; then
+        AUTH_FAILURE=1
+        break
+      fi
+      if [[ $MODE == plan ]] && [[ -n $(git -C "$WORKTREE" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
+        break
+      fi
+      if is_provider_quota_error "$CURRENT_AGENT"; then
+        if (( idx + 1 < TOTAL_CANDIDATES )); then
+          printf 'Model %s encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_MODEL" "$RUN_EXIT" >&2
+        fi
+      else
+        break
+      fi
+    fi
+  fi
+done
+
+MODEL=${SUCCESSFUL_MODEL:-${CURRENT_MODEL:-}}
+printf 'resolved_model=%s\nexit_code=%s\n' "${MODEL:-'(default)'}" "$EXIT_CODE" >>"$LOG_DIR/manifest.txt"
 
 # Review both tracked and untracked changes: git diff alone omits new files.
 git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
@@ -170,6 +361,7 @@ if [[ $MODE == plan && -s $LOG_DIR/git-status.txt ]]; then
 fi
 printf '\nDELEGATION_RESULT\n'
 printf '  Agent: %s (%s)\n' "$AGENT" "$MODE"
+printf '  Worker: %s\n' "$CURRENT_AGENT"
 printf '  Orchestrator: %s\n' "$ORCHESTRATOR"
 printf '  Model: %s\n' "${MODEL:-Gemini CLI default}"
 printf '  Worktree: %s\n' "$WORKTREE"
@@ -182,6 +374,14 @@ printf '\n--- Delegate report ---\n'
 cat "$LOG_DIR/report.md"
 printf '\n--- End report ---\n'
 if [[ $EXIT_CODE -ne 0 ]]; then
-  printf 'Delegate failed or requires manual verification; inspect stderr and status logs.\n' >&2
+  if (( AUTH_FAILURE )); then
+    if [[ $CURRENT_AGENT == copilot ]]; then
+      printf 'GitHub Copilot authentication/setup failed. Stopping fallback. Check your Copilot Student entitlement and run copilot login, then rerun. Details: %s/stderr.log\n' "$LOG_DIR" >&2
+    else
+      printf 'Authentication/provider setup failed for model %s. Stopping fallback. Check the OpenCode login and provider API key/configuration, then rerun. Details: %s/stderr.log\n' "$MODEL" "$LOG_DIR" >&2
+    fi
+  else
+    printf 'Delegate failed or requires manual verification; inspect stderr and status logs.\n' >&2
+  fi
 fi
 exit "$EXIT_CODE"
