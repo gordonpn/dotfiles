@@ -87,6 +87,7 @@ printf 'copilot %s %s complete\n' "$model" "$mode"
 MOCK
 chmod +x "$TMP/bin/gemini" "$TMP/bin/opencode" "$TMP/bin/copilot"
 export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees" COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls" OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL COPILOT_DELEGATE_MODELS GEMINI_DELEGATE_MODEL
 cd "$TMP/repo"
 git init -q
 git config user.name 'Unit Test'

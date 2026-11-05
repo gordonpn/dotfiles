@@ -204,7 +204,7 @@ mkdir -p "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins"
 printf 'retired managed plugin\n' >"${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/copilot-student-models.ts"
 printf 'preexisting backup\n' >"${OPENCODE_DIR}/AGENTS.md.bak"
 printf 'old opencode instructions\n' >"${OPENCODE_DIR}/AGENTS.md"
-ln -s "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/copilot-student-models.ts" "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+ln -s "${repo_dir}/dotfiles/opencode/plugins/copilot-student-models.ts" "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
 ln -s "${HOME}/external-plugin.ts" "${OPENCODE_DIR}/plugins/user-plugin.ts"
 ln -s "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/user-plugin.ts" "${OPENCODE_DIR}/plugins/user-dangling-plugin.ts"
 
@@ -305,15 +305,18 @@ sync_skills_and_instructions
 backup_count_after=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 [[ "${backup_count_before}" -eq "${backup_count_after}" ]]
 
-# The removed Student plugin link is pruned after its source repository has moved, even if the old target still exists.
+# Symlinks whose targets share the retired plugin suffix outside REPO_DIR are preserved as user-owned links.
 (
-  moved_repo="${test_tmp_dir}/moved-repo"
-  old_repo="${test_tmp_dir}/old-repo"
-  stale_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
-  ln -s "${old_repo}/dotfiles/opencode/plugins/copilot-student-models.ts" "${stale_plugin}"
-  REPO_DIR="${moved_repo}"
+  external_repo="${test_tmp_dir}/external-repo"
+  external_target="${external_repo}/dotfiles/opencode/plugins/copilot-student-models.ts"
+  mkdir -p "$(dirname "${external_target}")"
+  printf 'external custom copilot plugin\n' >"${external_target}"
+  external_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+  ln -s "${external_target}" "${external_plugin}"
   sync_skills_and_instructions
-  [[ ! -e "${stale_plugin}" && ! -L "${stale_plugin}" ]]
+  [[ -L "${external_plugin}" ]]
+  [[ "$(readlink "${external_plugin}")" == "${external_target}" ]]
+  rm -f "${external_plugin}"
 )
 
 # User-owned files and links with the retired plugin name are preserved.

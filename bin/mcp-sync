@@ -841,7 +841,7 @@ sync_skills_and_instructions() {
     local removed_copilot_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
     local removed_copilot_target
     removed_copilot_target="$(readlink "${removed_copilot_plugin}" 2>/dev/null || true)"
-    if [[ -L "${removed_copilot_plugin}" && "${removed_copilot_target}" == */dotfiles/opencode/plugins/copilot-student-models.ts ]]; then
+    if [[ -L "${removed_copilot_plugin}" && "${removed_copilot_target}" == "${REPO_DIR}/dotfiles/opencode/plugins/copilot-student-models.ts" ]]; then
       rm -f "${removed_copilot_plugin}"
     fi
   fi
