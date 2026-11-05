@@ -42,6 +42,12 @@ is_provider_auth_error() {
     return 0
   fi
 
+  if grep -Eqi \
+    '(^[[:space:]]*(error:[[:space:]]*)?((you are )?(not signed in|not authenticated|not logged in)|authentication (is )?(required|failed|missing|expired)|failed to authenticate|invalid (token|api[ -]?key)|expired (token|api[ -]?key)|(please[[:space:]]+)?run[[:space:]]+[[:punct:]]?[[:alnum:]_-]+([[:space:]]+[[:alnum:]_-]+)*[[:space:]]+login[[:punct:]]?))' \
+    <<< "$stderr_log"; then
+    return 0
+  fi
+
   grep -Eqi \
     '(^([[:space:]]*timestamp=[^[:space:]]+[[:space:]]+)?level=ERROR[[:space:]].*(error|error\.error|stack|cause)="(ProviderAuthError|ProviderInitError|AuthenticationError):)|(^[[:space:]]*(error:[[:space:]]*)?(ProviderAuthError|ProviderInitError|AuthenticationError)[[:space:]]*:)|(^[[:space:]]*error:[[:space:]]*Failed to initialize provider)|(^[[:space:]]*(error:[[:space:]]*)?(Incorrect|Invalid|Bad) API key([[:space:]:]|$))|(^[[:space:]]*(error:[[:space:]]*)?(Missing|No) API key)|(^[[:space:]]*error:[[:space:]]*API key (is )?(missing|required|invalid|incorrect))|(^[[:space:]]*(error:[[:space:]]*)?(Unauthorized|Forbidden|Unauthenticated)(:|[[:space:]]))|(^[[:space:]]*(error:[[:space:]]*)?(AI_APICallError|APIError):.*(unauthori[sz]ed|forbidden|invalid api key|incorrect api key|missing api key|no api key|authentication failed))|(^[[:space:]]*(http|status|response)[[:space:]:]+(status[[:space:]:]+|code[[:space:]:]+)?(401|403)([^0-9]|$))|(^[[:space:]]*error:[[:space:]]*(HTTP |Status:? |Response:? )?(401|403)([^0-9]|$))' \
     <<< "$stderr_log"
