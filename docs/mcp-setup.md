@@ -2,9 +2,10 @@
 
 ## Overview
 
-This repository configures Model Context Protocol (MCP) servers, shared skills, and global instructions for terminal AI coding agents (Antigravity `agy` and Codex) on macOS and Linux. `bin/mcp-sync` compiles a single source of truth template (`dotfiles/gemini/mcp_config.template.json`) into client-specific configurations for both agents:
+This repository configures Model Context Protocol (MCP) servers, shared skills, and global instructions for terminal AI coding agents (Antigravity `agy`, Codex, and OpenCode) on macOS and Linux. `bin/mcp-sync` compiles a single source of truth template (`dotfiles/gemini/mcp_config.template.json`) into client-specific configurations:
 - Antigravity: `~/.gemini/config/mcp_config.json`
 - Codex: `~/.codex/config.toml`
+- OpenCode: `~/.config/opencode/opencode.json`
 
 It also maintains agent parity by synchronizing global instructions (`dotfiles/gemini/GEMINI.md` to `AGENTS.md`) and custom skills into Codex, Antigravity, and OpenCode discovery paths.
 
@@ -98,10 +99,25 @@ just setup-codebase-memory
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` and `~/.codex/config.toml` (36 total servers).
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json`, `~/.codex/config.toml`, and `~/.config/opencode/opencode.json` (37 total servers). Antigravity keeps all non-disabled servers available for its native lazy loading. Codex and OpenCode enable only `context7`, `codebase-memory-mcp`, `ai-memory`, and `github` by default; all other definitions remain available but disabled.
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories. The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
    Codex uses OpenCode DeepSeek Flash Free, then GLM Flash Free only after an explicit quota/rate-limit failure, and Gemini CLI if both OpenCode free routes are limited. The Gemini CLI fallback requires a separately installed and authenticated `gemini` command.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
+
+### MCP loading tiers
+
+Codex and OpenCode eagerly start enabled MCP servers and advertise their tools at
+session startup. The default eager tier is intentionally limited to four
+daily-driver servers to stay below provider tool and context limits. The
+remaining servers are retained in each generated configuration for explicit
+opt-in without editing the shared template:
+
+```bash
+MCP_EAGER_SERVERS=context7,codebase-memory-mcp,ai-memory,github,filesystem mcp-sync --configs-only
+```
+
+Antigravity continues to receive the complete 37-server registry because it
+lazy-loads MCP schemas on demand. Restart clients after changing the eager tier.
 
 ---
 

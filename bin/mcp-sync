@@ -471,6 +471,7 @@ sync_mcp_config() {
   local template_file="${TEMPLATE_DIR}/mcp_config.template.json"
   local target_file="${GEMINI_CONFIG_DIR}/mcp_config.json"
   local codex_config="${CODEX_DIR}/config.toml"
+  local opencode_config="${OPENCODE_DIR}/opencode.json"
 
   if [[ ! -f "${template_file}" ]]; then
     echo "Error: Template ${template_file} not found." >&2
@@ -588,6 +589,7 @@ sync_mcp_config() {
   export SONARQUBE_TOKEN="${sonar_token}"
   export SONARQUBE_URL="${sonar_url}"
   export SONARQUBE_ORG="${sonar_org}"
+  export MCP_EAGER_SERVERS="${MCP_EAGER_SERVERS:-context7,codebase-memory-mcp,ai-memory,github}"
 
   python3 -c "
 import json, os, re
@@ -595,7 +597,13 @@ import json, os, re
 template_file = '${template_file}'
 target_file = '${target_file}'
 codex_config = '${codex_config}'
+opencode_config = '${opencode_config}'
 codex_template = '${REPO_DIR}/dotfiles/codex/config.template.toml'
+eager_servers = {
+    name.strip()
+    for name in os.environ.get('MCP_EAGER_SERVERS', '').split(',')
+    if name.strip()
+}
 
 with open(template_file, 'r') as f:
     content = f.read()
@@ -634,6 +642,7 @@ for k, v in replacements.items():
     content = content.replace(k, v)
 
 data = json.loads(content)
+all_servers = data.get('mcpServers', {})
 
 def safe_write_config(path, text):
     dirname = os.path.dirname(path)
@@ -651,10 +660,42 @@ def safe_write_config(path, text):
         raise
 
 # 1. Antigravity MCP config
-safe_write_config(target_file, json.dumps(data, indent=2))
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_file}')
+safe_write_config(target_file, json.dumps(data, indent=2) + '\n')
+print(f'Synchronized {len(all_servers)} MCP servers to {target_file}')
 
-# 2. Codex MCP config (~/.codex/config.toml)
+def opencode_server(server, enabled):
+    command = [server.get('command', '')] + server.get('args', [])
+    result = {
+        'type': 'local',
+        'command': command,
+        'enabled': enabled,
+    }
+    if server.get('env'):
+        result['environment'] = server['env']
+    return result
+
+# 2. OpenCode MCP config. Keep all definitions for explicit opt-in, but only
+# the eager tier is enabled by default to avoid spawning every server.
+opencode_data = {'\$schema': 'https://opencode.ai/config.json', 'mcp': {}}
+if os.path.exists(opencode_config):
+    with open(opencode_config, 'r') as f:
+        existing = json.load(f)
+    if isinstance(existing, dict):
+        opencode_data = existing
+        opencode_data.setdefault('\$schema', 'https://opencode.ai/config.json')
+        opencode_data.setdefault('mcp', {})
+if not isinstance(opencode_data.get('mcp'), dict):
+    raise ValueError(f'OpenCode mcp setting must be an object: {opencode_config}')
+for name, server in all_servers.items():
+    template_enabled = not server.get('disabled', False)
+    opencode_data['mcp'][name] = opencode_server(
+        server,
+        template_enabled and name in eager_servers,
+    )
+safe_write_config(opencode_config, json.dumps(opencode_data, indent=2) + '\n')
+print(f'Synchronized {len(all_servers)} MCP servers to {opencode_config}')
+
+# 3. Codex MCP config (~/.codex/config.toml)
 codex_content = ''
 if os.path.exists(codex_config):
     with open(codex_config, 'r') as f:
@@ -678,7 +719,7 @@ toml_lines = ['\n# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===']
 for name, s in data.get('mcpServers', {}).items():
     cmd = s.get('command', '')
     args = s.get('args', [])
-    disabled = s.get('disabled', False)
+    disabled = s.get('disabled', False) or name not in eager_servers
     env = s.get('env', {})
 
     toml_lines.append(f'[mcp_servers.\"{name}\"]')
@@ -706,7 +747,7 @@ for s_name in data.get('mcpServers', {}):
 
 new_content = cleaned.rstrip() + '\n' + managed_block
 safe_write_config(codex_config, new_content)
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config}')
+print(f'Synchronized {len(all_servers)} MCP servers to {codex_config}')
 "
 }
 

@@ -154,10 +154,23 @@ uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" -
 [[ "$(jq -r '.mcpServers["chrome-devtools"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["server-services-configs"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
 
+[[ "$(jq -r '.mcp["codebase-memory-mcp"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["filesystem"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["codebase-memory-mcp"].command[0]' "${OPENCODE_DIR}/opencode.json")" == "${HOME}/.local/share/codebase-memory-mcp/codebase-memory-mcp" ]]
+[[ "$(jq -r '.mcp["github"].environment.GITHUB_PERSONAL_ACCESS_TOKEN' "${OPENCODE_DIR}/opencode.json")" == "" ]]
+[[ "$(stat -c '%a' "${OPENCODE_DIR}/opencode.json" 2>/dev/null || stat -f '%Lp' "${OPENCODE_DIR}/opencode.json")" == "600" ]]
+
 grep -F '[mcp_servers."ai-memory"]' "${CODEX_DIR}/config.toml"
 grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 3 -F '[mcp_servers."chrome-devtools"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 3 -F '[mcp_servers."server-services-configs"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+MCP_EAGER_SERVERS='context7,codebase-memory-mcp,ai-memory,github,filesystem' sync_mcp_config
+[[ "$(jq -r '.mcp.filesystem.enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+if grep -A 4 -F '[mcp_servers."filesystem"]' "${CODEX_DIR}/config.toml" | grep -q '^enabled = false'; then
+  echo 'Expected filesystem to be enabled in Codex' >&2
+  exit 1
+fi
 
 # Fast-path stamp check for ai-memory
 ai_stamp="${LOCAL_BIN_DIR}/.ai-memory.version"
