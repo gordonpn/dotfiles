@@ -19,11 +19,11 @@ Do **not** call a harness from inside its delegated invocation, recursively dele
 For Codex, route sequentially and stop after the first worker completes successfully:
 
 1. OpenCode with `opencode/deepseek-v4.1-flash-free` at high variant.
-2. Only after a clear quota/rate-limit failure, retry with OpenCode `opencode/glm-5.3-flash-free`.
-3. If that is also explicitly quota/rate limited, use Gemini CLI with its configured account/model.
+2. Only after a classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`).
+3. If all OpenCode free candidates fail with classified provider, quota, rate-limit, or availability errors, use Gemini CLI with its configured account/model.
 4. If Gemini CLI is unavailable, quota-limited, or cannot complete, continue with Codex directly.
 
-Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. These OpenCode free offers can change; confirm the selected model remains available before use. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
+Authentication and provider-initialization errors are hard stops: show a message directing the user to check login and provider credentials/configuration, and do not try another model or Gemini. Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. These OpenCode free offers can change; confirm the selected model remains available before use. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
 
 ## Calling the script
 
@@ -35,13 +35,13 @@ Use the script in **the current skill installation**. Codex default install: `~/
   --orchestrator codex --automatic --agent opencode --mode plan \
   --id pagination-plan --task 'Inspect cursor handling; propose concrete design and tests.'
 
-# After an explicit OpenCode quota/rate-limit failure, try the free GLM model
+# After a classified provider, quota, rate-limit, or model-availability failure, try GLM explicitly
 "$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
   --orchestrator codex --automatic --agent opencode --mode build \
   --model opencode/glm-5.3-flash-free \
   --id pagination-api --task 'Implement cursor-based pagination and tests in API module.'
 
-# After an explicit OpenCode quota/rate-limit failure, use Gemini CLI
+# After all OpenCode free candidates fail with classified errors, use Gemini CLI
 "$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
   --orchestrator codex --automatic --agent gemini --mode build \
   --id validation-tests --task 'Implement the assigned acceptance criteria and tests.'
@@ -49,7 +49,7 @@ Use the script in **the current skill installation**. Codex default install: `~/
 
 Supported flags: `--orchestrator codex|agy`, `--agent opencode|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
 
-OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant. GLM fallback is passed explicitly with `--model opencode/glm-5.3-flash-free` and uses the model's default variant. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. OpenCode's `OPENCODE_DELEGATE_MODEL` is an intentional override, not an automatic fallback. Never silently fall back to paid models.
+OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) only on classified provider, quota, rate-limit, or model-availability failures. `--model` pins a single candidate with no fallback; `OPENCODE_DELEGATE_MODEL` overrides only the first candidate in the default chain; `OPENCODE_DELEGATE_MODELS` replaces the entire chain with a comma-separated list. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
 
 ## Delegate specification
 
@@ -67,5 +67,5 @@ The wrapper creates an external Git worktree from the **committed** base revisio
 - Automatic delegation requires explicit per-repository opt-in: `git config --local agents.delegationAllowed true`. This setting is in local Git config, not committed to the repository.
 - Worktrees do **not** sandbox host credentials, Git metadata, filesystem, or network. Keep narrowly scoped shell permissions; do not enable blanket unattended execution.
 - If there is no isolated, valid committed state, do not stash/reset or discard user changes to force delegation.
-- Run one external worker at a time. Avoid recursive delegation and indefinite retry loops. Fallback only on clear quota/rate-limit failures; if all free routes fail, report and continue with the orchestrator if possible.
+- Run one external worker at a time. Avoid recursive delegation and indefinite retry loops. Fallback only on classified provider, quota, rate-limit, or model-availability failures; if all eligible routes fail, report and continue with the orchestrator if possible.
 - Never treat claimed passing tests as evidence without checking command output; agy headless may soft-deny shell commands.
