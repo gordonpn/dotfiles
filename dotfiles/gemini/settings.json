@@ -13,6 +13,16 @@
   "verbosity": "low",
   "runningLightSpeed": "fast",
   "showFeedbackSurvey": false,
+  "statusLine": {
+    "type": "command",
+    "command": "~/.local/bin/agy-statusline",
+    "enabled": true
+  },
+  "title": {
+    "type": "command",
+    "command": "~/.gemini/antigravity-cli/title.sh",
+    "enabled": true
+  },
   "general": {
     "vimMode": true,
     "enableNotifications": true,
