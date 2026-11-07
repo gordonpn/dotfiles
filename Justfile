@@ -3,6 +3,8 @@ test:
     bash tests/deepseek-analyze.sh
     bash tests/deepseek-review-prompt.sh
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
+    bash tests/agy-statusline.sh
+    bash tests/agy-title.sh
 
 lint:
     #!/usr/bin/env bash
@@ -11,7 +13,11 @@ lint:
         ".github/scripts/check-deepseek-credentials.sh"
         ".github/scripts/install-actionlint.sh"
         ".github/scripts/write-deepseek-review-prompt.sh"
+        "bin/agy-statusline"
         "bin/mcp-sync"
+        "dotfiles/gemini/antigravity-cli/title.sh"
+        "tests/agy-statusline.sh"
+        "tests/agy-title.sh"
         "tests/mcp-sync.sh"
         "tests/deepseek-analyze.sh"
         "tests/deepseek-review-prompt.sh"

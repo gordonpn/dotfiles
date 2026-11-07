@@ -252,6 +252,16 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 
+# Settings, title, and statusline symlinks
+[[ -L "${GEMINI_DIR}/settings.json" ]]
+[[ "$(readlink "${GEMINI_DIR}/settings.json")" == "${repo_dir}/dotfiles/gemini/settings.json" ]]
+[[ -L "${GEMINI_DIR}/antigravity-cli/settings.json" ]]
+[[ "$(readlink "${GEMINI_DIR}/antigravity-cli/settings.json")" == "${repo_dir}/dotfiles/gemini/antigravity-cli/settings.json" ]]
+[[ -L "${GEMINI_DIR}/antigravity-cli/title.sh" ]]
+[[ "$(readlink "${GEMINI_DIR}/antigravity-cli/title.sh")" == "${repo_dir}/dotfiles/gemini/antigravity-cli/title.sh" ]]
+[[ -L "${LOCAL_BIN_DIR}/agy-statusline" ]]
+[[ "$(readlink "${LOCAL_BIN_DIR}/agy-statusline")" == "${repo_dir}/bin/agy-statusline" ]]
+
 # Manual non-symlink skill is preserved
 [[ -d "${OPENCODE_DIR}/skills/manual-skill" && ! -L "${OPENCODE_DIR}/skills/manual-skill" ]]
 
