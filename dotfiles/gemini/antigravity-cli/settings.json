@@ -8,7 +8,7 @@
   "showFeedbackSurvey": false,
   "statusLine": {
     "type": "command",
-    "command": "agy-statusline",
+    "command": "~/.local/bin/agy-statusline",
     "enabled": true
   },
   "title": {

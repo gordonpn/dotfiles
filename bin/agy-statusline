@@ -34,14 +34,10 @@ printf '%s\n' "$input" | jq -r --arg home "${HOME:-}" '
       .quota.remaining_fraction
     elif (.quota | type) == "object" then
       (.model.display_name // .model.id // "" | ascii_downcase) as $m |
-      if ($m | contains("gemini")) and .quota["gemini-5h"].remaining_fraction != null then
-        .quota["gemini-5h"].remaining_fraction
-      elif ($m | contains("gemini")) and .quota["gemini-weekly"].remaining_fraction != null then
-        .quota["gemini-weekly"].remaining_fraction
-      elif ($m | (contains("claude") or contains("3p") or contains("gpt") or contains("anthropic"))) and .quota["3p-5h"].remaining_fraction != null then
-        .quota["3p-5h"].remaining_fraction
-      elif ($m | (contains("claude") or contains("3p") or contains("gpt") or contains("anthropic"))) and .quota["3p-weekly"].remaining_fraction != null then
-        .quota["3p-weekly"].remaining_fraction
+      if ($m | contains("gemini")) then
+        ([.quota["gemini-5h"].remaining_fraction, .quota["gemini-weekly"].remaining_fraction] | map(select(. != null)) | min) // ([.quota[] | .remaining_fraction? | select(. != null)] | min)
+      elif ($m | (contains("claude") or contains("3p") or contains("gpt") or contains("anthropic"))) then
+        ([.quota["3p-5h"].remaining_fraction, .quota["3p-weekly"].remaining_fraction] | map(select(. != null)) | min) // ([.quota[] | .remaining_fraction? | select(. != null)] | min)
       else
         ([.quota[] | .remaining_fraction? | select(. != null)] | min)
       end

@@ -134,15 +134,29 @@ EOF
 )
 assert_output "Zero percentages" "/tmp/test | Test Model | ctx: 0% | quota: 0%" "$actual"
 
-# 11. Empty JSON object
+# 11. Limiting weekly quota selection
+actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
+{
+  "workspace": {"current_dir": "/Users/gordonpn/workspace/dotfiles"},
+  "model": {"display_name": "Gemini 3.8 Flash (High)"},
+  "quota": {
+    "gemini-5h": {"remaining_fraction": 0.90},
+    "gemini-weekly": {"remaining_fraction": 0.25}
+  }
+}
+EOF
+)
+assert_output "Limiting weekly quota selection" "~/workspace/dotfiles | Gemini 3.8 Flash (High) | quota: 25%" "$actual"
+
+# 12. Empty JSON object
 actual=$(echo '{}' | "$script")
 assert_output "Empty JSON object" "" "$actual"
 
-# 12. Empty stdin
-actual=$(echo -n '' | "$script")
+# 13. Empty stdin
+actual=$(printf '' | "$script")
 assert_output "Empty stdin" "" "$actual"
 
-# 13. Invalid JSON input
+# 14. Invalid JSON input
 actual=$(echo 'not valid json' | "$script")
 assert_output "Invalid JSON" "" "$actual"
 

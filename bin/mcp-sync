@@ -818,6 +818,11 @@ sync_skills_and_instructions() {
   local agy_statusline_src="${REPO_DIR}/bin/agy-statusline"
   local agy_statusline_dest="${LOCAL_BIN_DIR}/agy-statusline"
   if [[ -f "${agy_statusline_src}" ]]; then
+    if [[ ( -e "${agy_statusline_dest}" || -L "${agy_statusline_dest}" ) && "$(readlink "${agy_statusline_dest}" 2>/dev/null || true)" != "${agy_statusline_src}" ]]; then
+      local statusline_bak
+      statusline_bak="${LOCAL_BIN_DIR}/agy-statusline.bak.$(date +%s)"
+      backup_with_collision_avoidance "${agy_statusline_dest}" "${statusline_bak}"
+    fi
     ln -sf "${agy_statusline_src}" "${agy_statusline_dest}"
   fi
 
