@@ -815,6 +815,47 @@ sync_skills_and_instructions() {
     ln -sfn "${agy_delegation_rule}" "${agy_rule_dest}"
   fi
 
+  local agy_statusline_src="${REPO_DIR}/bin/agy-statusline"
+  local agy_statusline_dest="${LOCAL_BIN_DIR}/agy-statusline"
+  if [[ -f "${agy_statusline_src}" ]]; then
+    ln -sf "${agy_statusline_src}" "${agy_statusline_dest}"
+  fi
+
+  local gemini_settings_src="${REPO_DIR}/dotfiles/gemini/settings.json"
+  local gemini_settings_dest="${GEMINI_DIR}/settings.json"
+  if [[ -f "${gemini_settings_src}" ]]; then
+    if [[ ( -e "${gemini_settings_dest}" || -L "${gemini_settings_dest}" ) && "$(readlink "${gemini_settings_dest}" 2>/dev/null || true)" != "${gemini_settings_src}" ]]; then
+      local settings_bak
+      settings_bak="${GEMINI_DIR}/settings.json.bak.$(date +%s)"
+      backup_with_collision_avoidance "${gemini_settings_dest}" "${settings_bak}"
+    fi
+    ln -sfn "${gemini_settings_src}" "${gemini_settings_dest}"
+  fi
+
+  local agy_settings_src="${REPO_DIR}/dotfiles/gemini/antigravity-cli/settings.json"
+  local agy_settings_dest="${GEMINI_DIR}/antigravity-cli/settings.json"
+  if [[ -f "${agy_settings_src}" ]]; then
+    mkdir -p "$(dirname "${agy_settings_dest}")"
+    if [[ ( -e "${agy_settings_dest}" || -L "${agy_settings_dest}" ) && "$(readlink "${agy_settings_dest}" 2>/dev/null || true)" != "${agy_settings_src}" ]]; then
+      local settings_bak
+      settings_bak="${GEMINI_DIR}/antigravity-cli/settings.json.bak.$(date +%s)"
+      backup_with_collision_avoidance "${agy_settings_dest}" "${settings_bak}"
+    fi
+    ln -sfn "${agy_settings_src}" "${agy_settings_dest}"
+  fi
+
+  local agy_title_src="${REPO_DIR}/dotfiles/gemini/antigravity-cli/title.sh"
+  local agy_title_dest="${GEMINI_DIR}/antigravity-cli/title.sh"
+  if [[ -f "${agy_title_src}" ]]; then
+    mkdir -p "$(dirname "${agy_title_dest}")"
+    if [[ ( -e "${agy_title_dest}" || -L "${agy_title_dest}" ) && "$(readlink "${agy_title_dest}" 2>/dev/null || true)" != "${agy_title_src}" ]]; then
+      local title_bak
+      title_bak="${GEMINI_DIR}/antigravity-cli/title.sh.bak.$(date +%s)"
+      backup_with_collision_avoidance "${agy_title_dest}" "${title_bak}"
+    fi
+    ln -sfn "${agy_title_src}" "${agy_title_dest}"
+  fi
+
   # Link global AGENTS.md instructions
   local dest="${CODEX_DIR}/AGENTS.md"
   mkdir -p "$(dirname "${dest}")"
