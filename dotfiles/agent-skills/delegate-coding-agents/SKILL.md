@@ -1,6 +1,6 @@
 ---
 name: delegate-coding-agents
-description: Delegate scoped coding work from Codex to OpenCode or Gemini CLI, or from Antigravity CLI to OpenCode, in isolated worktrees. Use automatically when a bounded subtask benefits from an independent worker.
+description: Delegate scoped coding work across Antigravity CLI, Codex, OpenCode, GitHub Copilot Student, and Gemini CLI in isolated worktrees. Use automatically when a bounded subtask benefits from an independent worker.
 ---
 
 # Delegate coding agents (Codex and Antigravity)
@@ -11,45 +11,46 @@ The **agent started by the user is the orchestrator**, and always owns final des
 
 | Orchestrator | Permitted workers | Plan | Build |
 | --- | --- | --- | --- |
-| Codex | OpenCode, Gemini CLI | yes | yes |
-| Antigravity CLI | OpenCode | yes | yes |
+| Antigravity CLI | Codex, OpenCode, GitHub Copilot Student | yes | yes |
+| Codex | OpenCode, GitHub Copilot Student, Gemini CLI | yes | yes |
 
 Do **not** call a harness from inside its delegated invocation, recursively delegate, or hand tasks back in a loop. Honor explicit user choices. Automatically consider delegation on nontrivial tasks, but skip low-value overhead. Keep confidential work code away from external inference.
 
-For Codex, route sequentially and stop after the first worker completes successfully:
+For Antigravity CLI, route sequentially through `agy-cli -> codex -> opencode -> github copilot student` and stop after the first worker completes successfully:
 
-1. OpenCode with `opencode/deepseek-v4.1-flash-free` at high variant.
-2. Only after a classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`).
-3. If all OpenCode free candidates fail with classified provider, quota, rate-limit, or availability errors, use Gemini CLI with its configured account/model.
-4. If Gemini CLI is unavailable, quota-limited, or cannot complete, continue with Codex directly.
+1. Codex CLI non-interactive execution (`codex exec` in isolated worktree with `--sandbox read-only` or `--sandbox workspace-write`).
+2. Only after classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/deepseek-v4.1-flash-free` with high variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`).
+3. If all OpenCode candidate free models fail with classified provider/quota errors, use first-party GitHub Copilot CLI under the Student plan with `--model auto`.
+4. If Copilot Student fails or is unavailable, continue with Antigravity directly.
 
-Authentication and provider-initialization errors are hard stops: show a message directing the user to check login and provider credentials/configuration, and do not try another model or Gemini. Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. These OpenCode free offers can change; confirm the selected model remains available before use. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
+For Codex, route sequentially: OpenCode free models first, then GitHub Copilot Student (`--model auto`), then Gemini CLI only after all prior candidates fail with classified provider, quota, rate-limit, or availability errors. Codex cannot delegate to Codex.
+
+Authentication and provider-initialization errors are hard stops: show a message directing the user to check login and provider credentials/configuration (`codex login`, `copilot login`, or OpenCode configuration), and do not continue fallback. Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
 
 ## Calling the script
 
 Use the script in **the current skill installation**. Codex default install: `~/.agents/skills/delegate-coding-agents`; agy CLI default install: `~/.gemini/config/skills/delegate-coding-agents`.
 
 ```bash
-# Codex delegates a read-only plan to OpenCode
-"$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
-  --orchestrator codex --automatic --agent opencode --mode plan \
+# Antigravity delegates a read-only plan to Codex (falling back to OpenCode and Copilot)
+"$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
+  --orchestrator agy --automatic --agent codex --mode plan \
   --id pagination-plan --task 'Inspect cursor handling; propose concrete design and tests.'
 
-# After a classified provider, quota, rate-limit, or model-availability failure, try GLM explicitly
-"$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
-  --orchestrator codex --automatic --agent opencode --mode build \
-  --model opencode/glm-5.3-flash-free \
+# Antigravity delegates an isolated build
+"$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
+  --orchestrator agy --automatic --agent codex --mode build \
   --id pagination-api --task 'Implement cursor-based pagination and tests in API module.'
 
-# After all OpenCode free candidates fail with classified errors, use Gemini CLI
-"$HOME/.agents/skills/delegate-coding-agents/scripts/delegate.sh" \
-  --orchestrator codex --automatic --agent gemini --mode build \
-  --id validation-tests --task 'Implement the assigned acceptance criteria and tests.'
+# Explicit worker pin (e.g. Copilot Student with --model auto)
+"$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
+  --orchestrator agy --automatic --agent copilot --mode plan \
+  --id copilot-review --task 'Review test coverage and edge cases.'
 ```
 
-Supported flags: `--orchestrator codex|agy`, `--agent opencode|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
+Supported flags: `--orchestrator codex|agy`, `--agent codex|opencode|copilot|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. Codex worker is available only for Antigravity orchestrator. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
 
-OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) only on classified provider, quota, rate-limit, or model-availability failures. `--model` pins a single candidate with no fallback; `OPENCODE_DELEGATE_MODEL` overrides only the first candidate in the default chain; `OPENCODE_DELEGATE_MODELS` replaces the entire chain with a comma-separated list. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
+OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) only on classified provider, quota, rate-limit, or model-availability failures. GitHub Copilot Student uses automatic model selection only (`--model auto`). Codex uses its configured default CLI model unless `--model` or `CODEX_DELEGATE_MODEL` is supplied. Gemini CLI uses its configured default model unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
 
 ## Delegate specification
 
