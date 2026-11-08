@@ -1,10 +1,13 @@
 {
   "allowNonWorkspaceAccess": true,
+  "altScreenMode": "never",
   "artifactReviewPolicy": "always-proceed",
+  "copyOnSelect": true,
+  "hideActiveItems": false,
   "max_concurrent_tasks": 1,
   "model": "Gemini 3.8 Flash (High)",
   "notifications": true,
-  "runningLightSpeed": "fast",
+  "runningLightSpeed": "slow",
   "showFeedbackSurvey": false,
   "statusLine": {
     "type": "command",
@@ -16,5 +19,6 @@
     "command": "~/.gemini/antigravity-cli/title.sh",
     "enabled": true
   },
-  "toolPermission": "always-proceed"
+  "toolPermission": "always-proceed",
+  "verbosity": "high"
 }
