@@ -19,7 +19,7 @@ Environment:
   OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
   OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
   COPILOT_DELEGATE_MODEL    Default: auto
-  GEMINI_DELEGATE_MODEL     Optional Gemini CLI model override
+  GEMINI_DELEGATE_MODEL     Default: gemini-2.5-flash
   DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
 
 Runs are isolated in Git worktrees. BUILD changes remain uncommitted on a
