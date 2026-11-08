@@ -136,6 +136,9 @@ OPENCODE_ZERO_COST_MODELS=(
   "opencode/nemotron-3.5-lightning-free"
 )
 
+[[ -z ${COPILOT_DELEGATE_MODEL:-} || $COPILOT_DELEGATE_MODEL == auto ]] \
+  || die 'COPILOT_DELEGATE_MODEL supports automatic model selection only (auto)'
+
 CANDIDATE_AGENTS=()
 CANDIDATE_MODELS=()
 
@@ -334,13 +337,12 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     if [[ $CURRENT_MODEL == opencode/deepseek-v4.1-flash-free ]]; then ARGS+=(--variant high); fi
     ARGS+=("$PROMPT")
   elif [[ $CURRENT_AGENT == copilot ]]; then
-    ARGS=(--model "${CURRENT_MODEL:-auto}")
+    ARGS=(-p "$PROMPT" --model "${CURRENT_MODEL:-auto}" --no-ask-user --output-format text)
     if [[ $MODE == plan ]]; then
-      ARGS+=(--deny-tool 'write_file,edit_file,run_command,shell')
-    elif [[ $MODE == build ]]; then
-      ARGS+=(--deny-tool 'run_command,shell')
+      ARGS+=(--mode plan "--available-tools=view,grep,glob" --deny-tool=write --deny-tool=shell)
+    else
+      ARGS+=("--available-tools=edit,view,grep,glob" --allow-tool=write --deny-tool=shell)
     fi
-    ARGS+=("$PROMPT")
   elif [[ $CURRENT_AGENT == gemini ]]; then
     ARGS=(-p "$PROMPT" --output-format json)
     if [[ $MODE == build ]]; then ARGS+=(--approval-mode auto_edit); fi

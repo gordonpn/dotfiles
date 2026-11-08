@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-SCRIPT=$(cd "$(dirname "$0")/.." && pwd)/scripts/delegate.sh
+SCRIPT_DIR=$(cd "$(dirname "$0")/.." && pwd)/scripts
+SCRIPT="$SCRIPT_DIR/delegate.sh"
+ANALYZE_SCRIPT="$SCRIPT_DIR/delegate-analyze.sh"
+IMPLEMENT_SCRIPT="$SCRIPT_DIR/delegate-implement.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/repo"
@@ -71,15 +74,17 @@ MOCK
 
 cat > "$TMP/bin/copilot" <<'MOCK'
 #!/usr/bin/env bash
-model=''; deny_tools=''; args="$*"
+mode=''; model=''; has_prompt=0; args="$*"
 while (($#)); do
   case "$1" in
+    -p) shift; has_prompt=1 ;;
+    --mode) shift; mode=$1 ;;
     --model) shift; model=$1 ;;
-    --deny-tool) shift; deny_tools=$1 ;;
   esac
   shift
 done
-[[ -z ${COPILOT_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$model" "$deny_tools" >>"$COPILOT_MOCK_CALL_LOG"
+[[ $has_prompt -eq 1 ]] || exit 8
+[[ -z ${COPILOT_MOCK_CALL_LOG:-} ]] || printf '%s\n' "$args" >>"$COPILOT_MOCK_CALL_LOG"
 if [[ ${COPILOT_MOCK_DIRTY_ON_FAIL:-} == 1 ]]; then printf 'partial copilot edit\n' >copilot-partial.txt; fi
 if [[ ${COPILOT_MOCK_AUTH_FAIL:-} == 1 ]]; then
   printf '%s\n' "${COPILOT_MOCK_FAIL_MSG:-Error: You are not signed in. Run copilot login.}" >&2
@@ -89,15 +94,17 @@ if [[ ${COPILOT_MOCK_FAIL:-} == 1 ]]; then
   printf '%s\n' "${COPILOT_MOCK_FAIL_MSG:-AI credits limit reached}" >&2
   exit 1
 fi
-if [[ $deny_tools != *'write_file'* ]]; then
+if [[ $mode != plan && $args == *'--allow-tool=write'* ]]; then
   printf 'implemented by copilot\n' > agent-change.txt
 fi
-printf 'copilot %s complete\n' "$model"
+printf 'copilot %s %s complete\n' "$model" "${mode:-build}"
 MOCK
 
 cat > "$TMP/bin/codex" <<'MOCK'
 #!/usr/bin/env bash
-sandbox=''; out_file=''; model='default'; args="$*"
+[[ $1 == exec ]] || exit 8
+shift
+sandbox=''; out_file=''; model='default'
 while (($#)); do
   case "$1" in
     --sandbox) shift; sandbox=$1 ;;
@@ -144,6 +151,7 @@ git add source.txt && git commit -qm init
 # Direct plan and build executions across all four workers
 for agent in gemini opencode copilot codex; do
   for mode in plan build; do
+    : >"$COPILOT_MOCK_CALL_LOG"
     orch='codex'
     if [[ $agent == codex ]]; then orch='agy'; fi
     if [[ $agent == gemini ]]; then
@@ -167,12 +175,27 @@ for agent in gemini opencode copilot codex; do
       [[ ! -f $WT/agent-change.txt ]]
       grep -q 'Branch: (detached)' "$TMP/$agent-$mode.out"
       if [[ $agent == opencode ]]; then grep -q 'opencode plan high complete' "$TMP/$agent-$mode.out"; fi
-      if [[ $agent == copilot ]]; then grep -q 'copilot auto complete' "$TMP/$agent-$mode.out"; fi
+      if [[ $agent == copilot ]]; then
+        grep -q 'Model: auto' "$TMP/$agent-$mode.out"
+        grep -q 'copilot auto plan complete' "$TMP/$agent-$mode.out"
+        grep -q -- '--no-ask-user' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--mode plan' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--available-tools=view,grep,glob' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--deny-tool=write' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--deny-tool=shell' "$COPILOT_MOCK_CALL_LOG"
+      fi
       if [[ $agent == codex ]]; then grep -q 'codex read-only default complete' "$TMP/$agent-$mode.out"; fi
     else
       [[ -f $WT/agent-change.txt ]]
       grep -q "Branch: delegate/$agent/" "$TMP/$agent-$mode.out"
-      if [[ $agent == copilot ]]; then grep -q 'copilot auto complete' "$TMP/$agent-$mode.out"; fi
+      if [[ $agent == copilot ]]; then
+        grep -q 'Model: auto' "$TMP/$agent-$mode.out"
+        grep -q 'copilot auto build complete' "$TMP/$agent-$mode.out"
+        grep -q -- '--no-ask-user' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--available-tools=edit,view,grep,glob' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--allow-tool=write' "$COPILOT_MOCK_CALL_LOG"
+        grep -q -- '--deny-tool=shell' "$COPILOT_MOCK_CALL_LOG"
+      fi
       if [[ $agent == codex ]]; then grep -q 'codex workspace-write default complete' "$TMP/$agent-$mode.out"; fi
     fi
     [[ ! -e agent-change.txt ]]
@@ -350,6 +373,11 @@ if "$SCRIPT" --agent copilot --mode plan --model gpt-4.1 --id copilot-no-pin --t
 fi
 grep -q 'automatic model selection only' "$TMP/copilot-no-pin.out"
 
+if COPILOT_DELEGATE_MODEL=gpt-4.1 "$SCRIPT" --agent copilot --mode plan --id copilot-env-no-pin --task 'Reject env Student model' >"$TMP/copilot-env-no-pin.out" 2>&1; then
+  echo 'Expected non-Auto COPILOT_DELEGATE_MODEL to be rejected' >&2; exit 1
+fi
+grep -q 'COPILOT_DELEGATE_MODEL supports automatic model selection only' "$TMP/copilot-env-no-pin.out"
+
 # Gemini default model
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
 grep -q 'Model: gemini-2.5-flash' "$TMP/gemini-default.out"
@@ -444,6 +472,22 @@ if "$SCRIPT" --agent codex --mode plan --orchestrator codex --automatic --task '
   echo 'Expected Codex-to-Codex rejection' >&2; exit 1
 fi
 grep -q 'Codex cannot delegate to Codex' "$TMP/codex-to-codex.out"
+
+# Wrapper scripts accept --orchestrator and preserve self-delegation guard
+"$ANALYZE_SCRIPT" --orchestrator agy codex 'Wrapper analyze with codex' > "$TMP/wrap-analyze-agy.out"
+grep -q 'Orchestrator: agy' "$TMP/wrap-analyze-agy.out"
+grep -q 'Worker: codex' "$TMP/wrap-analyze-agy.out"
+
+if "$ANALYZE_SCRIPT" codex 'Wrapper self-delegation' > "$TMP/wrap-analyze-self.out" 2>&1; then
+  echo 'Expected wrapper Codex-to-Codex rejection' >&2; exit 1
+fi
+grep -q 'Codex cannot delegate to Codex' "$TMP/wrap-analyze-self.out"
+
+"$IMPLEMENT_SCRIPT" --orchestrator agy codex wrap-build 'Wrapper build with codex' > "$TMP/wrap-implement-agy.out"
+grep -q 'Orchestrator: agy' "$TMP/wrap-implement-agy.out"
+grep -q 'Worker: codex' "$TMP/wrap-implement-agy.out"
+WT_WRAP_CODEX=$(sed -n 's/^  Worktree: //p' "$TMP/wrap-implement-agy.out" | head -n 1)
+[[ -f $WT_WRAP_CODEX/agent-change.txt ]]
 
 # agy cannot delegate to Gemini
 if "$SCRIPT" --agent gemini --mode plan --orchestrator agy --automatic --task 'Unsupported route' > "$TMP/agy-to-gemini.out" 2>&1; then
