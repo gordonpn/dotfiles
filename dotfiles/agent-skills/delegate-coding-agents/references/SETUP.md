@@ -7,14 +7,18 @@ to link them into `~/.agents/skills/` and
 OpenCode, and Antigravity's skill discovery directory. Existing conflicting
 local copies are backed up by the sync script.
 
-Codex tries OpenCode DeepSeek Flash Free (high), GLM-5.3 Flash Free, MiMo-V2.6
-Flash Free, and Nemotron-3.5 Lightning Free in order. It advances only after a
-classified provider, quota, rate-limit, or model-availability failure. After
-all OpenCode candidates fail that way, Codex may use Gemini CLI. Authentication
+Antigravity CLI acts as the main harness, routing through
+`agy-cli -> codex -> opencode -> github copilot student`. It tries Codex CLI
+first, then falls back across OpenCode free models (DeepSeek Flash Free high,
+GLM-5.3 Flash Free, MiMo-V2.6 Flash Free, Nemotron-3.5 Lightning Free), then to
+GitHub Copilot Student (`--model auto`).
+
+Codex as parent orchestrator delegates sequentially across OpenCode free
+models and GitHub Copilot Student (`--model auto`). Authentication
 and provider-initialization errors stop delegation with a message to check
-login and credentials/configuration. Gemini CLI must be installed and
-authenticated before that fallback can run. Codex does not delegate to
-Antigravity CLI under a consumer plan.
+login and credentials/configuration (`codex login`, `copilot login`, or OpenCode
+provider configuration). Codex does not delegate to Antigravity CLI under a
+consumer plan.
 
 Automatic delegation requires explicit opt-in in each eligible repository:
 
@@ -28,7 +32,8 @@ enable global shell-approval bypass.
 
 ## Notes
 
-- Parent Codex uses the sequential OpenCode-to-Gemini fallback; parent agy delegates only to OpenCode.
+- Parent agy delegates sequentially across Codex, OpenCode, and GitHub Copilot Student (`--model auto`).
+- Parent Codex delegates sequentially across OpenCode and GitHub Copilot Student (`--model auto`).
 - Automatic repo opt-in avoids accidentally sending confidential employer sources to an external hosted model.
 - If no repo opt-in exists, the agent should complete tasks itself or explain that delegation is blocked.
 - Both delegations operate on a clean committed checkout; current uncommitted edits cannot be safely inherited.

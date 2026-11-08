@@ -199,9 +199,14 @@ mkdir -p "${CODEX_DIR}/skills"
 printf 'colliding codex skill file\n' >"${CODEX_DIR}/skills/shared-skill"
 
 # Pre-existing backup file to verify collision-avoidance logic
-mkdir -p "${OPENCODE_DIR}"
+mkdir -p "${OPENCODE_DIR}/plugins"
+mkdir -p "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins"
+printf 'retired managed plugin\n' >"${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/copilot-student-models.ts"
 printf 'preexisting backup\n' >"${OPENCODE_DIR}/AGENTS.md.bak"
 printf 'old opencode instructions\n' >"${OPENCODE_DIR}/AGENTS.md"
+ln -s "${repo_dir}/dotfiles/opencode/plugins/copilot-student-models.ts" "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+ln -s "${HOME}/external-plugin.ts" "${OPENCODE_DIR}/plugins/user-plugin.ts"
+ln -s "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/user-plugin.ts" "${OPENCODE_DIR}/plugins/user-dangling-plugin.ts"
 
 mkdir -p "${CODEX_DIR}"
 printf 'preexisting codex backup\n' >"${CODEX_DIR}/AGENTS.md.bak"
@@ -229,6 +234,12 @@ sync_skills_and_instructions
 
 [[ -L "${OPENCODE_DIR}/AGENTS.md" ]]
 [[ "$(readlink "${OPENCODE_DIR}/AGENTS.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
+[[ ! -e "${OPENCODE_DIR}/plugins/copilot-student-models.ts" && ! -L "${OPENCODE_DIR}/plugins/copilot-student-models.ts" ]]
+[[ -f "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/copilot-student-models.ts" ]]
+[[ -L "${OPENCODE_DIR}/plugins/user-plugin.ts" ]]
+[[ "$(readlink "${OPENCODE_DIR}/plugins/user-plugin.ts")" == "${HOME}/external-plugin.ts" ]]
+[[ -L "${OPENCODE_DIR}/plugins/user-dangling-plugin.ts" ]]
+[[ "$(readlink "${OPENCODE_DIR}/plugins/user-dangling-plugin.ts")" == "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/user-plugin.ts" ]]
 [[ -f "${OPENCODE_DIR}/AGENTS.md.bak" ]]
 [[ "$(<"${OPENCODE_DIR}/AGENTS.md.bak")" == 'preexisting backup' ]]
 agent_backups=("${OPENCODE_DIR}/AGENTS.md.bak."*)
@@ -303,6 +314,33 @@ backup_count_before=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 sync_skills_and_instructions
 backup_count_after=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 [[ "${backup_count_before}" -eq "${backup_count_after}" ]]
+
+# Symlinks whose targets share the retired plugin suffix outside REPO_DIR are preserved as user-owned links.
+(
+  external_repo="${test_tmp_dir}/external-repo"
+  external_target="${external_repo}/dotfiles/opencode/plugins/copilot-student-models.ts"
+  mkdir -p "$(dirname "${external_target}")"
+  printf 'external custom copilot plugin\n' >"${external_target}"
+  external_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+  ln -s "${external_target}" "${external_plugin}"
+  sync_skills_and_instructions
+  [[ -L "${external_plugin}" ]]
+  [[ "$(readlink "${external_plugin}")" == "${external_target}" ]]
+  rm -f "${external_plugin}"
+)
+
+# User-owned files and links with the retired plugin name are preserved.
+user_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
+printf 'user-owned plugin\n' >"${user_plugin}"
+sync_skills_and_instructions
+[[ -f "${user_plugin}" && ! -L "${user_plugin}" ]]
+[[ "$(<"${user_plugin}")" == 'user-owned plugin' ]]
+rm -f "${user_plugin}"
+ln -s "${HOME}/external-plugin.ts" "${user_plugin}"
+sync_skills_and_instructions
+[[ -L "${user_plugin}" ]]
+[[ "$(readlink "${user_plugin}")" == "${HOME}/external-plugin.ts" ]]
+rm -f "${user_plugin}"
 
 # Verify sync_skills_and_instructions leaves OPENCODE_DIR absent when opencode is absent
 (

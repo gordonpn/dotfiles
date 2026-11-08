@@ -66,14 +66,18 @@ gh-dash notifications include New Comments, Review Requests, CI Activity,
 My PR Activity, and Mentions, refreshing every five minutes. My PR Activity
 also includes issues you opened because it uses `reason:author`.
 
-Codex delegates eligible work sequentially to OpenCode DeepSeek Flash Free
-(high), GLM-5.3 Flash Free, MiMo-V2.6-Flash Free, and Nemotron 3.5 Lightning Free.
-It advances only after a classified provider, quota, rate-limit, or
-model-availability failure; after all OpenCode candidates fail that way, Codex
-may use Gemini CLI. Authentication and provider-initialization errors are hard
-stops with a credential/configuration message, not fallback triggers. It stops
-after a successful worker; Antigravity CLI as a Codex worker is not used under a
-consumer plan. Automatic delegation requires the repository-local opt-in
+Antigravity CLI acts as the main terminal coding harness and delegates
+eligible work sequentially through `agy-cli -> codex -> opencode -> github copilot student`.
+Codex CLI runs non-interactively in an isolated Git worktree; on classified
+provider, quota, rate-limit, or model-availability failures, it falls back to
+OpenCode zero-cost models (`opencode/deepseek-v4.1-flash-free` with high
+variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and
+`opencode/nemotron-3.5-lightning-free`), then to first-party GitHub Copilot
+CLI with `--model auto` under the Student plan. Codex as orchestrator delegates
+sequentially across OpenCode and GitHub Copilot Student.
+Authentication and provider-initialization errors are hard stops directing
+the user to log in (`codex login`, `copilot login`, or check OpenCode
+credentials). Automatic delegation requires the repository-local opt-in
 `agents.delegationAllowed=true`.
 See [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
