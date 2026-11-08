@@ -15,7 +15,7 @@ Options:
   --help               Display this help
 
 Environment:
-  CODEX_DELEGATE_MODEL      Optional Codex CLI model override
+  CODEX_DELEGATE_MODEL      Default: auto (omit -m, let Codex decide)
   OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
   OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
   COPILOT_DELEGATE_MODEL    Default: auto
@@ -148,7 +148,7 @@ if [[ -n $MODEL ]]; then
   CANDIDATE_MODELS=("$MODEL")
 elif [[ $AGENT == codex ]]; then
   CANDIDATE_AGENTS=(codex)
-  CANDIDATE_MODELS=("${CODEX_DELEGATE_MODEL:-default}")
+  CANDIDATE_MODELS=("${CODEX_DELEGATE_MODEL:-auto}")
   if [[ -n ${OPENCODE_DELEGATE_MODELS:-} ]]; then
     IFS=',' read -ra raw_models <<< "$OPENCODE_DELEGATE_MODELS"
     for cm in "${raw_models[@]}"; do
@@ -328,7 +328,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     else
       ARGS+=(--sandbox workspace-write)
     fi
-    if [[ -n $CURRENT_MODEL && $CURRENT_MODEL != default ]]; then
+    if [[ -n $CURRENT_MODEL && $CURRENT_MODEL != default && $CURRENT_MODEL != auto ]]; then
       ARGS+=(-m "$CURRENT_MODEL")
     fi
     ARGS+=("$PROMPT")

@@ -115,6 +115,10 @@ while (($#)); do
   esac
   shift
 done
+if [[ $model == auto ]]; then
+  printf 'Error: model not found: auto\n' >&2
+  exit 1
+fi
 [[ -z ${CODEX_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$sandbox" "$model" >>"$CODEX_MOCK_CALL_LOG"
 if [[ ${CODEX_MOCK_DIRTY_ON_FAIL:-} == 1 ]]; then printf 'partial codex edit\n' >codex-partial.txt; fi
 if [[ ${CODEX_MOCK_AUTH_FAIL:-} == 1 ]]; then
@@ -377,6 +381,19 @@ if COPILOT_DELEGATE_MODEL=gpt-4.1 "$SCRIPT" --agent copilot --mode plan --id cop
   echo 'Expected non-Auto COPILOT_DELEGATE_MODEL to be rejected' >&2; exit 1
 fi
 grep -q 'COPILOT_DELEGATE_MODEL supports automatic model selection only' "$TMP/copilot-env-no-pin.out"
+
+# Codex --model auto and CODEX_DELEGATE_MODEL=auto omit -m to let Codex decide
+"$SCRIPT" --orchestrator agy --agent codex --mode plan --model auto --id codex-model-auto --task 'Codex with model auto' > "$TMP/codex-model-auto.out"
+grep -q 'Model: auto' "$TMP/codex-model-auto.out"
+grep -q 'codex read-only default complete' "$TMP/codex-model-auto.out"
+
+CODEX_DELEGATE_MODEL=auto "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-env-auto --task 'Codex with env auto' > "$TMP/codex-env-auto.out"
+grep -q 'Model: auto' "$TMP/codex-env-auto.out"
+grep -q 'codex read-only default complete' "$TMP/codex-env-auto.out"
+
+"$SCRIPT" --orchestrator agy --agent codex --mode plan --model custom-codex --id codex-explicit --task 'Codex explicit model' > "$TMP/codex-explicit.out"
+grep -q 'Model: custom-codex' "$TMP/codex-explicit.out"
+grep -q 'codex read-only custom-codex complete' "$TMP/codex-explicit.out"
 
 # Gemini default model
 env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
