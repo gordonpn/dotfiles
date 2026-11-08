@@ -1,6 +1,6 @@
 ---
 name: delegate-coding-agents
-description: Delegate scoped coding work across Antigravity CLI, Codex, OpenCode, GitHub Copilot Student, and Gemini CLI in isolated worktrees. Use automatically when a bounded subtask benefits from an independent worker.
+description: Delegate scoped coding work across Antigravity CLI, Codex, OpenCode, and GitHub Copilot Student in isolated worktrees. Use automatically when a bounded subtask benefits from an independent worker.
 ---
 
 # Delegate coding agents (Codex and Antigravity)
@@ -12,7 +12,7 @@ The **agent started by the user is the orchestrator**, and always owns final des
 | Orchestrator | Permitted workers | Plan | Build |
 | --- | --- | --- | --- |
 | Antigravity CLI | Codex, OpenCode, GitHub Copilot Student | yes | yes |
-| Codex | OpenCode, GitHub Copilot Student, Gemini CLI | yes | yes |
+| Codex | OpenCode, GitHub Copilot Student | yes | yes |
 
 Do **not** call a harness from inside its delegated invocation, recursively delegate, or hand tasks back in a loop. Honor explicit user choices. Automatically consider delegation on nontrivial tasks, but skip low-value overhead. Keep confidential work code away from external inference.
 
@@ -23,7 +23,7 @@ For Antigravity CLI, route sequentially through `agy-cli -> codex -> opencode ->
 3. If all OpenCode candidate free models fail with classified provider/quota errors, use first-party GitHub Copilot CLI under the Student plan with `--model auto`.
 4. If Copilot Student fails or is unavailable, continue with Antigravity directly.
 
-For Codex, route sequentially: OpenCode free models first, then GitHub Copilot Student (`--model auto`), then Gemini CLI only after all prior candidates fail with classified provider, quota, rate-limit, or availability errors. Codex cannot delegate to Codex.
+For Codex, route sequentially: OpenCode free models first, then GitHub Copilot Student (`--model auto`). Codex cannot delegate to Codex.
 
 Authentication and provider-initialization errors are hard stops: show a message directing the user to check login and provider credentials/configuration (`codex login`, `copilot login`, or OpenCode configuration), and do not continue fallback. Never move to the next worker for task errors, test failures, or an ambiguous result. Do not parallelize providers or silently use a paid model. Do not invoke Antigravity CLI (`agy -p`) from Codex under a consumer plan.
 
@@ -48,18 +48,16 @@ Use the script in **the current skill installation**. Codex default install: `~/
   --id copilot-review --task 'Review test coverage and edge cases.'
 ```
 
-Supported flags: `--orchestrator codex|agy`, `--agent codex|opencode|copilot|gemini`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Gemini CLI is available only as a Codex worker. Codex worker is available only for Antigravity orchestrator. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
+Supported flags: `--orchestrator codex|agy`, `--agent codex|opencode|copilot`, `--mode plan|build`, `--task` or `--task-file`, optional `--id`, `--model`, `--base`, `--automatic`. Codex worker is available only for Antigravity orchestrator. `--automatic` blocks external-model calls unless the repository owner has set local Git configuration `agents.delegationAllowed=true`. Explicit manual calls may omit `--automatic`; still respect data handling permissions and user intent.
 
-OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) only on classified provider, quota, rate-limit, or model-availability failures. GitHub Copilot Student uses automatic model selection only (`--model auto`). Codex uses its configured default CLI model unless `--model` or `CODEX_DELEGATE_MODEL` is supplied (defaulting to `auto`, which omits `-m` to let Codex decide). Gemini CLI uses `gemini-2.5-flash` unless `--model` or `GEMINI_DELEGATE_MODEL` is supplied. Never silently fall back to paid models.
+OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, automatically falling back across candidate free models (`opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`) only on classified provider, quota, rate-limit, or model-availability failures. GitHub Copilot Student uses automatic model selection only (`--model auto`). Codex uses its configured default CLI model unless `--model` or `CODEX_DELEGATE_MODEL` is supplied (defaulting to `auto`, which omits `-m` to let Codex decide). Never silently fall back to paid models.
 
 ## Delegate specification
 
 State: objective, acceptance criteria, owned files, forbidden files, compatibility constraints, permitted verification commands, and required output. Prefer a task file outside the checkout for longer prompts. Explicitly say if a task is plan-only or build.
 
-- **Plan:** explain implementation order, affected files/functions, tradeoffs, tests, and risks. No working-tree modifications.
+- **Plan:** explain implementation order, affected files/functions, tradeoffs, tests, and risks. No working-tree modifications. Plan requests remain prompt-constrained and the runner rejects any plan worktree that changes files.
 - **Build:** create/edit files only within worktree scope, add tests, run allowed checks; do not commit/push/merge/rebase. Return changed files, test outcomes and failures.
-
-Gemini CLI runs with `--approval-mode auto_edit` for builds, which approves edit tools but does not auto-approve shell commands. It is not run with YOLO mode. Plan requests remain prompt-constrained and the runner rejects any plan worktree that changes files.
 
 The wrapper creates an external Git worktree from the **committed** base revision, refuses dirty starting checkouts, and leaves build changes uncommitted on a `delegate/...` branch. The orchestrator inspects `DELEGATION_RESULT`, report/log files, `git status`, `git diff`, new files, and denied tool commands. Exit 0 means transport success, not correct code. If approved, stage only intended files, commit in the worktree, and cherry-pick to the integration branch. Run repository tests and the existing Alibaba Open Code Review pre-PR gate (if present) before PR creation.
 

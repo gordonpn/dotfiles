@@ -65,7 +65,7 @@ OpenCode zero-cost models (`opencode/deepseek-v4.1-flash-free` with high
 variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and
 `opencode/nemotron-3.5-lightning-free`), then to first-party GitHub Copilot
 CLI with `--model auto` under the Student plan. Codex as orchestrator delegates
-sequentially across OpenCode, GitHub Copilot Student, and Gemini CLI.
+sequentially across OpenCode and GitHub Copilot Student.
 Authentication and provider-initialization errors are hard stops directing
 the user to log in (`codex login`, `copilot login`, or check OpenCode
 credentials). Automatic delegation requires the repository-local opt-in

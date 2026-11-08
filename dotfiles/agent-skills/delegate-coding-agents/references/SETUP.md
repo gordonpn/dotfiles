@@ -14,7 +14,7 @@ GLM-5.3 Flash Free, MiMo-V2.6 Flash Free, Nemotron-3.5 Lightning Free), then to
 GitHub Copilot Student (`--model auto`).
 
 Codex as parent orchestrator delegates sequentially across OpenCode free
-models, GitHub Copilot Student (`--model auto`), and Gemini CLI. Authentication
+models and GitHub Copilot Student (`--model auto`). Authentication
 and provider-initialization errors stop delegation with a message to check
 login and credentials/configuration (`codex login`, `copilot login`, or OpenCode
 provider configuration). Codex does not delegate to Antigravity CLI under a
@@ -33,7 +33,7 @@ enable global shell-approval bypass.
 ## Notes
 
 - Parent agy delegates sequentially across Codex, OpenCode, and GitHub Copilot Student (`--model auto`).
-- Parent Codex delegates sequentially across OpenCode, GitHub Copilot Student, and Gemini CLI.
+- Parent Codex delegates sequentially across OpenCode and GitHub Copilot Student (`--model auto`).
 - Automatic repo opt-in avoids accidentally sending confidential employer sources to an external hosted model.
 - If no repo opt-in exists, the agent should complete tasks itself or explain that delegation is blocked.
 - Both delegations operate on a clean committed checkout; current uncommitted edits cannot be safely inherited.

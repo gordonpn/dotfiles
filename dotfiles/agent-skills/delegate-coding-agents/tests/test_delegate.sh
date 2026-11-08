@@ -8,28 +8,6 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/repo"
 
-cat > "$TMP/bin/gemini" <<'MOCK'
-#!/usr/bin/env bash
-approval=''; output=''; model=''
-while (($#)); do
- case "$1" in
- --approval-mode) shift; approval=$1 ;;
- --output-format) shift; output=$1 ;;
- --model) shift; model=$1 ;;
- -p) shift ;;
- esac
- shift
-done
-[[ $output == json ]] || exit 8
-if [[ $approval == auto_edit ]]; then printf 'implemented by gemini\n' > agent-change.txt; fi
-if [[ ${GEMINI_MOCK_INVALID:-} == 1 ]]; then printf '{"error":"no response"}\n'; exit 0; fi
-if [[ -n ${GEMINI_MOCK_FAIL_EXIT:-} ]]; then
-  printf '{"response":"gemini failed output","model":"%s"}\n' "$model"
-  exit "$GEMINI_MOCK_FAIL_EXIT"
-fi
-printf '{"response":"gemini %s complete","model":"%s"}\n' "$approval" "$model"
-MOCK
-
 cat > "$TMP/bin/opencode" <<'MOCK'
 #!/usr/bin/env bash
 [[ $1 == run ]] || exit 8
@@ -138,12 +116,12 @@ fi
 printf 'codex %s %s complete\n' "$sandbox" "$model"
 MOCK
 
-chmod +x "$TMP/bin/gemini" "$TMP/bin/opencode" "$TMP/bin/copilot" "$TMP/bin/codex"
+chmod +x "$TMP/bin/opencode" "$TMP/bin/copilot" "$TMP/bin/codex"
 export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees"
 export OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
 export COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls"
 export CODEX_MOCK_CALL_LOG="$TMP/codex.calls"
-unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL GEMINI_DELEGATE_MODEL CODEX_DELEGATE_MODEL
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL
 
 cd "$TMP/repo"
 git init -q
@@ -152,30 +130,17 @@ git config user.email 'test@example.com'
 echo base > source.txt
 git add source.txt && git commit -qm init
 
-# Direct plan and build executions across all four workers
-for agent in gemini opencode copilot codex; do
+# Direct plan and build executions across all three workers
+for agent in opencode copilot codex; do
   for mode in plan build; do
     : >"$COPILOT_MOCK_CALL_LOG"
     orch='codex'
     if [[ $agent == codex ]]; then orch='agy'; fi
-    if [[ $agent == gemini ]]; then
-      "$SCRIPT" --orchestrator "$orch" --agent "$agent" --mode "$mode" --id "t-$agent-$mode" --task 'Do work' --model gemini-test-model > "$TMP/$agent-$mode.out"
-    else
-      "$SCRIPT" --orchestrator "$orch" --agent "$agent" --mode "$mode" --id "t-$agent-$mode" --task 'Do work' > "$TMP/$agent-$mode.out"
-    fi
+    "$SCRIPT" --orchestrator "$orch" --agent "$agent" --mode "$mode" --id "t-$agent-$mode" --task 'Do work' > "$TMP/$agent-$mode.out"
     grep -q 'Exit: 0' "$TMP/$agent-$mode.out"
     WT=$(sed -n 's/^  Worktree: //p' "$TMP/$agent-$mode.out" | head -n 1)
     [[ -d $WT ]]
-    if [[ $agent == gemini && $mode == plan ]]; then
-      [[ ! -f $WT/agent-change.txt ]]
-      grep -q 'Model: gemini-test-model' "$TMP/$agent-$mode.out"
-      grep -q 'gemini  complete' "$TMP/$agent-$mode.out"
-      grep -q 'Branch: (detached)' "$TMP/$agent-$mode.out"
-    elif [[ $agent == gemini ]]; then
-      [[ -f $WT/agent-change.txt ]]
-      grep -q 'gemini auto_edit complete' "$TMP/$agent-$mode.out"
-      grep -q 'Branch: delegate/gemini/' "$TMP/$agent-$mode.out"
-    elif [[ $mode == plan ]]; then
+    if [[ $mode == plan ]]; then
       [[ ! -f $WT/agent-change.txt ]]
       grep -q 'Branch: (detached)' "$TMP/$agent-$mode.out"
       if [[ $agent == opencode ]]; then grep -q 'opencode plan high complete' "$TMP/$agent-$mode.out"; fi
@@ -395,22 +360,6 @@ grep -q 'codex read-only default complete' "$TMP/codex-env-auto.out"
 grep -q 'Model: custom-codex' "$TMP/codex-explicit.out"
 grep -q 'codex read-only custom-codex complete' "$TMP/codex-explicit.out"
 
-# Gemini default model
-env -u GEMINI_DELEGATE_MODEL "$SCRIPT" --agent gemini --mode plan --id gemini-default --task 'Use configured model' > "$TMP/gemini-default.out"
-grep -q 'Model: gemini-2.5-flash' "$TMP/gemini-default.out"
-
-# Invalid Gemini JSON response
-if GEMINI_MOCK_INVALID=1 "$SCRIPT" --agent gemini --mode plan --id gemini-invalid --task 'Return no response' > "$TMP/gemini-invalid.out" 2>&1; then
- echo 'Expected invalid Gemini JSON response to fail' >&2; exit 1
-fi
-grep -q 'Gemini CLI did not return a JSON response' "$TMP/gemini-invalid.out"
-
-# Gemini nonzero exit with string response must preserve nonzero exit code
-if GEMINI_MOCK_FAIL_EXIT=42 "$SCRIPT" --agent gemini --mode plan --id gemini-nonzero --task 'Test nonzero exit' > "$TMP/gemini-nonzero.out" 2>&1; then
-  echo 'Expected nonzero exit for failing Gemini process' >&2; exit 1
-fi
-grep -q 'Exit: 42' "$TMP/gemini-nonzero.out"
-
 # OpenCode task error must not fallback to next candidate model and must preserve worktree
 if OPENCODE_MOCK_TASK_ERROR=1 "$SCRIPT" --agent opencode --mode build --id task-error --task 'Test task error' > "$TMP/task-error.out" 2>&1; then
   echo 'Expected task error to return nonzero' >&2; exit 1
@@ -506,23 +455,17 @@ grep -q 'Worker: codex' "$TMP/wrap-implement-agy.out"
 WT_WRAP_CODEX=$(sed -n 's/^  Worktree: //p' "$TMP/wrap-implement-agy.out" | head -n 1)
 [[ -f $WT_WRAP_CODEX/agent-change.txt ]]
 
-# agy cannot delegate to Gemini
-if "$SCRIPT" --agent gemini --mode plan --orchestrator agy --automatic --task 'Unsupported route' > "$TMP/agy-to-gemini.out" 2>&1; then
- echo 'Expected agy-to-Gemini rejection' >&2; exit 1
-fi
-grep -q 'only enabled for Codex' "$TMP/agy-to-gemini.out"
-
 # Unsupported worker rejection
 if "$SCRIPT" --agent agy --mode plan --task 'Unsupported worker' > "$TMP/agy-worker.out" 2>&1; then
  echo 'Expected Antigravity worker rejection' >&2; exit 1
 fi
-grep -q 'Use --agent codex, opencode, copilot, or gemini' "$TMP/agy-worker.out"
+grep -q 'Use --agent codex, opencode, or copilot' "$TMP/agy-worker.out"
 
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
-if "$SCRIPT" --agent gemini --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then
+if "$SCRIPT" --agent opencode --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then
  echo 'Expected dirty-tree rejection' >&2; exit 1
 fi
 grep -q 'uncommitted or untracked' "$TMP/dirty.out"
 
-echo 'PASS: All delegation tests passed across Codex, OpenCode, Copilot, and Gemini'
+echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'

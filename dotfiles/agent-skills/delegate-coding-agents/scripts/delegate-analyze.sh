@@ -7,7 +7,6 @@ set -euo pipefail
 #   delegate-analyze.sh --orchestrator agy codex '<task>'            # uses Codex CLI under Antigravity
 #   delegate-analyze.sh opencode '<task>'                            # uses OpenCode
 #   delegate-analyze.sh copilot '<task>'                             # uses GitHub Copilot CLI
-#   delegate-analyze.sh gemini '<task>'                              # uses Gemini CLI
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ORCHESTRATOR=${DELEGATE_ORCHESTRATOR:-codex}
@@ -18,13 +17,13 @@ if [[ $# -ge 2 && $1 == "--orchestrator" ]]; then
   shift 2
 fi
 
-if [[ $# -ge 2 && ($1 == "codex" || $1 == "opencode" || $1 == "copilot" || $1 == "gemini") ]]; then
+if [[ $# -ge 2 && ($1 == "codex" || $1 == "opencode" || $1 == "copilot") ]]; then
   AGENT=$1
   shift
 fi
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 [--orchestrator codex|agy] [codex|opencode|copilot|gemini] '<analysis task>'" >&2
+  echo "Usage: $0 [--orchestrator codex|agy] [codex|opencode|copilot] '<analysis task>'" >&2
   exit 2
 fi
 
