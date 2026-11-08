@@ -30,11 +30,14 @@ dotfiles/ (Public Repository)
     └── mcp-setup.md                 # Architecture documentation
 
 ~/.gemini/ (Antigravity State)
+├── antigravity-cli/
+│   ├── settings.json                # Tracked CLI settings (altScreenMode, verbosity, light speed)
+│   ├── title.sh                     # Dynamic terminal title script
+│   └── rules/
+│       └── auto-delegation.md       # Symlink to tracked Antigravity rule
 ├── config/
 │   ├── mcp_config.json              # Fully hydrated MCP server registry (0600)
 │   └── skills/                      # Symlinks to shared custom skills
-├── antigravity-cli/rules/
-│   └── auto-delegation.md           # Symlink to tracked Antigravity rule
 ├── docker-profiles.json             # Local daemon + remote SSH Docker profiles
 ├── memory.json                      # Persistent knowledge graph store
 └── ssh-profiles.json                # Host profiles derived from ~/.ssh/config
@@ -102,6 +105,7 @@ just setup-codebase-memory
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories. The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
    Codex tries OpenCode DeepSeek Flash Free (high), GLM-5.3 Flash Free, MiMo-V2.6-Flash Free, and Nemotron 3.5 Lightning Free in order. It advances only after a classified provider, quota, rate-limit, or model-availability failure; after all OpenCode candidates fail that way, Codex may use Gemini CLI. Authentication and provider-initialization errors are hard stops with actionable credential/configuration guidance. Gemini CLI must be installed and authenticated.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
+10. **Synchronizes Agent Preferences & Status Tools:** Symlinks `dotfiles/gemini/antigravity-cli/settings.json` and `dotfiles/gemini/settings.json` to their respective home directory locations (`~/.gemini/antigravity-cli/settings.json` and `~/.gemini/settings.json`), symlinks `dotfiles/gemini/antigravity-cli/title.sh` to `~/.gemini/antigravity-cli/title.sh`, and links `bin/agy-statusline` to `~/.local/bin/agy-statusline`.
 
 ---
 

@@ -47,6 +47,15 @@ Codex CLI copies transcript selections on mouse release with
 Codex's `project_doc_max_bytes = 65536` allows up to 64 KiB of combined global
 and repository instructions, accommodating the shared cross-agent handoff policy.
 
+Antigravity CLI (`agy`) runs inline without alternate screen switching
+(`altScreenMode = "never"`), copies transcript selections on mouse release
+(`copyOnSelect = true`), displays full tool calls and thoughts
+(`verbosity = "high"`), shows active background tasks and subagents
+(`hideActiveItems = false`), and animates progress lights at slow speed
+(`runningLightSpeed = "slow"`). These preferences are tracked in
+`dotfiles/gemini/antigravity-cli/settings.json` and symlinked to
+`~/.gemini/antigravity-cli/settings.json`.
+
 In gh-dash's PR view, press `S` to confirm squash-merging the selected pull
 request and deleting its branch through Gum (`brew install gum`, included in
 `lists/Brewfile`). Only confirmation runs `gh pr merge --squash --delete-branch`.
