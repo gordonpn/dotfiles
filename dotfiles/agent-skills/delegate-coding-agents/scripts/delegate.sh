@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 usage() {
   cat <<'HELP'
 Usage: delegate.sh --agent codex|opencode|copilot --mode plan|build --task '...' [options]
@@ -12,14 +14,17 @@ Options:
   --base REF           Git revision to snapshot (default: HEAD)
   --orchestrator NAME  codex|agy (default: codex)
   --automatic          Enforce per-repository opt-in for auto delegation
+  --mcp-profile PROF   MCP profile for OpenCode (minimal|none|full|PATH, default: minimal)
   --help               Display this help
 
 Environment:
-  CODEX_DELEGATE_MODEL      Default: auto (omit -m, let Codex decide)
-  OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
-  OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
-  COPILOT_DELEGATE_MODEL    Default: auto
-  DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
+  CODEX_DELEGATE_MODEL           Default: auto (omit -m, let Codex decide)
+  OPENCODE_DELEGATE_MODEL        Default: opencode/deepseek-v4.1-flash-free
+  OPENCODE_DELEGATE_MODELS       Comma-separated fallback chain
+  OPENCODE_DELEGATE_MCP_PROFILE  Default: minimal (minimal|none|full|PATH)
+  OPENCODE_DELEGATE_MCP_SERVERS  Allowed servers for minimal profile (default: cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking)
+  COPILOT_DELEGATE_MODEL         Default: auto
+  DELEGATE_WORKTREE_ROOT         External directory for Git worktrees/logs
 
 Runs are isolated in Git worktrees. BUILD changes remain uncommitted on a
 new agent-specific branch. The caller (Codex or agy) reviews and integrates them.
@@ -84,21 +89,27 @@ is_provider_quota_error() {
     <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
+MCP_PROFILE="${OPENCODE_DELEGATE_MCP_PROFILE:-${OPENCODE_MCP_PROFILE:-minimal}}"
 while (($#)); do
   case "$1" in
-    --agent|--mode|--task|--task-file|--id|--model|--base|--orchestrator)
+    --agent|--mode|--task|--task-file|--id|--model|--base|--orchestrator|--mcp-profile)
       key=$1; shift; (($#)) || die "Missing value for $key"
       case "$key" in
         --agent) AGENT=$1 ;; --mode) MODE=$1 ;; --task) TASK=$1 ;;
         --task-file) TASK_FILE=$1 ;; --id) TASK_ID=$1 ;;
         --model) MODEL=$1 ;; --base) BASE=$1 ;;
         --orchestrator) ORCHESTRATOR=$1 ;;
+        --mcp-profile) MCP_PROFILE=$1 ;;
       esac; shift ;;
     --automatic) AUTOMATIC=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
+if [[ "$MCP_PROFILE" != "minimal" && "$MCP_PROFILE" != "none" && "$MCP_PROFILE" != "full" ]]; then
+  [[ -f "$MCP_PROFILE" ]] || die "MCP profile file not found: $MCP_PROFILE"
+  MCP_PROFILE=$(cd "$(dirname "$MCP_PROFILE")" && pwd)/$(basename "$MCP_PROFILE")
+fi
 if [[ -z $AGENT ]]; then
   if [[ $ORCHESTRATOR == agy ]]; then
     AGENT=codex
@@ -234,6 +245,61 @@ mkdir -p "$RUN_ROOT/logs"
 WORKTREE="$RUN_ROOT/$RUN_ID"
 LOG_DIR="$RUN_ROOT/logs/$RUN_ID"
 mkdir -p "$LOG_DIR"
+
+OPENCODE_PROFILE_PATH=''
+# shellcheck disable=SC2016
+resolve_opencode_mcp_profile() {
+  local target_file="$LOG_DIR/opencode-profile.json"
+  local base_profile="$SCRIPT_DIR/../profiles/opencode-minimal-profile.json"
+  local user_cfg="${OPENCODE_CONFIG:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/opencode.json}"
+
+  if [[ "$MCP_PROFILE" == "full" ]]; then
+    OPENCODE_PROFILE_PATH=''
+    return 0
+  fi
+
+  if [[ "$MCP_PROFILE" != "minimal" && "$MCP_PROFILE" != "none" ]]; then
+    OPENCODE_PROFILE_PATH="$MCP_PROFILE"
+    return 0
+  fi
+
+  if [[ "$MCP_PROFILE" == "none" ]]; then
+    if [[ -f "$user_cfg" ]] && command -v jq >/dev/null 2>&1; then
+      jq '{ "$schema": "https://opencode.ai/config.json", mcp: ((.mcp // {}) | to_entries | map({key: .key, value: {enabled: false}}) | from_entries) }' "$user_cfg" > "$target_file"
+    else
+      printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$target_file"
+    fi
+    OPENCODE_PROFILE_PATH="$target_file"
+    return 0
+  fi
+
+  local allowed_csv="${OPENCODE_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}"
+  if [[ -f "$user_cfg" ]] && command -v jq >/dev/null 2>&1; then
+    jq --arg allowed "$allowed_csv" '
+      ($allowed | split(",") | map(gsub("^[[:space:]]+|[[:space:]]+$"; "")) | map(select(length > 0))) as $allow_list |
+      {
+        "$schema": "https://opencode.ai/config.json",
+        mcp: (
+          (.mcp // {}) | to_entries | map(
+            .key as $k |
+            if ($allow_list | index($k)) then
+              empty
+            else
+              {key: $k, value: {enabled: false}}
+            end
+          ) | from_entries
+        )
+      }
+    ' "$user_cfg" > "$target_file"
+  elif [[ -f "$base_profile" ]]; then
+    cp "$base_profile" "$target_file"
+  else
+    printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$target_file"
+  fi
+  OPENCODE_PROFILE_PATH="$target_file"
+}
+resolve_opencode_mcp_profile
+
 BRANCH='(detached)'
 if [[ $MODE == build ]]; then
   BRANCH="delegate/${AGENT}/${RUN_ID}"
@@ -248,6 +314,8 @@ orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
 mode=$MODE
 requested_model=${MODEL:-'(default)'}
+mcp_profile=$MCP_PROFILE
+mcp_profile_path=${OPENCODE_PROFILE_PATH:-(none)}
 base=$BASE_SHA
 branch=$BRANCH
 worktree=$WORKTREE
@@ -335,7 +403,11 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   if [[ $CURRENT_AGENT == codex ]]; then
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" codex "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   elif [[ $CURRENT_AGENT == opencode ]]; then
-    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+    if [[ -n "$OPENCODE_PROFILE_PATH" ]]; then
+      (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" OPENCODE_CONFIG="$OPENCODE_PROFILE_PATH" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+    else
+      (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+    fi
   elif [[ $CURRENT_AGENT == copilot ]]; then
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" copilot "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   fi
@@ -422,6 +494,7 @@ printf '  Agent: %s (%s)\n' "$ENTRY_AGENT" "$MODE"
 printf '  Worker: %s\n' "$AGENT"
 printf '  Orchestrator: %s\n' "$ORCHESTRATOR"
 printf '  Model: %s\n' "${MODEL:-default}"
+printf '  MCP profile: %s\n' "$MCP_PROFILE"
 printf '  Worktree: %s\n' "$WORKTREE"
 printf '  Branch: %s\n' "$BRANCH"
 printf '  Logs: %s\n' "$LOG_DIR"

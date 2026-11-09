@@ -1,0 +1,92 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ai-memory": {
+      "enabled": false
+    },
+    "brave-search": {
+      "enabled": false
+    },
+    "caddy": {
+      "enabled": false
+    },
+    "chrome-devtools": {
+      "enabled": false
+    },
+    "cloudflare": {
+      "enabled": false
+    },
+    "discord": {
+      "enabled": false
+    },
+    "docker": {
+      "enabled": false
+    },
+    "exa": {
+      "enabled": false
+    },
+    "filesystem": {
+      "enabled": false
+    },
+    "github": {
+      "enabled": false
+    },
+    "healthchecks": {
+      "enabled": false
+    },
+    "kubernetes": {
+      "enabled": false
+    },
+    "loki": {
+      "enabled": false
+    },
+    "memory": {
+      "enabled": false
+    },
+    "playwright": {
+      "enabled": false
+    },
+    "postgres": {
+      "enabled": false
+    },
+    "postman": {
+      "enabled": false
+    },
+    "prometheus": {
+      "enabled": false
+    },
+    "puppeteer": {
+      "enabled": false
+    },
+    "redis": {
+      "enabled": false
+    },
+    "server-services-configs": {
+      "enabled": false
+    },
+    "slack": {
+      "enabled": false
+    },
+    "sonarqube": {
+      "enabled": false
+    },
+    "sqlite": {
+      "enabled": false
+    },
+    "ssh": {
+      "enabled": false
+    },
+    "tailscale": {
+      "enabled": false
+    },
+    "terraform": {
+      "enabled": false
+    },
+    "uptime-kuma": {
+      "enabled": false
+    },
+    "vault": {
+      "enabled": false
+    }
+  }
+}

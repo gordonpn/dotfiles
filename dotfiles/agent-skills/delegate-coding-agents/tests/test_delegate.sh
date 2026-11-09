@@ -20,6 +20,7 @@ while (($#)); do
  shift
 done
 [[ -z ${OPENCODE_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$mode" "$model" >>"$OPENCODE_MOCK_CALL_LOG"
+[[ -z ${OPENCODE_MOCK_CONFIG_LOG:-} ]] || printf '%s\n' "${OPENCODE_CONFIG:-NONE}" >>"$OPENCODE_MOCK_CONFIG_LOG"
 if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
@@ -119,9 +120,10 @@ MOCK
 chmod +x "$TMP/bin/opencode" "$TMP/bin/copilot" "$TMP/bin/codex"
 export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees"
 export OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
+export OPENCODE_MOCK_CONFIG_LOG="$TMP/opencode.config"
 export COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls"
 export CODEX_MOCK_CALL_LOG="$TMP/codex.calls"
-unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL OPENCODE_DELEGATE_MCP_PROFILE OPENCODE_DELEGATE_MCP_SERVERS OPENCODE_MCP_PROFILE
 
 cd "$TMP/repo"
 git init -q
@@ -460,6 +462,123 @@ if "$SCRIPT" --agent agy --mode plan --task 'Unsupported worker' > "$TMP/agy-wor
  echo 'Expected Antigravity worker rejection' >&2; exit 1
 fi
 grep -q 'Use --agent codex, opencode, or copilot' "$TMP/agy-worker.out"
+
+# MCP profile: Minimal profile generation and non-mutation of normal user profile
+mkdir -p "$TMP/user-config/opencode"
+cat > "$TMP/user-config/opencode/opencode.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "mcp": {
+    "cclsp": {
+      "command": "/usr/local/bin/cclsp"
+    },
+    "slack": {
+      "command": "npx -y @modelcontextprotocol/server-slack"
+    },
+    "uptime-kuma": {
+      "command": "npx -y @davidfuchs/mcp-uptime-kuma"
+    },
+    "docker": {
+      "command": "npx -y @hypnosis/docker-mcp-server"
+    }
+  }
+}
+JSON
+hash_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+ORIG_CFG_HASH=$(hash_file "$TMP/user-config/opencode/opencode.json")
+
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" "$SCRIPT" --agent opencode --mode plan --id mcp-minimal --task 'Test minimal MCP profile' > "$TMP/mcp-minimal.out"
+grep -q 'Exit: 0' "$TMP/mcp-minimal.out"
+grep -q 'MCP profile: minimal' "$TMP/mcp-minimal.out"
+MCP_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-minimal.out" | head -n 1)
+[[ -f "$MCP_LOG_DIR/opencode-profile.json" ]]
+grep -q 'mcp_profile=minimal' "$MCP_LOG_DIR/manifest.txt"
+grep -q "mcp_profile_path=$MCP_LOG_DIR/opencode-profile.json" "$MCP_LOG_DIR/manifest.txt"
+
+# Verify OPENCODE_CONFIG passed to OpenCode points to the generated minimal profile
+LAST_OPENCODE_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_OPENCODE_CFG" == "$MCP_LOG_DIR/opencode-profile.json" ]]
+
+# Verify unnecessary servers were disabled in the generated profile and minimal ones retained
+jq -e '.mcp["slack"].enabled == false' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["docker"].enabled == false' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+
+# Verify the user normal profile was NOT mutated
+POST_CFG_HASH=$(hash_file "$TMP/user-config/opencode/opencode.json")
+[[ "$ORIG_CFG_HASH" == "$POST_CFG_HASH" ]]
+
+# MCP profile: Selection override with --mcp-profile none disables all servers
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" "$SCRIPT" --agent opencode --mode plan --mcp-profile none --id mcp-none --task 'Test none MCP profile' > "$TMP/mcp-none.out"
+grep -q 'Exit: 0' "$TMP/mcp-none.out"
+grep -q 'MCP profile: none' "$TMP/mcp-none.out"
+MCP_NONE_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-none.out" | head -n 1)
+jq -e '.mcp["cclsp"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["docker"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile: Selection override with --mcp-profile full preserves full profile (no OPENCODE_CONFIG)
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" "$SCRIPT" --agent opencode --mode plan --mcp-profile full --id mcp-full --task 'Test full MCP profile' > "$TMP/mcp-full.out"
+grep -q 'Exit: 0' "$TMP/mcp-full.out"
+grep -q 'MCP profile: full' "$TMP/mcp-full.out"
+LAST_FULL_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_FULL_CFG" == "NONE" ]]
+MCP_FULL_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-full.out" | head -n 1)
+grep -q 'mcp_profile=full' "$MCP_FULL_LOG_DIR/manifest.txt"
+grep -q 'mcp_profile_path=(none)' "$MCP_FULL_LOG_DIR/manifest.txt"
+
+# MCP profile: Custom profile path
+cat > "$TMP/custom-mcp.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "custom-server": { "command": "custom-cmd" }
+  }
+}
+JSON
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+"$SCRIPT" --agent opencode --mode plan --mcp-profile "$TMP/custom-mcp.json" --id mcp-custom --task 'Test custom MCP profile' > "$TMP/mcp-custom.out"
+grep -q 'Exit: 0' "$TMP/mcp-custom.out"
+LAST_CUSTOM_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_CUSTOM_CFG" == "$TMP/custom-mcp.json" ]]
+
+# MCP profile: Relative custom profile path is normalized to absolute
+(
+  cd "$TMP/repo"
+  : >"$OPENCODE_MOCK_CONFIG_LOG"
+  "$SCRIPT" --agent opencode --mode plan --mcp-profile "../custom-mcp.json" --id mcp-custom-rel --task 'Test relative custom MCP profile' > "$TMP/mcp-custom-rel.out"
+  grep -q 'Exit: 0' "$TMP/mcp-custom-rel.out"
+  LAST_REL_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+  [[ "$LAST_REL_CFG" == "$TMP/custom-mcp.json" ]]
+)
+
+# MCP profile: Missing profile path rejection
+if "$SCRIPT" --agent opencode --mode plan --mcp-profile "$TMP/missing-profile.json" --task 'Missing profile' > "$TMP/mcp-missing.out" 2>&1; then
+  echo 'Expected missing profile path rejection' >&2; exit 1
+fi
+grep -q 'MCP profile file not found' "$TMP/mcp-missing.out"
+
+# MCP profile: Custom servers list via OPENCODE_DELEGATE_MCP_SERVERS
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" OPENCODE_DELEGATE_MCP_SERVERS="docker,cclsp" "$SCRIPT" --agent opencode --mode plan --id mcp-servers-override --task 'Test servers override' > "$TMP/mcp-servers-override.out"
+grep -q 'Exit: 0' "$TMP/mcp-servers-override.out"
+MCP_OVERRIDE_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-servers-override.out" | head -n 1)
+jq -e '.mcp | has("docker") | not' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
 
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
