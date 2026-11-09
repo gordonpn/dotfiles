@@ -89,8 +89,9 @@ while (($#)); do
     --sandbox) shift; sandbox=$1 ;;
     -o) shift; out_file=$1 ;;
     -m) shift; model=$1 ;;
+    -c|--config) shift; [[ -z ${CODEX_MOCK_CONFIG_LOG:-} ]] || printf '%s\n' "$1" >>"$CODEX_MOCK_CONFIG_LOG" ;;
     -C) shift ;;
-    --color|--ephemeral) ;;
+    --color|--ephemeral|--skip-git-repo-check|--non-interactive) ;;
   esac
   shift
 done
@@ -123,7 +124,8 @@ export OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
 export OPENCODE_MOCK_CONFIG_LOG="$TMP/opencode.config"
 export COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls"
 export CODEX_MOCK_CALL_LOG="$TMP/codex.calls"
-unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL OPENCODE_DELEGATE_MCP_PROFILE OPENCODE_DELEGATE_MCP_SERVERS OPENCODE_MCP_PROFILE
+export CODEX_MOCK_CONFIG_LOG="$TMP/codex.config"
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL OPENCODE_DELEGATE_MCP_PROFILE OPENCODE_DELEGATE_MCP_SERVERS OPENCODE_MCP_PROFILE DELEGATE_MCP_PROFILE DELEGATE_MCP_SERVERS CODEX_DELEGATE_MCP_PROFILE CODEX_DELEGATE_MCP_SERVERS
 
 cd "$TMP/repo"
 git init -q
@@ -579,6 +581,122 @@ jq -e '.mcp | has("docker") | not' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json"
 jq -e '.mcp | has("cclsp") | not' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
 jq -e '.mcp["slack"].enabled == false' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
 jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile for Codex: Minimal profile overrides and non-mutation of normal user profile
+mkdir -p "$TMP/user-config/codex"
+cat > "$TMP/user-config/codex/config.toml" <<'TOML'
+[mcp_servers."cclsp"]
+command = "/usr/local/bin/cclsp"
+
+[mcp_servers."slack"]
+command = "npx -y @modelcontextprotocol/server-slack"
+
+[mcp_servers."uptime-kuma"]
+command = "npx -y @davidfuchs/mcp-uptime-kuma"
+
+[mcp_servers."docker"]
+command = "npx -y @hypnosis/docker-mcp-server"
+TOML
+ORIG_CODEX_CFG_HASH=$(hash_file "$TMP/user-config/codex/config.toml")
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-mcp-minimal --task 'Test codex minimal MCP profile' > "$TMP/codex-mcp-minimal.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-minimal.out"
+grep -q 'MCP profile: minimal' "$TMP/codex-mcp-minimal.out"
+CODEX_MCP_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/codex-mcp-minimal.out" | head -n 1)
+[[ -f "$CODEX_MCP_LOG_DIR/codex-mcp-overrides.txt" ]]
+grep -q 'mcp_profile=minimal' "$CODEX_MCP_LOG_DIR/manifest.txt"
+grep -q "mcp_profile_path=$CODEX_MCP_LOG_DIR/codex-mcp-overrides.txt" "$CODEX_MCP_LOG_DIR/manifest.txt"
+
+# Verify unnecessary servers were disabled via -c and minimal servers kept
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.uptime-kuma.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.docker.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled for codex minimal profile' >&2; exit 1
+fi
+
+# Verify user codex config.toml was NOT mutated
+POST_CODEX_CFG_HASH=$(hash_file "$TMP/user-config/codex/config.toml")
+[[ "$ORIG_CODEX_CFG_HASH" == "$POST_CODEX_CFG_HASH" ]]
+
+# MCP profile for Codex: Selection override with --mcp-profile none disables all servers
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile none --id codex-mcp-none --task 'Test codex none MCP profile' > "$TMP/codex-mcp-none.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-none.out"
+grep -q 'MCP profile: none' "$TMP/codex-mcp-none.out"
+grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.uptime-kuma.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.docker.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
+# MCP profile for Codex: Selection override with --mcp-profile full preserves full profile (no -c overrides)
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile full --id codex-mcp-full --task 'Test codex full MCP profile' > "$TMP/codex-mcp-full.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-full.out"
+grep -q 'MCP profile: full' "$TMP/codex-mcp-full.out"
+[[ ! -s "$CODEX_MOCK_CONFIG_LOG" ]]
+CODEX_FULL_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/codex-mcp-full.out" | head -n 1)
+grep -q 'mcp_profile=full' "$CODEX_FULL_LOG_DIR/manifest.txt"
+grep -q 'mcp_profile_path=(none)' "$CODEX_FULL_LOG_DIR/manifest.txt"
+
+# MCP profile for Codex: Custom servers list via CODEX_DELEGATE_MCP_SERVERS
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" CODEX_DELEGATE_MCP_SERVERS="docker,cclsp" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-mcp-override --task 'Test codex servers override' > "$TMP/codex-mcp-override.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-override.out"
+if grep -q 'mcp_servers.docker.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected docker to remain enabled in override' >&2; exit 1
+fi
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled in override' >&2; exit 1
+fi
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.uptime-kuma.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
+# MCP profile for Codex: Custom TOML profile resets state across sections
+cat > "$TMP/custom-codex.toml" <<'TOML'
+[mcp_servers."cclsp"]
+command = "cclsp"
+
+[features]
+enabled = false
+
+[mcp_servers."slack"]
+enabled = false
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-codex.toml" --id codex-custom-toml --task 'Test codex custom toml' > "$TMP/codex-custom-toml.out"
+grep -q 'Exit: 0' "$TMP/codex-custom-toml.out"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled despite subsequent section having enabled=false' >&2; exit 1
+fi
+
+# MCP profile: Environment variable isolation between agents
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" CODEX_DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent opencode --mode plan --id opencode-iso --task 'Test profile isolation' > "$TMP/opencode-iso.out"
+grep -q 'Exit: 0' "$TMP/opencode-iso.out"
+grep -q 'MCP profile: minimal' "$TMP/opencode-iso.out"
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" OPENCODE_DELEGATE_MCP_PROFILE="none" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-iso --task 'Test profile isolation' > "$TMP/codex-iso.out"
+grep -q 'Exit: 0' "$TMP/codex-iso.out"
+grep -q 'MCP profile: minimal' "$TMP/codex-iso.out"
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled when OPENCODE_DELEGATE_MCP_PROFILE is set' >&2; exit 1
+fi
+
+# MCP profile: Global DELEGATE_MCP_PROFILE applies to both workers when specific override is omitted
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent opencode --mode plan --id opencode-global --task 'Test global profile' > "$TMP/opencode-global.out"
+grep -q 'Exit: 0' "$TMP/opencode-global.out"
+grep -q 'MCP profile: none' "$TMP/opencode-global.out"
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" DELEGATE_MCP_PROFILE="none" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-global --task 'Test global profile' > "$TMP/codex-global.out"
+grep -q 'Exit: 0' "$TMP/codex-global.out"
+grep -q 'MCP profile: none' "$TMP/codex-global.out"
+grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
 
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
