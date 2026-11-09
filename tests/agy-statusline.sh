@@ -32,7 +32,7 @@ actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
 }
 EOF
 )
-assert_output "Full Gemini payload" "~/workspace/dotfiles | Gemini 3.8 Flash (High) | ctx: 0% | quota: 96%" "$actual"
+assert_output "Full Gemini payload" "~/workspace/dotfiles | Gemini 3.8 Flash (High) | ctx: 0% used | quota: 96% left (5h)" "$actual"
 
 # 2. Exact home directory path
 actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
@@ -87,7 +87,7 @@ actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
 }
 EOF
 )
-assert_output "Claude 3p quota" "~/workspace/app | Claude 3.7 Sonnet | ctx: 42% | quota: 72%" "$actual"
+assert_output "Claude 3p quota" "~/workspace/app | Claude 3.7 Sonnet | ctx: 42% used | quota: 72% left (5h)" "$actual"
 
 # 7. Flat quota object with remaining_fraction
 actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
@@ -99,7 +99,7 @@ actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
 }
 EOF
 )
-assert_output "Flat quota object" "~/workspace/app | Test Model | ctx: 10% | quota: 50%" "$actual"
+assert_output "Flat quota object" "~/workspace/app | Test Model | ctx: 10% used | quota: 50% left" "$actual"
 
 # 8. Numeric quota
 actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
@@ -110,7 +110,7 @@ actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
 }
 EOF
 )
-assert_output "Numeric quota" "/tmp/test | Test Model | quota: 80%" "$actual"
+assert_output "Numeric quota" "/tmp/test | Test Model | quota: 80% left" "$actual"
 
 # 9. Missing context and quota
 actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
@@ -132,7 +132,7 @@ actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
 }
 EOF
 )
-assert_output "Zero percentages" "/tmp/test | Test Model | ctx: 0% | quota: 0%" "$actual"
+assert_output "Zero percentages" "/tmp/test | Test Model | ctx: 0% used | quota: 0% left" "$actual"
 
 # 11. Limiting weekly quota selection
 actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
@@ -146,17 +146,31 @@ actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
 }
 EOF
 )
-assert_output "Limiting weekly quota selection" "~/workspace/dotfiles | Gemini 3.8 Flash (High) | quota: 25%" "$actual"
+assert_output "Limiting weekly quota selection" "~/workspace/dotfiles | Gemini 3.8 Flash (High) | quota: 25% left (wk)" "$actual"
 
-# 12. Empty JSON object
+# 12. Equal 5h and weekly quota defaults to 5h
+actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
+{
+  "workspace": {"current_dir": "/Users/gordonpn/workspace/dotfiles"},
+  "model": {"display_name": "Gemini 3.8 Flash (High)"},
+  "quota": {
+    "gemini-5h": {"remaining_fraction": 0.90},
+    "gemini-weekly": {"remaining_fraction": 0.90}
+  }
+}
+EOF
+)
+assert_output "Equal 5h and weekly quota defaults to 5h" "~/workspace/dotfiles | Gemini 3.8 Flash (High) | quota: 90% left (5h)" "$actual"
+
+# 13. Empty JSON object
 actual=$(echo '{}' | "$script")
 assert_output "Empty JSON object" "" "$actual"
 
-# 13. Empty stdin
+# 14. Empty stdin
 actual=$(printf '' | "$script")
 assert_output "Empty stdin" "" "$actual"
 
-# 14. Invalid JSON input
+# 15. Invalid JSON input
 actual=$(echo 'not valid json' | "$script")
 assert_output "Invalid JSON" "" "$actual"
 

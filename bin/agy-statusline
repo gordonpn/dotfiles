@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Antigravity CLI status line generator.
 # Reads runtime telemetry JSON from stdin and formats:
-# workspace.current_dir | model.display_name | ctx: <used>% | quota: <remaining>%
+# workspace.current_dir | model.display_name | ctx: <used>% used | quota: <remaining>% left [(<window>)]
 
 set -euo pipefail
 
@@ -25,21 +25,53 @@ printf '%s\n' "$input" | jq -r --arg home "${HOME:-}" '
       .
     end;
 
-  def get_quota_fraction:
+  def get_quota_info:
     if .quota == null then
       null
     elif (.quota | type) == "number" then
-      .quota
+      { fraction: .quota, window: null }
     elif (.quota | type) == "object" and (.quota.remaining_fraction != null) then
-      .quota.remaining_fraction
+      { fraction: .quota.remaining_fraction, window: null }
     elif (.quota | type) == "object" then
       (.model.display_name // .model.id // "" | ascii_downcase) as $m |
-      if ($m | contains("gemini")) then
-        ([.quota["gemini-5h"].remaining_fraction, .quota["gemini-weekly"].remaining_fraction] | map(select(. != null)) | min) // ([.quota[] | .remaining_fraction? | select(. != null)] | min)
-      elif ($m | (contains("claude") or contains("3p") or contains("gpt") or contains("anthropic"))) then
-        ([.quota["3p-5h"].remaining_fraction, .quota["3p-weekly"].remaining_fraction] | map(select(. != null)) | min) // ([.quota[] | .remaining_fraction? | select(. != null)] | min)
+      (
+        if ($m | contains("gemini")) then
+          {
+            h: (.quota["gemini-5h"].remaining_fraction // .quota["5h"].remaining_fraction),
+            w: (.quota["gemini-weekly"].remaining_fraction // .quota["weekly"].remaining_fraction)
+          }
+        elif ($m | (contains("claude") or contains("3p") or contains("gpt") or contains("anthropic"))) then
+          {
+            h: (.quota["3p-5h"].remaining_fraction // .quota["5h"].remaining_fraction),
+            w: (.quota["3p-weekly"].remaining_fraction // .quota["weekly"].remaining_fraction)
+          }
+        else
+          {
+            h: (.quota["gemini-5h"].remaining_fraction // .quota["3p-5h"].remaining_fraction // .quota["5h"].remaining_fraction),
+            w: (.quota["gemini-weekly"].remaining_fraction // .quota["3p-weekly"].remaining_fraction // .quota["weekly"].remaining_fraction)
+          }
+        end
+      ) as $pair |
+      if ($pair.h != null and $pair.w != null) then
+        if $pair.w < $pair.h then
+          { fraction: $pair.w, window: "wk" }
+        else
+          { fraction: $pair.h, window: "5h" }
+        end
+      elif ($pair.h != null) then
+        { fraction: $pair.h, window: "5h" }
+      elif ($pair.w != null) then
+        { fraction: $pair.w, window: "wk" }
       else
-        ([.quota[] | .remaining_fraction? | select(. != null)] | min)
+        ([.quota | to_entries[] | select(.value.remaining_fraction? != null) | {
+          fraction: .value.remaining_fraction,
+          window: (
+            if (.key | contains("5h")) then "5h"
+            elif (.key | (contains("week") or contains("wk"))) then "wk"
+            else null
+            end
+          )
+        }] | sort_by(.fraction) | first) // null
       end
     else
       null
@@ -47,8 +79,8 @@ printf '%s\n' "$input" | jq -r --arg home "${HOME:-}" '
 
   (try (.workspace.current_dir // .cwd // "" | shorten_home) catch "") as $dir |
   (try (.model.display_name // .model.id // "") catch "") as $model |
-  (try (if .context_window.used_percentage != null then "ctx: \(.context_window.used_percentage | round)%" else null end) catch null) as $ctx |
-  (try (get_quota_fraction | if . != null then "quota: \((. * 100) | round)%" else null end) catch null) as $quota |
+  (try (if .context_window.used_percentage != null then "ctx: \(.context_window.used_percentage | round)% used" else null end) catch null) as $ctx |
+  (try (get_quota_info | if . != null and .fraction != null then "quota: \((.fraction * 100) | round)% left" + (if .window != null then " (\(.window))" else "" end) else null end) catch null) as $quota |
 
   [$dir, $model, $ctx, $quota] | map(select(. != null and . != "")) | join(" | ")
 ' 2>/dev/null || true
