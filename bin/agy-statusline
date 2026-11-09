@@ -37,33 +37,37 @@ printf '%s\n' "$input" | jq -r --arg home "${HOME:-}" '
       (
         if ($m | contains("gemini")) then
           {
-            h: (.quota["gemini-5h"].remaining_fraction // .quota["5h"].remaining_fraction),
-            w: (.quota["gemini-weekly"].remaining_fraction // .quota["weekly"].remaining_fraction)
-          }
+            h: (.quota["gemini-5h"].remaining_fraction? // .quota["5h"].remaining_fraction?),
+            w: (.quota["gemini-weekly"].remaining_fraction? // .quota["weekly"].remaining_fraction?)
+          } as $pair |
+          if ($pair.h != null and $pair.w != null) then
+            if $pair.w < $pair.h then { fraction: $pair.w, window: "wk" } else { fraction: $pair.h, window: "5h" } end
+          elif ($pair.h != null) then
+            { fraction: $pair.h, window: "5h" }
+          elif ($pair.w != null) then
+            { fraction: $pair.w, window: "wk" }
+          else
+            null
+          end
         elif ($m | (contains("claude") or contains("3p") or contains("gpt") or contains("anthropic"))) then
           {
-            h: (.quota["3p-5h"].remaining_fraction // .quota["5h"].remaining_fraction),
-            w: (.quota["3p-weekly"].remaining_fraction // .quota["weekly"].remaining_fraction)
-          }
+            h: (.quota["3p-5h"].remaining_fraction? // .quota["5h"].remaining_fraction?),
+            w: (.quota["3p-weekly"].remaining_fraction? // .quota["weekly"].remaining_fraction?)
+          } as $pair |
+          if ($pair.h != null and $pair.w != null) then
+            if $pair.w < $pair.h then { fraction: $pair.w, window: "wk" } else { fraction: $pair.h, window: "5h" } end
+          elif ($pair.h != null) then
+            { fraction: $pair.h, window: "5h" }
+          elif ($pair.w != null) then
+            { fraction: $pair.w, window: "wk" }
+          else
+            null
+          end
         else
-          {
-            h: (.quota["gemini-5h"].remaining_fraction // .quota["3p-5h"].remaining_fraction // .quota["5h"].remaining_fraction),
-            w: (.quota["gemini-weekly"].remaining_fraction // .quota["3p-weekly"].remaining_fraction // .quota["weekly"].remaining_fraction)
-          }
+          null
         end
-      ) as $pair |
-      if ($pair.h != null and $pair.w != null) then
-        if $pair.w < $pair.h then
-          { fraction: $pair.w, window: "wk" }
-        else
-          { fraction: $pair.h, window: "5h" }
-        end
-      elif ($pair.h != null) then
-        { fraction: $pair.h, window: "5h" }
-      elif ($pair.w != null) then
-        { fraction: $pair.w, window: "wk" }
-      else
-        ([.quota | to_entries[] | select(.value.remaining_fraction? != null) | {
+      ) // (
+        [.quota | to_entries[] | select(.value.remaining_fraction? != null) | {
           fraction: .value.remaining_fraction,
           window: (
             if (.key | contains("5h")) then "5h"
@@ -71,8 +75,8 @@ printf '%s\n' "$input" | jq -r --arg home "${HOME:-}" '
             else null
             end
           )
-        }] | sort_by(.fraction) | first) // null
-      end
+        }] | sort_by([.fraction, (if .window == "5h" then 0 else 1 end)]) | first
+      ) // null
     else
       null
     end;

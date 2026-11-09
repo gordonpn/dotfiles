@@ -174,4 +174,20 @@ assert_output "Empty stdin" "" "$actual"
 actual=$(echo 'not valid json' | "$script")
 assert_output "Invalid JSON" "" "$actual"
 
+# 16. Unrecognized model selects overall minimum quota and tags window
+actual=$(HOME="/Users/gordonpn" "$script" << 'EOF'
+{
+  "workspace": {"current_dir": "/Users/gordonpn/workspace/dotfiles"},
+  "model": {"id": "custom-model"},
+  "quota": {
+    "gemini-5h": {"remaining_fraction": 0.90},
+    "gemini-weekly": {"remaining_fraction": 0.80},
+    "3p-5h": {"remaining_fraction": 0.10},
+    "3p-weekly": {"remaining_fraction": 0.20}
+  }
+}
+EOF
+)
+assert_output "Unrecognized model selects overall minimum quota" "~/workspace/dotfiles | custom-model | quota: 10% left (5h)" "$actual"
+
 printf '\nAll agy-statusline tests passed successfully.\n'
