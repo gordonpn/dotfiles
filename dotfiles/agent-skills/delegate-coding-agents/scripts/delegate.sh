@@ -254,9 +254,11 @@ mkdir -p "$LOG_DIR"
 
 OPENCODE_MCP_PROFILE=''
 OPENCODE_PROFILE_PATH=''
+OPENCODE_CONTENT_PATH=''
 # shellcheck disable=SC2016
 resolve_opencode_mcp_profile() {
   local target_file="$LOG_DIR/opencode-profile.json"
+  local content_file="$LOG_DIR/opencode-content.json"
   local base_profile="$SCRIPT_DIR/../profiles/opencode-minimal-profile.json"
   local cfg_dir="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
   local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${OPENCODE_DELEGATE_MCP_PROFILE:-${OPENCODE_MCP_PROFILE:-minimal}}}}"
@@ -269,22 +271,24 @@ resolve_opencode_mcp_profile() {
 
   if [[ "$prof" == "full" ]]; then
     OPENCODE_PROFILE_PATH=''
+    OPENCODE_CONTENT_PATH=''
     return 0
   fi
 
   if [[ "$prof" != "minimal" && "$prof" != "none" ]]; then
     OPENCODE_PROFILE_PATH="$prof"
+    OPENCODE_CONTENT_PATH=''
     return 0
   fi
 
   local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
-  if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$base_profile" "$cfg_dir" "$ROOT" "${OPENCODE_CONFIG:-}" <<'PY'
+  if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$content_file" "$base_profile" "$cfg_dir" "$ROOT" "$BASE_SHA" "${OPENCODE_CONFIG:-}" "${OPENCODE_CONFIG_CONTENT:-}" <<'PY'
 import json
 import os
 import re
 import sys
 
-prof, allowed_csv, target_file, base_profile, cfg_dir, root_dir, caller_cfg = sys.argv[1:8]
+prof, allowed_csv, target_file, content_file, base_profile, cfg_dir, root_dir, base_sha, caller_cfg, caller_content_raw = sys.argv[1:11]
 allow_set = {s.strip() for s in allowed_csv.split(",") if s.strip()}
 
 TOKEN_AND_COMMA_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\r\n]*|/\*[\s\S]*?\*/|,\s*([}\]])')
@@ -305,19 +309,45 @@ def strip_jsonc(text: str) -> str:
         curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
     return curr
 
+def load_jsonc_text(raw: str):
+    if not raw or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        try:
+            data = json.loads(strip_jsonc(raw))
+        except Exception:
+            return None
+    return data if isinstance(data, dict) else None
+
 def load_jsonc(path: str):
     if not path or not os.path.isfile(path):
         return None
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             raw = f.read()
-        try:
-            data = json.loads(raw)
-        except Exception:
-            data = json.loads(strip_jsonc(raw))
-        return data if isinstance(data, dict) else None
+        return load_jsonc_text(raw)
     except Exception:
         return None
+
+def load_git_blob(root, rev, relpath):
+    if not root or not rev or not relpath:
+        return None
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["git", "-C", root, "show", f"{rev}:{relpath}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8-sig",
+        )
+        if res.returncode == 0 and res.stdout:
+            return load_jsonc_text(res.stdout)
+    except Exception:
+        pass
+    return None
 
 discovered_servers = []
 seen = set()
@@ -332,22 +362,37 @@ def collect_servers(data):
                 seen.add(k)
                 discovered_servers.append(k)
 
+# 1. Inspect BASE_SHA checkout or fallback to root_dir
+for candidate_rel in [
+    "opencode.json",
+    "opencode.jsonc",
+    os.path.join(".opencode", "opencode.json"),
+    os.path.join(".opencode", "opencode.jsonc"),
+]:
+    data = load_git_blob(root_dir, base_sha, candidate_rel)
+    if data is None:
+        data = load_jsonc(os.path.join(root_dir, candidate_rel))
+    collect_servers(data)
+
+# 2. Inspect global user configuration directory
 for candidate in [
     os.path.join(cfg_dir, "opencode.json"),
     os.path.join(cfg_dir, "opencode.jsonc"),
-    os.path.join(root_dir, "opencode.json"),
-    os.path.join(root_dir, "opencode.jsonc"),
-    os.path.join(root_dir, ".opencode", "opencode.json"),
-    os.path.join(root_dir, ".opencode", "opencode.jsonc"),
 ]:
     collect_servers(load_jsonc(candidate))
 
+# 3. Inspect caller config and caller content
 caller_data = load_jsonc(caller_cfg)
 collect_servers(caller_data)
 
+caller_content_data = load_jsonc_text(caller_content_raw)
+collect_servers(caller_content_data)
+
+# 4. Fallback to base profile if nothing discovered
 if not discovered_servers:
     collect_servers(load_jsonc(base_profile))
 
+# Build target profile for OPENCODE_CONFIG
 if isinstance(caller_data, dict):
     out_obj = dict(caller_data)
     out_obj.setdefault("$schema", "https://opencode.ai/config.json")
@@ -356,9 +401,11 @@ else:
     out_obj = {"$schema": "https://opencode.ai/config.json"}
     mcp_map = {}
 
+mcp_disables = {}
 for srv in discovered_servers:
     if prof == "none" or srv not in allow_set:
         mcp_map[srv] = {"enabled": False}
+        mcp_disables[srv] = {"enabled": False}
 
 out_obj["mcp"] = mcp_map
 
@@ -367,14 +414,31 @@ with open(tmp_path, "w", encoding="utf-8") as f:
     json.dump(out_obj, f, indent=2)
     f.write("\n")
 os.replace(tmp_path, target_file)
+
+# Build OPENCODE_CONFIG_CONTENT for high-priority inline override
+if isinstance(caller_content_data, dict):
+    content_obj = dict(caller_content_data)
+    content_mcp = dict(content_obj.get("mcp")) if isinstance(content_obj.get("mcp"), dict) else {}
+    content_mcp.update(mcp_disables)
+    content_obj["mcp"] = content_mcp
+else:
+    content_obj = {
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": mcp_disables,
+    }
+
+content_tmp = content_file + ".tmp"
+with open(content_tmp, "w", encoding="utf-8") as f:
+    json.dump(content_obj, f, separators=(",", ":"))
+os.replace(content_tmp, content_file)
 PY
   then
     OPENCODE_PROFILE_PATH="$target_file"
+    OPENCODE_CONTENT_PATH="$content_file"
     return 0
   fi
 
-  printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$target_file"
-  OPENCODE_PROFILE_PATH="$target_file"
+  die "Failed to generate OpenCode MCP profile '$prof' in '$target_file'"
 }
 resolve_opencode_mcp_profile
 
@@ -407,9 +471,17 @@ resolve_codex_mcp_profile() {
   if [[ ${#cfg_files[@]} -gt 0 ]]; then
     defined_servers=$(awk -F'[][]' '
       /^[[:space:]]*\[mcp_servers\./ {
-        name = $2
-        sub(/^mcp_servers\./, "", name)
-        gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", name)
+        s = $2
+        sub(/^[[:space:]]*mcp_servers\./, "", s)
+        gsub(/^[[:space:]]+/, "", s)
+        if (s ~ /^"/) {
+          match(s, /^"([^"\\]|\\.)*"/)
+          quoted = substr(s, 1, RLENGTH)
+          name = substr(quoted, 2, length(quoted) - 2)
+        } else {
+          match(s, /^[^.[:space:]]+/)
+          name = substr(s, 1, RLENGTH)
+        }
         if (length(name) > 0 && !seen[name]++) print name
       }
     ' "${cfg_files[@]}" 2>/dev/null || true)
@@ -425,7 +497,23 @@ resolve_codex_mcp_profile() {
       elif grep -q '\[mcp_servers\.' "$prof" 2>/dev/null; then
         raw_disabled=$(awk -F'[][]' '
           /^[[:space:]]*\[/ { curr = "" }
-          /^[[:space:]]*\[mcp_servers\./ { name = $2; sub(/^mcp_servers\./, "", name); gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", name); curr = name }
+          /^[[:space:]]*\[mcp_servers\./ {
+            s = $2
+            sub(/^[[:space:]]*mcp_servers\./, "", s)
+            gsub(/^[[:space:]]+/, "", s)
+            if (s ~ /^"[^"]*"\./ || (s !~ /^"/ && s ~ /\./)) {
+              curr = ""
+            } else {
+              if (s ~ /^"/) {
+                match(s, /^"([^"\\]|\\.)*"/)
+                quoted = substr(s, 1, RLENGTH)
+                curr = substr(quoted, 2, length(quoted) - 2)
+              } else {
+                match(s, /^[^.[:space:]]+/)
+                curr = substr(s, 1, RLENGTH)
+              }
+            }
+          }
           /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false/ { if (curr != "") { print curr; curr = "" } }
         ' "$prof" 2>/dev/null || true)
       fi
@@ -593,7 +681,15 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" codex "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   elif [[ $CURRENT_AGENT == opencode ]]; then
     if [[ -n "$OPENCODE_PROFILE_PATH" ]]; then
-      (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" OPENCODE_CONFIG="$OPENCODE_PROFILE_PATH" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+      inline_content=''
+      if [[ -n "$OPENCODE_CONTENT_PATH" && -f "$OPENCODE_CONTENT_PATH" ]]; then
+        inline_content=$(cat "$OPENCODE_CONTENT_PATH")
+      fi
+      if [[ -n "$inline_content" ]]; then
+        (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" OPENCODE_CONFIG="$OPENCODE_PROFILE_PATH" OPENCODE_CONFIG_CONTENT="$inline_content" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+      else
+        (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" OPENCODE_CONFIG="$OPENCODE_PROFILE_PATH" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+      fi
     else
       (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
     fi

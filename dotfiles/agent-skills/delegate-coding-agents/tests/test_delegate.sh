@@ -21,6 +21,7 @@ while (($#)); do
 done
 [[ -z ${OPENCODE_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$mode" "$model" >>"$OPENCODE_MOCK_CALL_LOG"
 [[ -z ${OPENCODE_MOCK_CONFIG_LOG:-} ]] || printf '%s\n' "${OPENCODE_CONFIG:-NONE}" >>"$OPENCODE_MOCK_CONFIG_LOG"
+[[ -z ${OPENCODE_MOCK_CONTENT_LOG:-} ]] || printf '%s\n' "${OPENCODE_CONFIG_CONTENT:-NONE}" >>"$OPENCODE_MOCK_CONTENT_LOG"
 if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
@@ -122,6 +123,7 @@ chmod +x "$TMP/bin/opencode" "$TMP/bin/copilot" "$TMP/bin/codex"
 export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees"
 export OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
 export OPENCODE_MOCK_CONFIG_LOG="$TMP/opencode.config"
+export OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode.content"
 export COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls"
 export CODEX_MOCK_CALL_LOG="$TMP/codex.calls"
 export CODEX_MOCK_CONFIG_LOG="$TMP/codex.config"
@@ -789,6 +791,57 @@ grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
 if grep -q 'mcp_servers.unknown-server.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
   echo 'Expected unknown server not to be emitted for Codex' >&2; exit 1
 fi
+
+# Codex: Nested TOML tables (.env) do not produce invalid server overrides
+mkdir -p "$TMP/nested-codex"
+cat > "$TMP/nested-codex/config.toml" <<'TOML'
+[mcp_servers.node_repl]
+command = "/path/to/node_repl"
+
+[mcp_servers.node_repl.env]
+NODE_ENV = "production"
+TOKEN = "secret"
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/nested-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-nested --task 'Codex nested toml' > "$TMP/codex-nested.out"
+grep -q 'Exit: 0' "$TMP/codex-nested.out"
+grep -q 'mcp_servers.node_repl.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.node_repl.env' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected nested table .env not to be emitted as a server override' >&2; exit 1
+fi
+
+# OpenCode: Inline OPENCODE_CONFIG_CONTENT is emitted to override project-level configs
+OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode-content.log"
+: >"$OPENCODE_MOCK_CONTENT_LOG"
+"$SCRIPT" --agent opencode --mode plan --id opencode-content-test --task 'OpenCode inline content' > "$TMP/opencode-content.out"
+grep -q 'Exit: 0' "$TMP/opencode-content.out"
+[[ -s "$OPENCODE_MOCK_CONTENT_LOG" ]]
+jq -e '.mcp["slack"].enabled == false' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
+
+# OpenCode: Project config committed at BASE_SHA is discovered by server discovery
+git checkout -b base-sha-test-branch >/dev/null 2>&1
+cat > opencode.json <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "git_blob_server": {
+      "command": "/usr/local/bin/git_blob_server"
+    }
+  }
+}
+JSON
+git add opencode.json
+git commit -m "test: commit opencode.json for base sha test" >/dev/null 2>&1
+TEST_BASE_SHA=$(git rev-parse HEAD)
+git checkout - >/dev/null 2>&1
+git branch -D base-sha-test-branch >/dev/null 2>&1
+rm -f opencode.json
+
+: >"$OPENCODE_MOCK_CONTENT_LOG"
+"$SCRIPT" --agent opencode --mode plan --base "$TEST_BASE_SHA" --id base-sha-test --task 'Discover from BASE_SHA' > "$TMP/base-sha-test.out"
+grep -q 'Exit: 0' "$TMP/base-sha-test.out"
+jq -e '.mcp["git_blob_server"].enabled == false' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
 
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
