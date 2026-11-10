@@ -39,7 +39,7 @@ Each worker in the delegation chain has specific authentication requirements:
 - **Anonymous execution:** All four supported free models can be invoked completely anonymously out of the box with zero credentials in `~/.local/share/opencode/auth.json` and no OpenCode account or token. OpenCode routes these requests through its hosted gateway service.
 - **When is OpenCode login required?**
   - Only when targeting non-free or commercial models (such as `anthropic/*`, `openai/*`, or `github-copilot/*`), or when using OpenCode Zen paid subscriptions.
-  - To log in for commercial providers, run `opencode providers login` (or configure provider environment variables like `ANTHROPIC_API_KEY`).
+  - To log in for commercial providers, run `opencode auth login` (or configure provider environment variables like `ANTHROPIC_API_KEY`).
 - **Failure and fallback behavior:**
   - Unauthenticated requests to non-free models fail with exit code 1 (`UnknownError: Unexpected server error` or `ProviderAuthError`), which stops fallback immediately.
   - Rate limits or temporary capacity limits on free models return HTTP 429 (`Free usage limit reached` or `FreeUsageLimitError`). `delegate.sh` catches these in `is_provider_quota_error` and automatically cascades to the next free candidate model in sequence before falling back to GitHub Copilot Student.
