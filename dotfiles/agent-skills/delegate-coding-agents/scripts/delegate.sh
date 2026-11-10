@@ -469,15 +469,19 @@ resolve_codex_mcp_profile() {
 
   local defined_servers=''
   if [[ ${#cfg_files[@]} -gt 0 ]]; then
-    defined_servers=$(awk -F'[][]' '
+    defined_servers=$(awk -F'[][]' -v sq="'" '
       /^[[:space:]]*\[mcp_servers\./ {
         s = $2
         sub(/^[[:space:]]*mcp_servers\./, "", s)
         gsub(/^[[:space:]]+/, "", s)
-        if (s ~ /^"/) {
+        name = ""
+        if (substr(s, 1, 1) == "\"") {
           match(s, /^"([^"\\]|\\.)*"/)
           quoted = substr(s, 1, RLENGTH)
           name = substr(quoted, 2, length(quoted) - 2)
+        } else if (substr(s, 1, 1) == sq) {
+          idx = index(substr(s, 2), sq)
+          if (idx > 0) name = substr(s, 2, idx - 1)
         } else {
           match(s, /^[^.[:space:]]+/)
           name = substr(s, 1, RLENGTH)
@@ -495,23 +499,32 @@ resolve_codex_mcp_profile() {
       if command -v jq >/dev/null 2>&1 && jq -e '.mcp or .mcpServers' "$prof" >/dev/null 2>&1; then
         raw_disabled=$(jq -r '(.mcp // .mcpServers // {}) | to_entries[] | select(.value.enabled == false) | .key' "$prof" 2>/dev/null || true)
       elif grep -q '\[mcp_servers\.' "$prof" 2>/dev/null; then
-        raw_disabled=$(awk -F'[][]' '
+        raw_disabled=$(awk -F'[][]' -v sq="'" '
           /^[[:space:]]*\[/ { curr = "" }
           /^[[:space:]]*\[mcp_servers\./ {
             s = $2
             sub(/^[[:space:]]*mcp_servers\./, "", s)
             gsub(/^[[:space:]]+/, "", s)
-            if (s ~ /^"[^"]*"\./ || (s !~ /^"/ && s ~ /\./)) {
+            if (s ~ /^"[^"]*"\./) {
               curr = ""
-            } else {
-              if (s ~ /^"/) {
-                match(s, /^"([^"\\]|\\.)*"/)
-                quoted = substr(s, 1, RLENGTH)
-                curr = substr(quoted, 2, length(quoted) - 2)
+            } else if (substr(s, 1, 1) == sq) {
+              idx = index(substr(s, 2), sq)
+              if (idx > 0 && substr(s, idx + 2, 1) == ".") {
+                curr = ""
+              } else if (idx > 0) {
+                curr = substr(s, 2, idx - 1)
               } else {
-                match(s, /^[^.[:space:]]+/)
-                curr = substr(s, 1, RLENGTH)
+                curr = ""
               }
+            } else if (s ~ /\./) {
+              curr = ""
+            } else if (substr(s, 1, 1) == "\"") {
+              match(s, /^"([^"\\]|\\.)*"/)
+              quoted = substr(s, 1, RLENGTH)
+              curr = substr(quoted, 2, length(quoted) - 2)
+            } else {
+              match(s, /^[^.[:space:]]+/)
+              curr = substr(s, 1, RLENGTH)
             }
           }
           /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false/ { if (curr != "") { print curr; curr = "" } }
@@ -550,7 +563,11 @@ resolve_codex_mcp_profile() {
   : > "$target_file"
   while IFS= read -r s; do
     [[ -n "$s" ]] || continue
-    CODEX_MCP_ARGS+=(-c "mcp_servers.${s}.enabled=false")
+    if [[ "$s" =~ [^a-zA-Z0-9_-] ]]; then
+      CODEX_MCP_ARGS+=(-c "mcp_servers.\"${s}\".enabled=false")
+    else
+      CODEX_MCP_ARGS+=(-c "mcp_servers.${s}.enabled=false")
+    fi
     printf '%s\n' "$s" >> "$target_file"
   done <<< "$servers"
 }

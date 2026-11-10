@@ -771,6 +771,11 @@ rm -rf rel-worktrees
 
 # Codex: Missing config.toml emits zero -c overrides instead of undefined servers
 : >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-cfg-check --task 'Codex with config' > "$TMP/codex-cfg-check.out"
+grep -q 'Exit: 0' "$TMP/codex-cfg-check.out"
+[[ -s "$CODEX_MOCK_CONFIG_LOG" ]]
+
+: >"$CODEX_MOCK_CONFIG_LOG"
 CODEX_CONFIG="$TMP/nonexistent/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-no-cfg --task 'Codex with no config' > "$TMP/codex-no-cfg.out"
 grep -q 'Exit: 0' "$TMP/codex-no-cfg.out"
 [[ ! -s "$CODEX_MOCK_CONFIG_LOG" ]]
@@ -809,6 +814,21 @@ grep -q 'mcp_servers.node_repl.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
 if grep -q 'mcp_servers.node_repl.env' "$CODEX_MOCK_CONFIG_LOG"; then
   echo 'Expected nested table .env not to be emitted as a server override' >&2; exit 1
 fi
+
+# Codex: Quoted server names containing dots produce quoted override paths
+mkdir -p "$TMP/quoted-codex"
+cat > "$TMP/quoted-codex/config.toml" <<'TOML'
+[mcp_servers."foo.bar"]
+command = "/path/to/foo_bar"
+
+[mcp_servers.plain_server]
+command = "/path/to/plain"
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-quoted --task 'Codex quoted server' > "$TMP/codex-quoted.out"
+grep -q 'Exit: 0' "$TMP/codex-quoted.out"
+grep -q 'mcp_servers."foo.bar".enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.plain_server.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
 
 # OpenCode: Inline OPENCODE_CONFIG_CONTENT is emitted to override project-level configs
 OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode-content.log"
