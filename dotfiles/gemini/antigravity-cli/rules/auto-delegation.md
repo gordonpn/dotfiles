@@ -10,7 +10,7 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
 1. **Codex CLI:** Primary delegate worker running non-interactively in an isolated Git worktree (`--sandbox read-only` in plan mode, `--sandbox workspace-write` in build mode).
 2. **OpenCode Free Models:** Automatic fallback after classified provider, quota, rate-limit, or model-availability failures on Codex, cycling through `opencode/deepseek-v4.1-flash-free` (high variant), `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free`.
 3. **GitHub Copilot Student:** Automatic fallback after OpenCode zero-cost models are exhausted, using first-party Copilot CLI with `--model auto`.
-4. **Authentication Hard Stops:** Credential or login failures stop fallback immediately with instructions to run `codex login`, `copilot login`, or check OpenCode provider credentials.
+4. **Authentication Hard Stops:** Credential or login failures stop fallback immediately with instructions to run `codex login`, `copilot login`, or check OpenCode provider credentials (only applicable if using custom or commercial OpenCode providers; OpenCode free models require no login).
 
 ## Delegation-First Rules
 
