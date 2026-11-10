@@ -815,7 +815,7 @@ if grep -q 'mcp_servers.node_repl.env' "$CODEX_MOCK_CONFIG_LOG"; then
   echo 'Expected nested table .env not to be emitted as a server override' >&2; exit 1
 fi
 
-# Codex: Quoted server names containing dots produce quoted override paths
+# Codex: Dotted server names fail Codex invocation with clear error without blocking other workers or full profile
 mkdir -p "$TMP/quoted-codex"
 cat > "$TMP/quoted-codex/config.toml" <<'TOML'
 [mcp_servers."foo.bar"]
@@ -825,10 +825,16 @@ command = "/path/to/foo_bar"
 command = "/path/to/plain"
 TOML
 : >"$CODEX_MOCK_CONFIG_LOG"
-CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-quoted --task 'Codex quoted server' > "$TMP/codex-quoted.out"
-grep -q 'Exit: 0' "$TMP/codex-quoted.out"
-grep -q 'mcp_servers."foo.bar".enabled=false' "$CODEX_MOCK_CONFIG_LOG"
-grep -q 'mcp_servers.plain_server.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-quoted --task 'Codex quoted server' > "$TMP/codex-quoted.out" 2>"$TMP/codex-quoted.err" || true
+grep -q 'Codex CLI does not support disabling dotted MCP server names' "$TMP/codex-quoted.err"
+
+# Full profile on Codex is not blocked by dotted server names
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mcp-profile full --mode plan --id codex-full-quoted --task 'Codex full profile with quoted server' > "$TMP/codex-full-quoted.out"
+grep -q 'Exit: 0' "$TMP/codex-full-quoted.out"
+
+# Other workers (OpenCode) are not blocked by Codex dotted servers
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent opencode --mode plan --id opencode-unblocked --task 'OpenCode worker unaffected' > "$TMP/opencode-unblocked.out"
+grep -q 'Exit: 0' "$TMP/opencode-unblocked.out"
 
 # OpenCode: Inline OPENCODE_CONFIG_CONTENT is emitted to override project-level configs
 OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode-content.log"

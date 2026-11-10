@@ -444,6 +444,7 @@ resolve_opencode_mcp_profile
 
 CODEX_MCP_PROFILE=''
 CODEX_MCP_ARGS=()
+CODEX_DOTTED_SERVERS=()
 CODEX_PROFILE_PATH=''
 resolve_codex_mcp_profile() {
   local target_file="$LOG_DIR/codex-mcp-overrides.txt"
@@ -460,6 +461,7 @@ resolve_codex_mcp_profile() {
   if [[ "$prof" == "full" ]]; then
     CODEX_PROFILE_PATH=''
     CODEX_MCP_ARGS=()
+    CODEX_DOTTED_SERVERS=()
     return 0
   fi
 
@@ -560,11 +562,12 @@ resolve_codex_mcp_profile() {
   fi
 
   CODEX_MCP_ARGS=()
+  CODEX_DOTTED_SERVERS=()
   : > "$target_file"
   while IFS= read -r s; do
     [[ -n "$s" ]] || continue
-    if [[ "$s" =~ [^a-zA-Z0-9_-] ]]; then
-      CODEX_MCP_ARGS+=(-c "mcp_servers.\"${s}\".enabled=false")
+    if [[ "$s" == *"."* || "$s" =~ [^a-zA-Z0-9_-] ]]; then
+      CODEX_DOTTED_SERVERS+=("$s")
     else
       CODEX_MCP_ARGS+=(-c "mcp_servers.${s}.enabled=false")
     fi
@@ -666,6 +669,9 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   fi
 
   if [[ $CURRENT_AGENT == codex ]]; then
+    if [[ ${#CODEX_DOTTED_SERVERS[@]} -gt 0 ]]; then
+      die "Codex CLI does not support disabling dotted MCP server names via -c overrides: ${CODEX_DOTTED_SERVERS[*]}"
+    fi
     ARGS=(exec -C "$WORKTREE" --color never --ephemeral -o "$LOG_DIR/report.md")
     if [[ $MODE == plan ]]; then
       ARGS+=(--sandbox read-only)
