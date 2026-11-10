@@ -797,6 +797,16 @@ if grep -q 'mcp_servers.unknown-server.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; 
   echo 'Expected unknown server not to be emitted for Codex' >&2; exit 1
 fi
 
+# Codex: Custom TOML profile disabling unquoted server emits override
+cat > "$TMP/custom-slack.toml" <<'TOML'
+[mcp_servers.slack]
+enabled = false
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-slack.toml" --id codex-custom-toml-slack --task 'Codex custom toml slack' > "$TMP/codex-custom-toml-slack.out"
+grep -q 'Exit: 0' "$TMP/codex-custom-toml-slack.out"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
 # Codex: Nested TOML tables (.env) do not produce invalid server overrides
 mkdir -p "$TMP/nested-codex"
 cat > "$TMP/nested-codex/config.toml" <<'TOML'
@@ -835,6 +845,14 @@ grep -q 'Exit: 0' "$TMP/codex-full-quoted.out"
 # Other workers (OpenCode) are not blocked by Codex dotted servers
 CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent opencode --mode plan --id opencode-unblocked --task 'OpenCode worker unaffected' > "$TMP/opencode-unblocked.out"
 grep -q 'Exit: 0' "$TMP/opencode-unblocked.out"
+
+# Codex: Custom TOML profile disabling quoted dotted server is parsed and fails closed
+cat > "$TMP/custom-dotted.toml" <<'TOML'
+[mcp_servers."foo.bar"]
+enabled = false
+TOML
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-dotted.toml" --id codex-custom-dotted --task 'Codex custom dotted' > "$TMP/codex-custom-dotted.out" 2>"$TMP/codex-custom-dotted.err" || true
+grep -q 'Codex CLI does not support disabling dotted MCP server names' "$TMP/codex-custom-dotted.err"
 
 # OpenCode: Inline OPENCODE_CONFIG_CONTENT is emitted to override project-level configs
 OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode-content.log"

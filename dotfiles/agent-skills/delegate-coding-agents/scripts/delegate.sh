@@ -507,8 +507,17 @@ resolve_codex_mcp_profile() {
             s = $2
             sub(/^[[:space:]]*mcp_servers\./, "", s)
             gsub(/^[[:space:]]+/, "", s)
-            if (s ~ /^"[^"]*"\./) {
-              curr = ""
+            if (substr(s, 1, 1) == "\"") {
+              if (match(s, /^"([^"\\]|\\.)*"/)) {
+                quoted = substr(s, 1, RLENGTH)
+                if (substr(s, RLENGTH + 1, 1) == ".") {
+                  curr = ""
+                } else {
+                  curr = substr(quoted, 2, length(quoted) - 2)
+                }
+              } else {
+                curr = ""
+              }
             } else if (substr(s, 1, 1) == sq) {
               idx = index(substr(s, 2), sq)
               if (idx > 0 && substr(s, idx + 2, 1) == ".") {
@@ -520,10 +529,6 @@ resolve_codex_mcp_profile() {
               }
             } else if (s ~ /\./) {
               curr = ""
-            } else if (substr(s, 1, 1) == "\"") {
-              match(s, /^"([^"\\]|\\.)*"/)
-              quoted = substr(s, 1, RLENGTH)
-              curr = substr(quoted, 2, length(quoted) - 2)
             } else {
               match(s, /^[^.[:space:]]+/)
               curr = substr(s, 1, RLENGTH)
