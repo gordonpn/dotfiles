@@ -698,6 +698,98 @@ grep -q 'Exit: 0' "$TMP/codex-global.out"
 grep -q 'MCP profile: none' "$TMP/codex-global.out"
 grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
 
+# MCP profile: Preservation of caller OPENCODE_CONFIG settings and allowed server definitions
+cat > "$TMP/caller-opencode.json" <<'JSON'
+{
+  "provider": { "my-provider": { "apiKey": "xyz" } },
+  "permissions": { "allow": ["read"] },
+  "model": "custom/model",
+  "custom_pattern": "contains ,} and ,] verbatim",
+  "mcp": {
+    "cclsp": { "command": "/usr/local/bin/cclsp" },
+    "slack": { "command": "npx -y slack-server" }
+  }
+}
+JSON
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+OPENCODE_CONFIG="$TMP/caller-opencode.json" "$SCRIPT" --agent opencode --mode plan --id caller-preserve --task 'Preserve caller config' > "$TMP/caller-preserve.out"
+grep -q 'Exit: 0' "$TMP/caller-preserve.out"
+CALLER_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/caller-preserve.out" | head -n 1)
+jq -e '.provider["my-provider"].apiKey == "xyz"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.permissions.allow[0] == "read"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.model == "custom/model"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.custom_pattern == "contains ,} and ,] verbatim"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["cclsp"].command == "/usr/local/bin/cclsp"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile: OpenCode opencode.jsonc discovery and JSONC syntax parsing
+mkdir -p "$TMP/jsonc-config/opencode"
+cat > "$TMP/jsonc-config/opencode/opencode.jsonc" <<'JSONC'
+{
+  // Single line comment
+  /* Multi
+     line
+     comment */
+  "url": "https://example.com/api",
+  "string_with_comma_brace": "contains ,} and ,] verbatim",
+  "mcp": {
+    "cclsp": {
+      "command": "/usr/local/bin/cclsp",
+    },
+    "slack": {
+      "command": "npx -y slack-server",
+    },
+  },
+}
+JSONC
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/jsonc-config" "$SCRIPT" --agent opencode --mode plan --id jsonc-test --task 'Test jsonc parsing' > "$TMP/jsonc-test.out"
+grep -q 'Exit: 0' "$TMP/jsonc-test.out"
+JSONC_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/jsonc-test.out" | head -n 1)
+jq -e '.mcp["slack"].enabled == false' "$JSONC_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$JSONC_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile: Malformed user OpenCode config falls back gracefully and filters via allowed list
+mkdir -p "$TMP/bad-json-config/opencode"
+printf '{ malformed json: not valid' > "$TMP/bad-json-config/opencode/opencode.json"
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/bad-json-config" OPENCODE_DELEGATE_MCP_SERVERS="docker" "$SCRIPT" --agent opencode --mode plan --id bad-json --task 'Handle malformed config' > "$TMP/bad-json.out"
+grep -q 'Exit: 0' "$TMP/bad-json.out"
+BAD_JSON_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/bad-json.out" | head -n 1)
+jq -e '.mcp | has("docker") | not' "$BAD_JSON_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$BAD_JSON_LOG_DIR/opencode-profile.json" >/dev/null
+
+# Relative DELEGATE_WORKTREE_ROOT is resolved to absolute paths
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+DELEGATE_WORKTREE_ROOT="./rel-worktrees" "$SCRIPT" --agent opencode --mode plan --id rel-worktree --task 'Test relative worktree' > "$TMP/rel-worktree.out"
+grep -q 'Exit: 0' "$TMP/rel-worktree.out"
+LAST_REL_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_REL_CFG" =~ ^/ ]]
+rm -rf rel-worktrees
+
+# Codex: Missing config.toml emits zero -c overrides instead of undefined servers
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/nonexistent/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-no-cfg --task 'Codex with no config' > "$TMP/codex-no-cfg.out"
+grep -q 'Exit: 0' "$TMP/codex-no-cfg.out"
+[[ ! -s "$CODEX_MOCK_CONFIG_LOG" ]]
+
+# Codex: Custom profile does not emit overrides for undefined servers
+cat > "$TMP/custom-unknown.json" <<'JSON'
+{
+  "mcp": {
+    "slack": { "enabled": false },
+    "unknown-server": { "enabled": false }
+  }
+}
+JSON
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-unknown.json" --id codex-custom-defined --task 'Codex custom defined only' > "$TMP/codex-custom-defined.out"
+grep -q 'Exit: 0' "$TMP/codex-custom-defined.out"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.unknown-server.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected unknown server not to be emitted for Codex' >&2; exit 1
+fi
+
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
 if "$SCRIPT" --agent opencode --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then

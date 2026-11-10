@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset CDPATH
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -246,6 +247,7 @@ SAFE_ID=${SAFE_ID:0:48}
 RUN_ID="${AGENT}-${MODE}-${SAFE_ID}-$(date '+%Y%m%d%H%M%S')-$$"
 RUN_ROOT=${DELEGATE_WORKTREE_ROOT:-"$(dirname "$ROOT")/.agent-worktrees-$(basename "$ROOT")"}
 mkdir -p "$RUN_ROOT/logs"
+RUN_ROOT=$(cd "$RUN_ROOT" >/dev/null && pwd)
 WORKTREE="$RUN_ROOT/$RUN_ID"
 LOG_DIR="$RUN_ROOT/logs/$RUN_ID"
 mkdir -p "$LOG_DIR"
@@ -256,12 +258,12 @@ OPENCODE_PROFILE_PATH=''
 resolve_opencode_mcp_profile() {
   local target_file="$LOG_DIR/opencode-profile.json"
   local base_profile="$SCRIPT_DIR/../profiles/opencode-minimal-profile.json"
-  local user_cfg="${OPENCODE_CONFIG:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/opencode.json}"
+  local cfg_dir="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
   local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${OPENCODE_DELEGATE_MCP_PROFILE:-${OPENCODE_MCP_PROFILE:-minimal}}}}"
 
   if [[ "$prof" != "minimal" && "$prof" != "none" && "$prof" != "full" ]]; then
     [[ -f "$prof" ]] || die "OpenCode MCP profile file not found: $prof"
-    prof=$(cd "$(dirname "$prof")" && pwd)/$(basename "$prof")
+    prof=$(cd "$(dirname "$prof")" >/dev/null && pwd)/$(basename "$prof")
   fi
   OPENCODE_MCP_PROFILE="$prof"
 
@@ -275,39 +277,103 @@ resolve_opencode_mcp_profile() {
     return 0
   fi
 
-  if [[ "$prof" == "none" ]]; then
-    if [[ -f "$user_cfg" ]] && command -v jq >/dev/null 2>&1; then
-      jq '{ "$schema": "https://opencode.ai/config.json", mcp: ((.mcp // {}) | to_entries | map({key: .key, value: {enabled: false}}) | from_entries) }' "$user_cfg" > "$target_file"
-    else
-      printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$target_file"
-    fi
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+  if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$base_profile" "$cfg_dir" "$ROOT" "${OPENCODE_CONFIG:-}" <<'PY'
+import json
+import os
+import re
+import sys
+
+prof, allowed_csv, target_file, base_profile, cfg_dir, root_dir, caller_cfg = sys.argv[1:8]
+allow_set = {s.strip() for s in allowed_csv.split(",") if s.strip()}
+
+TOKEN_AND_COMMA_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\r\n]*|/\*[\s\S]*?\*/|,\s*([}\]])')
+
+def strip_jsonc(text: str) -> str:
+    def repl(m):
+        s = m.group(0)
+        if s.startswith('"'):
+            return s
+        if s.startswith('//') or s.startswith('/*'):
+            return ""
+        return m.group(1)
+
+    prev = None
+    curr = text
+    while prev != curr:
+        prev = curr
+        curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
+    return curr
+
+def load_jsonc(path: str):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            raw = f.read()
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = json.loads(strip_jsonc(raw))
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+discovered_servers = []
+seen = set()
+
+def collect_servers(data):
+    if not isinstance(data, dict):
+        return
+    mcp = data.get("mcp")
+    if isinstance(mcp, dict):
+        for k in mcp.keys():
+            if isinstance(k, str) and k not in seen:
+                seen.add(k)
+                discovered_servers.append(k)
+
+for candidate in [
+    os.path.join(cfg_dir, "opencode.json"),
+    os.path.join(cfg_dir, "opencode.jsonc"),
+    os.path.join(root_dir, "opencode.json"),
+    os.path.join(root_dir, "opencode.jsonc"),
+    os.path.join(root_dir, ".opencode", "opencode.json"),
+    os.path.join(root_dir, ".opencode", "opencode.jsonc"),
+]:
+    collect_servers(load_jsonc(candidate))
+
+caller_data = load_jsonc(caller_cfg)
+collect_servers(caller_data)
+
+if not discovered_servers:
+    collect_servers(load_jsonc(base_profile))
+
+if isinstance(caller_data, dict):
+    out_obj = dict(caller_data)
+    out_obj.setdefault("$schema", "https://opencode.ai/config.json")
+    mcp_map = dict(out_obj.get("mcp")) if isinstance(out_obj.get("mcp"), dict) else {}
+else:
+    out_obj = {"$schema": "https://opencode.ai/config.json"}
+    mcp_map = {}
+
+for srv in discovered_servers:
+    if prof == "none" or srv not in allow_set:
+        mcp_map[srv] = {"enabled": False}
+
+out_obj["mcp"] = mcp_map
+
+tmp_path = target_file + ".tmp"
+with open(tmp_path, "w", encoding="utf-8") as f:
+    json.dump(out_obj, f, indent=2)
+    f.write("\n")
+os.replace(tmp_path, target_file)
+PY
+  then
     OPENCODE_PROFILE_PATH="$target_file"
     return 0
   fi
 
-  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
-  if [[ -f "$user_cfg" ]] && command -v jq >/dev/null 2>&1; then
-    jq --arg allowed "$allowed_csv" '
-      ($allowed | split(",") | map(gsub("^[[:space:]]+|[[:space:]]+$"; "")) | map(select(length > 0))) as $allow_list |
-      {
-        "$schema": "https://opencode.ai/config.json",
-        mcp: (
-          (.mcp // {}) | to_entries | map(
-            .key as $k |
-            if ($allow_list | index($k)) then
-              empty
-            else
-              {key: $k, value: {enabled: false}}
-            end
-          ) | from_entries
-        )
-      }
-    ' "$user_cfg" > "$target_file"
-  elif [[ -f "$base_profile" ]]; then
-    cp "$base_profile" "$target_file"
-  else
-    printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$target_file"
-  fi
+  printf '{\n  "$schema": "https://opencode.ai/config.json",\n  "mcp": {}\n}\n' > "$target_file"
   OPENCODE_PROFILE_PATH="$target_file"
 }
 resolve_opencode_mcp_profile
@@ -318,12 +384,12 @@ CODEX_PROFILE_PATH=''
 resolve_codex_mcp_profile() {
   local target_file="$LOG_DIR/codex-mcp-overrides.txt"
   local codex_cfg="${CODEX_CONFIG:-${CODEX_HOME:-$HOME/.codex}/config.toml}"
-  local base_profile="$SCRIPT_DIR/../profiles/opencode-minimal-profile.json"
+  local project_codex_cfg="$ROOT/.codex/config.toml"
   local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${CODEX_DELEGATE_MCP_PROFILE:-minimal}}}"
 
   if [[ "$prof" != "minimal" && "$prof" != "none" && "$prof" != "full" ]]; then
     [[ -f "$prof" ]] || die "Codex MCP profile file not found: $prof"
-    prof=$(cd "$(dirname "$prof")" && pwd)/$(basename "$prof")
+    prof=$(cd "$(dirname "$prof")" >/dev/null && pwd)/$(basename "$prof")
   fi
   CODEX_MCP_PROFILE="$prof"
 
@@ -333,38 +399,50 @@ resolve_codex_mcp_profile() {
     return 0
   fi
 
+  local cfg_files=()
+  [[ -f "$codex_cfg" ]] && cfg_files+=("$codex_cfg")
+  [[ -f "$project_codex_cfg" && "$project_codex_cfg" != "$codex_cfg" ]] && cfg_files+=("$project_codex_cfg")
+
+  local defined_servers=''
+  if [[ ${#cfg_files[@]} -gt 0 ]]; then
+    defined_servers=$(awk -F'[][]' '
+      /^[[:space:]]*\[mcp_servers\./ {
+        name = $2
+        sub(/^mcp_servers\./, "", name)
+        gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", name)
+        if (length(name) > 0 && !seen[name]++) print name
+      }
+    ' "${cfg_files[@]}" 2>/dev/null || true)
+  fi
+
   local servers=''
   if [[ "$prof" != "minimal" && "$prof" != "none" ]]; then
     CODEX_PROFILE_PATH="$prof"
+    local raw_disabled=''
     if [[ -f "$prof" ]]; then
       if command -v jq >/dev/null 2>&1 && jq -e '.mcp or .mcpServers' "$prof" >/dev/null 2>&1; then
-        servers=$(jq -r '(.mcp // .mcpServers // {}) | to_entries[] | select(.value.enabled == false) | .key' "$prof" 2>/dev/null || true)
+        raw_disabled=$(jq -r '(.mcp // .mcpServers // {}) | to_entries[] | select(.value.enabled == false) | .key' "$prof" 2>/dev/null || true)
       elif grep -q '\[mcp_servers\.' "$prof" 2>/dev/null; then
-        servers=$(awk -F'[][]' '
+        raw_disabled=$(awk -F'[][]' '
           /^[[:space:]]*\[/ { curr = "" }
-          /^[[:space:]]*\[mcp_servers\./ { split($2, a, "."); name = a[2]; gsub(/^"|"$/, "", name); curr = name }
+          /^[[:space:]]*\[mcp_servers\./ { name = $2; sub(/^mcp_servers\./, "", name); gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", name); curr = name }
           /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false/ { if (curr != "") { print curr; curr = "" } }
         ' "$prof" 2>/dev/null || true)
       fi
     fi
-  elif [[ "$prof" == "none" ]]; then
-    if [[ -f "$codex_cfg" ]]; then
-      servers=$(awk -F'[][]' '
-        /^[[:space:]]*\[mcp_servers\./ {
-          split($2, a, ".")
-          name = a[2]
-          gsub(/^"|"$/, "", name)
-          if (length(name) > 0 && !seen[name]++) print name
-        }
-      ' "$codex_cfg" 2>/dev/null || true)
-    elif [[ -f "$base_profile" ]] && command -v jq >/dev/null 2>&1; then
-      servers=$(jq -r '(.mcp // .mcpServers // {}) | keys[]' "$base_profile" 2>/dev/null || true)
+    if [[ -n "$raw_disabled" && -n "$defined_servers" ]]; then
+      servers=$(awk '
+        NR == FNR { if (length($0) > 0) def[$0] = 1; next }
+        length($0) > 0 && def[$0] && !seen[$0]++ { print $0 }
+      ' <(printf '%s\n' "$defined_servers") <(printf '%s\n' "$raw_disabled"))
     fi
+  elif [[ "$prof" == "none" ]]; then
+    servers="$defined_servers"
     CODEX_PROFILE_PATH="$target_file"
   else
     local allowed_csv="${DELEGATE_MCP_SERVERS:-${CODEX_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
-    if [[ -f "$codex_cfg" ]]; then
-      servers=$(awk -F'[][]' -v allowed="$allowed_csv" '
+    if [[ -n "$defined_servers" ]]; then
+      servers=$(awk -v allowed="$allowed_csv" '
         BEGIN {
           n = split(allowed, arr, ",")
           for (i = 1; i <= n; i++) {
@@ -372,20 +450,10 @@ resolve_codex_mcp_profile() {
             if (length(arr[i]) > 0) allow_map[arr[i]] = 1
           }
         }
-        /^[[:space:]]*\[mcp_servers\./ {
-          split($2, a, ".")
-          name = a[2]
-          gsub(/^"|"$/, "", name)
-          if (length(name) > 0 && !seen[name]++) {
-            if (!allow_map[name]) print name
-          }
+        length($0) > 0 && !seen[$0]++ {
+          if (!allow_map[$0]) print $0
         }
-      ' "$codex_cfg" 2>/dev/null || true)
-    elif [[ -f "$base_profile" ]] && command -v jq >/dev/null 2>&1; then
-      servers=$(jq --arg allowed "$allowed_csv" -r '
-        ($allowed | split(",") | map(gsub("^[[:space:]]+|[[:space:]]+$"; "")) | map(select(length > 0))) as $allow_list |
-        (.mcp // .mcpServers // {}) | keys[] | select(($allow_list | index(.)) | not)
-      ' "$base_profile" 2>/dev/null || true)
+      ' <<< "$defined_servers")
     fi
     CODEX_PROFILE_PATH="$target_file"
   fi
