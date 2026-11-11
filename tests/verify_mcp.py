@@ -8,6 +8,19 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 SERVER_NAME: str = "codebase-memory-mcp"
+EXPECTED_MINIMAL_SERVERS: frozenset[str] = frozenset(
+    {
+        "ai-memory",
+        "cclsp",
+        "codebase-memory-mcp",
+        "context7",
+        "fetch",
+        "git",
+        "repomix",
+        "semgrep",
+        "sequentialthinking",
+    }
+)
 EXPECTED_TOOLS: frozenset[str] = frozenset(
     {
         "check_index_coverage",
@@ -85,14 +98,11 @@ def verify_configs(require_minimal: bool = False) -> Path:
             for name, entry in codex_servers.items()
             if isinstance(entry, dict) and entry.get("enabled", True)
         }
-        assert "codebase-memory-mcp" in enabled_codex
-        assert "cclsp" in enabled_codex
-        assert "git" in enabled_codex
-        assert "ai-memory" in enabled_codex
-        assert "tailscale" not in enabled_codex
-        assert "cloudflare" not in enabled_codex
-        assert "docker" not in enabled_codex
-        assert len(enabled_codex) <= 12, f"Unexpectedly high enabled servers in Codex: {len(enabled_codex)}"
+        managed_enabled: frozenset[str] = frozenset(enabled_codex - {"node_repl"})
+        assert managed_enabled == EXPECTED_MINIMAL_SERVERS, (
+            f"Minimal profile mismatch. Missing: {sorted(EXPECTED_MINIMAL_SERVERS - managed_enabled)}, "
+            f"Unexpected: {sorted(managed_enabled - EXPECTED_MINIMAL_SERVERS)}"
+        )
 
     configs = [
         home / ".gemini/config/mcp_config.json",
