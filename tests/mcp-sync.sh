@@ -159,6 +159,98 @@ grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'ena
 grep -A 3 -F '[mcp_servers."chrome-devtools"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 3 -F '[mcp_servers."server-services-configs"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
+# Minimal profile: non-core servers are disabled by default in Codex
+grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."cloudflare"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."uptime-kuma"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+# Minimal profile: core servers are enabled in Codex (no enabled = false)
+if grep -A 4 -F '[mcp_servers."cclsp"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected cclsp to be enabled in minimal profile' >&2
+  exit 1
+fi
+if grep -A 4 -F '[mcp_servers."git"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected git to be enabled in minimal profile' >&2
+  exit 1
+fi
+if grep -A 4 -F '[mcp_servers."codebase-memory-mcp"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected codebase-memory-mcp to be enabled in minimal profile' >&2
+  exit 1
+fi
+if grep -A 4 -F '[mcp_servers."ai-memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected ai-memory to be enabled in minimal profile' >&2
+  exit 1
+fi
+
+# Codex MCP profile: Full profile enables non-core servers while preserving globally disabled servers
+CODEX_MCP_PROFILE=full sync_mcp_config
+if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected docker to be enabled in full profile' >&2
+  exit 1
+fi
+if grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected tailscale to be enabled in full profile' >&2
+  exit 1
+fi
+grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+# Codex MCP profile: Custom server allowlist via CODEX_MCP_SERVERS
+CODEX_MCP_SERVERS="cclsp,docker" sync_mcp_config
+if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected docker to be enabled in custom servers' >&2
+  exit 1
+fi
+if grep -A 4 -F '[mcp_servers."cclsp"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected cclsp to be enabled in custom servers' >&2
+  exit 1
+fi
+grep -A 4 -F '[mcp_servers."git"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+unset CODEX_MCP_SERVERS
+
+# Codex MCP profile: CLI arguments validation
+(main --configs-only --codex-profile full)
+if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected docker to be enabled via --codex-profile full' >&2
+  exit 1
+fi
+
+(main --configs-only --codex-servers=cclsp,docker)
+if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected docker to be enabled via --codex-servers=' >&2
+  exit 1
+fi
+grep -A 4 -F '[mcp_servers."git"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+# Codex MCP profile: Missing CLI option arguments fail cleanly
+if (main --configs-only --codex-profile 2>/dev/null); then
+  echo 'Expected missing --codex-profile argument to fail' >&2
+  exit 1
+fi
+if (main --configs-only --codex-profile --configs-only 2>/dev/null); then
+  echo 'Expected swallowed --codex-profile flag to fail' >&2
+  exit 1
+fi
+if (main --configs-only --codex-servers 2>/dev/null); then
+  echo 'Expected missing --codex-servers argument to fail' >&2
+  exit 1
+fi
+if (main --configs-only --codex-servers --configs-only 2>/dev/null); then
+  echo 'Expected swallowed --codex-servers flag to fail' >&2
+  exit 1
+fi
+
+# Codex MCP profile: Unrecognized profile warns and falls back to minimal
+warn_output="$(CODEX_MCP_PROFILE=unknown sync_mcp_config 2>&1)"
+[[ "${warn_output}" == *"Warning: Unrecognized CODEX_MCP_PROFILE \"unknown\", defaulting to \"minimal\""* ]]
+grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+# Restore default minimal profile
+unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS
+sync_mcp_config
+grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
 # Fast-path stamp check for ai-memory
 ai_stamp="${LOCAL_BIN_DIR}/.ai-memory.version"
 mkdir -p "${LOCAL_BIN_DIR}"
@@ -213,6 +305,7 @@ printf 'colliding codex skill file\n' >"${CODEX_DIR}/skills/shared-skill"
 mkdir -p "${OPENCODE_DIR}/plugins"
 mkdir -p "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins"
 printf 'retired managed plugin\n' >"${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/copilot-student-models.ts"
+rm -f "${OPENCODE_DIR}/AGENTS.md"
 printf 'preexisting backup\n' >"${OPENCODE_DIR}/AGENTS.md.bak"
 printf 'old opencode instructions\n' >"${OPENCODE_DIR}/AGENTS.md"
 ln -s "${repo_dir}/dotfiles/opencode/plugins/copilot-student-models.ts" "${OPENCODE_DIR}/plugins/copilot-student-models.ts"
@@ -220,6 +313,7 @@ ln -s "${HOME}/external-plugin.ts" "${OPENCODE_DIR}/plugins/user-plugin.ts"
 ln -s "${test_tmp_dir}/old-repo/dotfiles/opencode/plugins/user-plugin.ts" "${OPENCODE_DIR}/plugins/user-dangling-plugin.ts"
 
 mkdir -p "${CODEX_DIR}"
+rm -f "${CODEX_DIR}/AGENTS.md"
 printf 'preexisting codex backup\n' >"${CODEX_DIR}/AGENTS.md.bak"
 printf 'old codex instructions\n' >"${CODEX_DIR}/AGENTS.md"
 

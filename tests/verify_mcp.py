@@ -48,6 +48,24 @@ def verify_configs() -> Path:
     assert server_entry(agy, "mcpServers") == expected
     assert server_entry(codex, "mcp_servers") == expected
 
+    # Verify Codex CLI has lean core servers enabled by default and non-core disabled
+    assert isinstance(codex, dict)
+    codex_servers: object = codex.get("mcp_servers")
+    assert isinstance(codex_servers, dict)
+    enabled_codex: set[str] = {
+        name
+        for name, entry in codex_servers.items()
+        if isinstance(entry, dict) and entry.get("enabled", True)
+    }
+    assert "codebase-memory-mcp" in enabled_codex
+    assert "cclsp" in enabled_codex
+    assert "git" in enabled_codex
+    assert "ai-memory" in enabled_codex
+    assert "tailscale" not in enabled_codex
+    assert "cloudflare" not in enabled_codex
+    assert "docker" not in enabled_codex
+    assert len(enabled_codex) <= 12, f"Unexpectedly high enabled servers in Codex: {len(enabled_codex)}"
+
     configs = [
         home / ".gemini/config/mcp_config.json",
         home / ".codex/config.toml",
