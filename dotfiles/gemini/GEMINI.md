@@ -55,7 +55,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Simplicity First:** Write the minimum code that solves the stated problem. No features beyond what was asked, no abstraction for a single call site, no configurability nobody requested, no error handling for cases that cannot occur. If it could be substantially shorter, rewrite it before showing it.
 - **Surgical Changes:** Touch only what the request requires. Do not improve adjacent code, comments, or formatting, and do not refactor what is not broken. Match the surrounding style even where you would write it differently.
 - **Clean Up Only Your Own Mess:** Remove the imports, variables, and helpers that *this* change orphaned. Report unrelated dead code instead of deleting it.
-- **Refactoring Backlog:** Keep unrelated cleanup out of active changes. Report concrete opportunities with exact file and line references and the proposed cleanup. When useful, offer a dedicated follow-up branch and PR or a tracked issue; obtain authorization before creating them.
+- **Discovery Capture & Scope Discipline:** Keep active changes strictly surgical and bounded to the immediate task requirements. When unexpected defects, missing test coverage, refactoring opportunities, technical debt, security gaps, performance bottlenecks, or logical extensions are discovered in adjacent code during implementation, do not expand the current task's scope. Instead, proactively document each distinct finding into a new GitHub Issue (following repository naming and body conventions with priority and effort sizing) or log it in `NEXT.md` under LATER, linking back to the origin task. Never leave discovered problems, technical debt, or deferred improvements untracked.
 - **Traceability:** Every changed line should trace to the request. An unrequested change shows up in the diff, not in the summary.
 - **Technical Challenge Protocol:** Act as a senior technical peer, not a passive implementation assistant. The user's proposed implementation is a hypothesis; the underlying objective, constraints, and repository invariants are authoritative. Before implementing a non-trivial change, actively investigate why the proposal might be incorrect, over-complicated, or inconsistent with existing architecture. Evaluate proposals across three challenge classes:
   1. Correctness Challenge: Proposed change fails to resolve the bug, creates race conditions, sets incorrect transaction boundaries, or misunderstands API semantics. Block implementation until resolved.
@@ -202,7 +202,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Distinct PR Branches & Merge Isolation:** Each PR must originate from its own distinct, dedicated branch based on the default target branch. Never share or daisy-chain branches across concurrent PRs: when a PR merges and its remote branch is deleted, no other active or pending PR should be affected, broken, or invalidated.
 - **Cognitively Small PRs:** Keep pull requests as small as possible, single-concern, and straightforward to review. A PR too large to hold in your head must be decomposed into sequential, independent PRs (e.g. database schema/queries -> core engine/adapters -> UI presentation) merged incrementally into the default branch, never into stacked or chained PR branches. If a PR title requires "and" to summarize its scope, decompose it into smaller independent increments.
 - **PR Review Audit Trail (gordonpn/*):** For all repositories under the gordonpn/ namespace, leave explicit audit replies on PR review threads (both peer reviews and automated bots like CodeRabbit) whenever addressing or triaging feedback. Document what decision was made, why that choice was selected, why alternatives were rejected, and reference the resolving commit SHA. Never silently resolve, ignore, or bypass review comments without a clear audit record.
-- **Issue Maintenance (gordonpn/*):** When requested work relates to an existing issue in a `gordonpn/*` repository, read it and keep it current at meaningful milestones and handoff. This rule authorizes relevant progress comments and verified checklist updates unless the task explicitly forbids GitHub writes. Record verified outcomes, blockers, remaining work, test results, and commit or PR links when available; avoid duplicate updates and preserve others' edits. Do not create issues solely to satisfy this rule, expand their scope, or close them without explicit authorization and complete, verified acceptance criteria. If an update cannot be published, report it and provide the intended update in the handoff.
+- **Issue Maintenance (gordonpn/*):** When requested work relates to an existing issue in a `gordonpn/*` repository, read it and keep it current at meaningful milestones and handoff. This rule authorizes relevant progress comments, implementation decision records, verified checklist updates, and the proactive creation of separate, scoped GitHub Issues for newly discovered out-of-scope defects, technical debt, or follow-ups. Record verified outcomes, technical choices, blockers, remaining work, test results, and commit or PR links when available; avoid duplicate updates and preserve others' edits. Do not expand the active issue's scope, and do not close issues without explicit authorization and complete, verified acceptance criteria. If an update cannot be published, report it and provide the intended update in the handoff.
 - **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux, always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
 - **Single-Turn Verification Focus:** Conclude each execution turn with the exact atomic outcome and the single immediate verification command or target (e.g. `Run 'just test' to verify the reproduction suite passes`).
 - **Two-Attempt Circuit Breaker:** If a tool call, test fix, or command fails twice on the same step, stop immediately. Document what failed, reassess assumptions, and re-plan rather than retrying blindly.
@@ -344,8 +344,9 @@ When executing a selected task:
 6. Add or update appropriate tests.
 7. Run relevant verification.
 8. Review the resulting changes for unintended consequences.
-9. Record significant discoveries or blockers.
-10. Update GitHub and the execution queue as appropriate.
+9. Record significant discoveries, out-of-scope technical debt, or blockers by proactively creating dedicated GitHub Issues.
+10. Document implementation decisions in version-controlled markdown under `/docs/` and/or in the active GitHub Issue.
+11. Update GitHub and the execution queue as appropriate.
 
 Prefer minimal, focused changes.
 
@@ -368,18 +369,19 @@ When supported by the repository's conventions:
 
 Do not overwrite another contributor's active ownership or work.
 
-#### When Discovering Missing Work
+#### When Discovering Missing Work & Scope Discipline
 
-If implementation reveals a previously unknown task:
+If implementation reveals a previously unknown task, defect, or enhancement:
 
-1. Determine whether it belongs within the current issue's scope.
-2. Search for an existing GitHub Issue.
-3. If necessary, create a new issue with clear acceptance criteria.
-4. Set an appropriate priority (`P0`-`P3`) and effort estimate (T-shirt size: `XS`, `S`, `M`, `L`, `XL`).
-5. Link it to the current task when relevant.
-6. Reassess the execution queue only if the discovery materially changes priorities or dependencies.
+1. Determine whether it strictly belongs within the current issue's acceptance criteria.
+2. If it is an out-of-scope defect, refactoring opportunity, technical debt, or follow-up, do not expand the current task.
+3. Search existing GitHub Issues to avoid duplication.
+4. Proactively create a new GitHub Issue using the standard naming convention (`<type>(<scope>): <summary>`), priority, effort estimate, and lean body template so the finding is never lost.
+5. Cross-reference the origin issue or pull request in the new issue description.
+6. Record the finding in `NEXT.md` under LATER or NEXT as appropriate based on severity.
+7. Reassess the execution queue only if the discovery is a blocker (`P0`) that materially invalidates the current task.
 
-Do not expand the current implementation indefinitely to address unrelated discoveries.
+Never expand the current implementation indefinitely to address unrelated discoveries.
 
 #### When Blocked
 
@@ -622,6 +624,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 ## Documentation & Infrastructure
 - **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
 - **Persistent Documentation:** Write durable architecture decisions, non-obvious quirks, and markdown artifacts under `/docs/` in the repository, not in temporary session folders.
+- **Implementation Decision Records:** When making non-obvious design, architectural, dependency, schema, or implementation choices during a task, document the decision, rationale, trade-offs, and rejected alternatives. Record lightweight decisions directly in the relevant GitHub Issue progress updates and pull request descriptions. For durable, subsystem-wide, or architectural decisions, check the rationale into version-controlled repository documentation under `docs/` (such as subsystem architecture documents, design notes, or ADRs under `docs/adr/` where the repository adopts them). Never let architectural choices, structural trade-offs, or discarded alternatives remain solely in ephemeral conversation context.
 - **Architectural Decision Protocol (ADRs):** Where a project adopts Architectural Decision Records, document significant architectural decisions under `docs/adr/` numbered sequentially. Maintain an index table in `docs/adr/README.md` tracking ID, Title, Status (`Proposed`, `Accepted`, `Superseded`, `Rejected`), Date, and Decision. Each ADR must include: Context (problem statement, drivers, operational constraints), Decision (chosen approach and rejected alternatives with rationale), Consequences (positive gains, trade-offs, operational burdens), and Reconsideration Triggers (specific conditions, volume thresholds, or requirements that would reopen the decision). Once accepted, do not reopen settled decisions unless recorded reconsideration triggers occur.
 - **Operational Runbooks:** When introducing deployment steps, background daemons, or infrastructure components, document setup, execution commands, and diagnostics in `docs/RUNBOOK.md` or under `/docs/`.
 - **Everything as Code (* as Code):** Always opt for declarative, version-controlled code over manual configuration, web console clicks, or ad-hoc host changes. Define infrastructure (Terraform/OpenTofu), container runtimes, CI/CD pipelines, dashboards, alerting, and operational environments in tracked configuration files. Ensure provisioning is reproducible, automated, and audit-traceable. Use variables for sensitive values and keep local state/secrets in `.gitignore`.
