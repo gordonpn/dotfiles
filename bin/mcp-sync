@@ -588,6 +588,8 @@ sync_mcp_config() {
   export SONARQUBE_TOKEN="${sonar_token}"
   export SONARQUBE_URL="${sonar_url}"
   export SONARQUBE_ORG="${sonar_org}"
+  export CODEX_MCP_PROFILE="${CODEX_MCP_PROFILE:-minimal}"
+  export CODEX_MCP_SERVERS="${CODEX_MCP_SERVERS:-}"
 
   python3 -c "
 import json, os, re
@@ -663,6 +665,35 @@ elif os.path.exists(codex_template):
     with open(codex_template, 'r') as f:
         codex_content = f.read()
 
+codex_profile = os.environ.get('CODEX_MCP_PROFILE', 'minimal').strip().lower()
+custom_servers_env = os.environ.get('CODEX_MCP_SERVERS', '').strip()
+
+DEFAULT_CODEX_CORE_SERVERS = {
+    'ai-memory',
+    'cclsp',
+    'codebase-memory-mcp',
+    'context7',
+    'fetch',
+    'git',
+    'repomix',
+    'semgrep',
+    'sequentialthinking',
+}
+
+if codex_profile not in ('minimal', 'full'):
+    import sys
+    print(f'Warning: Unrecognized CODEX_MCP_PROFILE \"{codex_profile}\", defaulting to \"minimal\"', file=sys.stderr)
+    codex_profile = 'minimal'
+
+if custom_servers_env:
+    allowed_codex_servers = {
+        s.strip() for s in custom_servers_env.split(',') if s.strip()
+    }
+elif codex_profile == 'full':
+    allowed_codex_servers = None
+else:
+    allowed_codex_servers = DEFAULT_CODEX_CORE_SERVERS
+
 def toml_str(val):
     escaped = (
         str(val)
@@ -678,14 +709,21 @@ toml_lines = ['\n# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===']
 for name, s in data.get('mcpServers', {}).items():
     cmd = s.get('command', '')
     args = s.get('args', [])
-    disabled = s.get('disabled', False)
+    globally_disabled = s.get('disabled', False)
     env = s.get('env', {})
+
+    if globally_disabled:
+        codex_enabled = False
+    elif allowed_codex_servers is not None:
+        codex_enabled = name in allowed_codex_servers
+    else:
+        codex_enabled = True
 
     toml_lines.append(f'[mcp_servers.\"{name}\"]')
     toml_lines.append(f'command = {toml_str(cmd)}')
     args_str = ', '.join(toml_str(a) for a in args)
     toml_lines.append(f'args = [{args_str}]')
-    if disabled:
+    if not codex_enabled:
         toml_lines.append('enabled = false')
 
     if env:
@@ -706,7 +744,12 @@ for s_name in data.get('mcpServers', {}):
 
 new_content = cleaned.rstrip() + '\n' + managed_block
 safe_write_config(codex_config, new_content)
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config}')
+enabled_count = sum(
+    1 for name, s in data.get('mcpServers', {}).items()
+    if not s.get('disabled', False) and (allowed_codex_servers is None or name in allowed_codex_servers)
+)
+profile_label = f'custom ({len(allowed_codex_servers)} servers)' if custom_servers_env else codex_profile
+print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config} ({enabled_count} enabled, profile: {profile_label})')
 "
 }
 
@@ -988,6 +1031,41 @@ main() {
         configs_only=1
         codebase_memory_only=1
         shift
+        ;;
+      --codex-profile=*)
+        export CODEX_MCP_PROFILE="${1#*=}"
+        shift
+        ;;
+      --codex-profile)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          echo "Error: --codex-profile requires a profile argument ('minimal' or 'full')" >&2
+          exit 1
+        fi
+        export CODEX_MCP_PROFILE="$2"
+        shift 2
+        ;;
+      --codex-servers=*)
+        export CODEX_MCP_SERVERS="${1#*=}"
+        shift
+        ;;
+      --codex-servers)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          echo "Error: --codex-servers requires a comma-separated list of servers" >&2
+          exit 1
+        fi
+        export CODEX_MCP_SERVERS="$2"
+        shift 2
+        ;;
+      -h|--help)
+        echo "Usage: mcp-sync [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --configs-only, --mcp-only    Synchronize configurations and skills without downloading binaries"
+        echo "  --codebase-memory-only        Run only codebase-memory-mcp checks and configuration updates"
+        echo "  --codex-profile <PROFILE>     Codex MCP profile: 'minimal' (default) or 'full'"
+        echo "  --codex-servers <SERVERS>     Comma-separated list of MCP servers to enable in Codex"
+        echo "  -h, --help                    Show this help message and exit"
+        exit 0
         ;;
       *)
         shift

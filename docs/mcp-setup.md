@@ -101,11 +101,79 @@ just setup-codebase-memory
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` and `~/.codex/config.toml` (37 total servers).
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 37 servers, lazy-loaded on demand by Antigravity CLI) and `~/.codex/config.toml` (lean minimal profile by default with 9 core coding servers enabled; 28 heavy, homelab, and database servers defined with `enabled = false`). Profiles can be configured via `--codex-profile` or `CODEX_MCP_PROFILE`.
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories (skipping redundant links in `~/.config/opencode/skills` for skills present in `~/.agents/skills` to eliminate duplicate OpenCode discovery warnings). The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
    Antigravity CLI delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`: Codex CLI runs first, falling back on classified provider, quota, rate-limit, or model-availability failures to OpenCode free models (`opencode/deepseek-v4.1-flash-free` high, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`), then to GitHub Copilot Student (`--model auto`). Codex as orchestrator delegates sequentially across OpenCode free models and GitHub Copilot Student (`--model auto`). OpenCode free models run anonymously without requiring an account or login. Authentication and provider-initialization errors (such as `ProviderInitError` or HTTP 403) are hard stops across all candidates with actionable credential/configuration guidance (`codex login`, `copilot login`, or OpenCode provider configuration). Automatic delegation requires `agents.delegationAllowed=true`.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
 10. **Synchronizes Agent Preferences & Status Tools:** Symlinks `dotfiles/gemini/antigravity-cli/settings.json` and `dotfiles/gemini/settings.json` to their respective home directory locations (`~/.gemini/antigravity-cli/settings.json` and `~/.gemini/settings.json`), symlinks `dotfiles/gemini/antigravity-cli/title.sh` to `~/.gemini/antigravity-cli/title.sh`, and links `bin/agy-statusline` to `~/.local/bin/agy-statusline`.
+
+---
+
+## Codex CLI Minimal MCP Profile & Performance Tuning
+
+Codex CLI eagerly spawns all enabled MCP servers and advertises their full tool schemas to the model on turn 0. Enabling all 33 servers exposed **593 tools** (~643 KiB of JSON schemas, ~160k tokens), which exceeded the 128-tool limit on OpenAI and Copilot chat completion endpoints, triggered aggressive auto-compaction loops on 64k models, and generated cold-start stderr errors from offline homelab services.
+
+To optimize interactive and CLI workflows, `bin/mcp-sync` configures Codex with a lean **minimal profile** by default while leaving Antigravity CLI (which lazy-loads tools from disk) and OpenCode unaffected.
+
+### Default Minimal Profile
+
+Only 9 core coding and memory servers are enabled by default in `~/.codex/config.toml`:
+
+| Server Name | Tools | Role |
+| :--- | :---: | :--- |
+| **`ai-memory`** | 24 | Unified cross-agent memory, session tracking, handoffs, and durable knowledge base |
+| **`cclsp`** | 12 | Multi-language LSP router for local language servers |
+| **`codebase-memory-mcp`** | 17 | Codebase indexing, call graphs, architecture queries, and ADR management |
+| **`context7`** | 2 | Real-time library documentation and code reference search |
+| **`fetch`** | 1 | Web requests and HTML-to-markdown conversion |
+| **`git`** | 14 | Local repository inspection, branch, commit, and diff operations |
+| **`repomix`** | 6 | Repository packing and output analysis |
+| **`semgrep`** | 7 | Security, AST search, and rule scanning |
+| **`sequentialthinking`**| 1 | Multi-step reasoning scratchpad |
+
+All other 28 servers remain fully defined in `~/.codex/config.toml` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false`.
+
+### Measured Performance Reduction
+
+| Metric | Before (Full Profile) | After (Minimal Profile) | Change |
+| :--- | :---: | :---: | :---: |
+| **Enabled MCP Servers** | 33 | 9 (+ internal `node_repl`) | -72.7% |
+| **Model-Visible Tools** | 593 | 84 | -85.8% |
+| **Tool Schema JSON Size** | 642.9 KiB | 116.6 KiB | -81.9% |
+| **Tool Cap Compliance** | Exceeded 128-tool limit (4.6x) | 84 tools (comfortably below 128) | Compliant |
+| **Process Startup Errors** | Uptime Kuma auth / offline warnings | Zero startup errors or stderr noise | Clean |
+| **Tool Discovery Latency** | High | 0.042s min / 0.085s avg | Fast |
+
+### Escape Hatches & Overrides
+
+When additional MCP servers are needed for specific tasks, multiple tiers of overrides are available:
+
+1. **One-Off Session Override (Codex CLI):**
+   Pass `-c mcp_servers.<name>.enabled=true` when launching Codex. Because the server definition is already in `~/.codex/config.toml`, only the enablement flag is required:
+   ```bash
+   # Enable Docker for a container debugging session:
+   codex -c mcp_servers.docker.enabled=true
+
+   # Enable multiple servers:
+   codex -c mcp_servers.docker.enabled=true -c mcp_servers.github.enabled=true
+   ```
+
+2. **Full Profile via `mcp-sync`:**
+   To enable all configured MCP servers across Codex:
+   ```bash
+   mcp-sync --codex-profile full
+   # Or set via environment variable:
+   CODEX_MCP_PROFILE=full mcp-sync --configs-only
+   ```
+
+3. **Custom Server Allowlist:**
+   To configure a specific subset of enabled servers:
+   ```bash
+   mcp-sync --codex-servers "cclsp,docker,github,context7"
+   # Or set via environment variable:
+   export CODEX_MCP_SERVERS="cclsp,docker,github,context7"
+   mcp-sync --configs-only
+   ```
 
 ---
 
