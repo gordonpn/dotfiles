@@ -901,6 +901,7 @@ sync_skills_and_instructions() {
   fi
 
   local valid_skills=" "
+  local opencode_valid_skills=" "
   for s_dir in "${search_dirs[@]}"; do
     if [[ -d "${s_dir}" ]]; then
       for skill_path in "${s_dir}"/*; do
@@ -915,7 +916,35 @@ sync_skills_and_instructions() {
 
           # Ensure OpenCode discovers skills across all search dirs
           if [[ "${opencode_enabled}" -eq 1 ]]; then
-            link_skill_into "${OPENCODE_DIR}/skills" "${skill_name}" "${skill_path}" "opencode-${skill_name}"
+            # OpenCode v1.19+ natively scans ~/.agents/skills. Skip linking when
+            # a valid skill is already present in ~/.agents/skills to avoid duplicate warnings.
+            if [[ ! -f "${HOME}/.agents/skills/${skill_name}/SKILL.md" ]]; then
+              link_skill_into "${OPENCODE_DIR}/skills" "${skill_name}" "${skill_path}" "opencode-${skill_name}"
+              opencode_valid_skills="${opencode_valid_skills}${skill_name} "
+            else
+              local opencode_dest="${OPENCODE_DIR}/skills/${skill_name}"
+              if [[ -e "${opencode_dest}" || -L "${opencode_dest}" ]]; then
+                local is_managed_link=0
+                if [[ -L "${opencode_dest}" ]]; then
+                  local link_target
+                  link_target="$(readlink "${opencode_dest}" 2>/dev/null || true)"
+                  local s_root
+                  for s_root in "${search_dirs[@]}"; do
+                    if [[ "${link_target}" == "${s_root}/"* ]]; then
+                      is_managed_link=1
+                      break
+                    fi
+                  done
+                fi
+                if [[ "${is_managed_link}" -eq 0 ]]; then
+                  local backup_root="${GEMINI_DIR}/skill-backups"
+                  mkdir -p "${backup_root}"
+                  local s_bak
+                  s_bak="${backup_root}/opencode-${skill_name}.bak.$(date +%s)"
+                  backup_with_collision_avoidance "${opencode_dest}" "${s_bak}"
+                fi
+              fi
+            fi
           fi
 
           # Ensure Antigravity CLI discovers skills managed in ~/.agents/skills
@@ -934,7 +963,7 @@ sync_skills_and_instructions() {
   # Prune managed/dangling skill symlinks across all agent harnesses
   prune_managed_skill_symlinks "${target_root}" "${valid_skills}" "${search_dirs[@]}"
   prune_managed_skill_symlinks "${GEMINI_CONFIG_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
-  prune_managed_skill_symlinks "${OPENCODE_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
+  prune_managed_skill_symlinks "${OPENCODE_DIR}/skills" "${opencode_valid_skills}" "${search_dirs[@]}"
   echo "Synchronized shared skills and AGENTS.md instructions across agents"
 }
 

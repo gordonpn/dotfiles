@@ -174,8 +174,15 @@ mkdir -p "${HOME}/.local/share/cc-thinking-skills/skills/thinking-model-router"
 touch "${HOME}/.local/share/cc-thinking-skills/skills/thinking-model-router/SKILL.md"
 mkdir -p "${HOME}/.agents/skills/shared-skill"
 touch "${HOME}/.agents/skills/shared-skill/SKILL.md"
+mkdir -p "${HOME}/.agents/skills/shared-dir-skill"
+touch "${HOME}/.agents/skills/shared-dir-skill/SKILL.md"
 mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-skill"
 touch "${GEMINI_CONFIG_DIR}/skills/gemini-skill/SKILL.md"
+mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill"
+touch "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill/SKILL.md"
+mkdir -p "${HOME}/.agents/skills/incomplete-shared-skill"
+mkdir -p "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill"
+touch "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill/SKILL.md"
 
 # Directly exercise the collision suffix loop in backup_with_collision_avoidance
 printf 'existing\n' >"${test_tmp_dir}/collide.bak"
@@ -188,8 +195,12 @@ mkdir -p "${OPENCODE_DIR}/skills/manual-skill"
 touch "${OPENCODE_DIR}/skills/manual-skill/SKILL.md"
 
 # Colliding skill directory in OpenCode to verify directory collision backup
-mkdir -p "${OPENCODE_DIR}/skills/shared-skill"
-printf 'colliding opencode skill\n' >"${OPENCODE_DIR}/skills/shared-skill/collision.txt"
+mkdir -p "${OPENCODE_DIR}/skills/gemini-dir-skill"
+printf 'colliding opencode skill\n' >"${OPENCODE_DIR}/skills/gemini-dir-skill/collision.txt"
+
+# Colliding skill directory in OpenCode for shared skill to verify backup without redundant link
+mkdir -p "${OPENCODE_DIR}/skills/shared-dir-skill"
+printf 'colliding shared opencode skill\n' >"${OPENCODE_DIR}/skills/shared-dir-skill/collision.txt"
 
 # Colliding custom symlink in OpenCode to verify symlink collision backup
 ln -s "${HOME}/external-skill" "${OPENCODE_DIR}/skills/gemini-skill"
@@ -220,6 +231,9 @@ ln -s "${HOME}/.agents/skills/removed-opencode-skill" "${OPENCODE_DIR}/skills/st
 
 # Managed symlink pointing into search_dirs with obsolete/renamed name to verify pruning
 ln -s "${HOME}/.agents/skills/shared-skill" "${OPENCODE_DIR}/skills/renamed-stale-skill"
+
+# Pre-existing redundant symlink in OpenCode pointing to skill in ~/.agents/skills to verify pruning
+ln -s "${HOME}/.agents/skills/shared-skill" "${OPENCODE_DIR}/skills/shared-skill"
 
 # Custom user symlinks pointing outside search_dirs to verify they are preserved
 mkdir -p "${HOME}/external-skill"
@@ -256,10 +270,15 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 
 [[ "$(readlink "${CODEX_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
-[[ "$(readlink "${OPENCODE_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
+[[ ! -e "${OPENCODE_DIR}/skills/shared-skill" && ! -L "${OPENCODE_DIR}/skills/shared-skill" ]]
+[[ ! -e "${OPENCODE_DIR}/skills/shared-dir-skill" && ! -L "${OPENCODE_DIR}/skills/shared-dir-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
-[[ "$(readlink "${OPENCODE_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
+[[ "$(readlink "${OPENCODE_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
+[[ "$(readlink "${OPENCODE_DIR}/skills/incomplete-shared-skill")" == "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/incomplete-shared-skill")" == "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill" ]]
+[[ ! -e "${OPENCODE_DIR}/skills/thinking-model-router" && ! -L "${OPENCODE_DIR}/skills/thinking-model-router" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 
@@ -277,9 +296,14 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ -d "${OPENCODE_DIR}/skills/manual-skill" && ! -L "${OPENCODE_DIR}/skills/manual-skill" ]]
 
 # Colliding skill directory in OpenCode was backed up and preserved
-opencode_skill_backups=("${GEMINI_DIR}/skill-backups/opencode-shared-skill.bak."*)
+opencode_skill_backups=("${GEMINI_DIR}/skill-backups/opencode-gemini-dir-skill.bak."*)
 [[ ${#opencode_skill_backups[@]} -ge 1 && -d "${opencode_skill_backups[0]}" ]]
 [[ -f "${opencode_skill_backups[0]}/collision.txt" ]]
+
+# Colliding skill directory for shared skill in OpenCode was backed up without creating redundant link
+opencode_shared_dir_backups=("${GEMINI_DIR}/skill-backups/opencode-shared-dir-skill.bak."*)
+[[ ${#opencode_shared_dir_backups[@]} -ge 1 && -d "${opencode_shared_dir_backups[0]}" ]]
+[[ -f "${opencode_shared_dir_backups[0]}/collision.txt" ]]
 
 # Colliding skill symlink in OpenCode was backed up and preserved
 opencode_symlink_backups=("${GEMINI_DIR}/skill-backups/opencode-gemini-skill.bak."*)
@@ -314,6 +338,12 @@ backup_count_before=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 sync_skills_and_instructions
 backup_count_after=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 [[ "${backup_count_before}" -eq "${backup_count_after}" ]]
+
+# Verify OpenCode startup emits zero duplicate skill warnings when available
+if command -v opencode >/dev/null 2>&1; then
+  opencode_output="$(opencode debug skill --print-logs --log-level WARN 2>&1)"
+  [[ ! "${opencode_output}" == *'message="duplicate skill name"'* ]]
+fi
 
 # Symlinks whose targets share the retired plugin suffix outside REPO_DIR are preserved as user-owned links.
 (
