@@ -146,8 +146,9 @@ ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-brid
 get_secret() { printf ''; }
 gh() { return 1; }
 
+unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS
 sync_mcp_config
-uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" --configs-only
+uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" --configs-only --require-minimal
 
 [[ "$(jq -r '.mcpServers["ai-memory"].command' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "${HOME}/.local/bin/ai-memory" ]]
 [[ "$(jq -r '.mcpServers["memory"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
@@ -185,10 +186,12 @@ fi
 
 # Codex MCP profile: Full profile enables non-core servers while preserving globally disabled servers
 CODEX_MCP_PROFILE=full sync_mcp_config
+grep -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected docker to be enabled in full profile' >&2
   exit 1
 fi
+grep -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected tailscale to be enabled in full profile' >&2
   exit 1
@@ -197,10 +200,12 @@ grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'ena
 
 # Codex MCP profile: Custom server allowlist via CODEX_MCP_SERVERS
 CODEX_MCP_SERVERS="cclsp,docker" sync_mcp_config
+grep -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected docker to be enabled in custom servers' >&2
   exit 1
 fi
+grep -F '[mcp_servers."cclsp"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."cclsp"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected cclsp to be enabled in custom servers' >&2
   exit 1
@@ -211,12 +216,14 @@ unset CODEX_MCP_SERVERS
 
 # Codex MCP profile: CLI arguments validation
 (main --configs-only --codex-profile full)
+grep -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected docker to be enabled via --codex-profile full' >&2
   exit 1
 fi
 
 (main --configs-only --codex-servers=cclsp,docker)
+grep -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected docker to be enabled via --codex-servers=' >&2
   exit 1

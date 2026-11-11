@@ -32,13 +32,36 @@ EXPECTED_TOOLS: frozenset[str] = frozenset(
 
 
 def server_entry(config: object, section_name: str) -> object:
+    """Extract server entry from a configuration dictionary section.
+
+    Args:
+        config: Configuration dictionary object.
+        section_name: Name of the configuration section.
+
+    Returns:
+        The server entry object if present, or None.
+
+    Raises:
+        AssertionError: If config or the requested section is not a dictionary.
+    """
     assert isinstance(config, dict), "Configuration must be an object"
     section: object = config.get(section_name)
     assert isinstance(section, dict), f"Missing {section_name} section"
     return section.get(SERVER_NAME)
 
 
-def verify_configs() -> Path:
+def verify_configs(require_minimal: bool = False) -> Path:
+    """Validate client configuration files, permissions, and server enablement.
+
+    Args:
+        require_minimal: Whether to assert strict adherence to the minimal profile.
+
+    Returns:
+        Path to the codebase-memory-mcp executable.
+
+    Raises:
+        AssertionError: If configurations, permissions, or server assertions fail.
+    """
     home = Path.home()
     executable = home / ".local/share/codebase-memory-mcp/codebase-memory-mcp"
     agy: object = json.loads((home / ".gemini/config/mcp_config.json").read_text())
@@ -48,23 +71,28 @@ def verify_configs() -> Path:
     assert server_entry(agy, "mcpServers") == expected
     assert server_entry(codex, "mcp_servers") == expected
 
-    # Verify Codex CLI has lean core servers enabled by default and non-core disabled
+    # Verify codebase-memory-mcp is present and enabled in Codex
     assert isinstance(codex, dict)
     codex_servers: object = codex.get("mcp_servers")
     assert isinstance(codex_servers, dict)
-    enabled_codex: set[str] = {
-        name
-        for name, entry in codex_servers.items()
-        if isinstance(entry, dict) and entry.get("enabled", True)
-    }
-    assert "codebase-memory-mcp" in enabled_codex
-    assert "cclsp" in enabled_codex
-    assert "git" in enabled_codex
-    assert "ai-memory" in enabled_codex
-    assert "tailscale" not in enabled_codex
-    assert "cloudflare" not in enabled_codex
-    assert "docker" not in enabled_codex
-    assert len(enabled_codex) <= 12, f"Unexpectedly high enabled servers in Codex: {len(enabled_codex)}"
+    cbm = codex_servers.get(SERVER_NAME)
+    assert isinstance(cbm, dict) and cbm.get("enabled", True), f"{SERVER_NAME} must be enabled in Codex"
+
+    # Verify minimal profile expectations when explicitly requested
+    if require_minimal:
+        enabled_codex: set[str] = {
+            name
+            for name, entry in codex_servers.items()
+            if isinstance(entry, dict) and entry.get("enabled", True)
+        }
+        assert "codebase-memory-mcp" in enabled_codex
+        assert "cclsp" in enabled_codex
+        assert "git" in enabled_codex
+        assert "ai-memory" in enabled_codex
+        assert "tailscale" not in enabled_codex
+        assert "cloudflare" not in enabled_codex
+        assert "docker" not in enabled_codex
+        assert len(enabled_codex) <= 12, f"Unexpectedly high enabled servers in Codex: {len(enabled_codex)}"
 
     configs = [
         home / ".gemini/config/mcp_config.json",
@@ -81,6 +109,14 @@ def verify_configs() -> Path:
 
 
 async def verify_handshake(executable: Path) -> None:
+    """Perform MCP handshake and tool catalog verification against executable.
+
+    Args:
+        executable: Path to codebase-memory-mcp binary.
+
+    Raises:
+        AssertionError: If tool catalog does not match expected tools.
+    """
     parameters = StdioServerParameters(command=str(executable), args=[])
     async with (
         stdio_client(parameters) as (read, write),
@@ -96,10 +132,12 @@ async def verify_handshake(executable: Path) -> None:
 
 
 def main() -> None:
+    """Parse command-line arguments and run verification checks."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--configs-only", action="store_true")
+    parser.add_argument("--require-minimal", action="store_true")
     options = parser.parse_args()
-    executable = verify_configs()
+    executable = verify_configs(require_minimal=options.require_minimal)
     if not options.configs_only:
         asyncio.run(asyncio.wait_for(verify_handshake(executable), timeout=45))
 
