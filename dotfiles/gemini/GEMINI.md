@@ -138,6 +138,46 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
     **Effort:** XS | S | M | L | XL
     ```
     Attach the matching labels (`priority:p<0-3>`, `effort:<xs|s|m|l|xl>`). If the labels do not exist in the target repository, create them on first use.
+- **Issue Naming Convention (Title):** Follow the Conventional Commits specification for all issue titles:
+  `<type>(<optional-scope>): <imperative summary>`
+  - **Types:** `feat` (new user or developer capability), `fix` (bug resolution), `perf` (performance or resource improvement), `refactor` (code restructuring without behavior change), `docs` (documentation and ADRs), `test` (test coverage and harness work), `chore` (maintenance, CI/CD, dependencies), `investigation` (spikes, research, architectural evaluation).
+  - **Rules:** Lowercase type and scope, imperative present-tense verb ("add", "resolve", "lean out"), no issue numbers or PR links in the title, no trailing period, no emojis, and no em dashes.
+- **Issue Body Convention & Lean Templates:** Every created issue must begin with the metadata block followed by structured sections. Keep issue descriptions concise and bounded to the atomic scope:
+  - **Task / Story / Investigation Template:**
+    ```markdown
+    **Priority:** P0 | P1 | P2 | P3
+    **Effort:** XS | S | M | L | XL
+
+    ## Objective
+    [User narrative 'As a... I want... So that...' or concise statement of intent]
+
+    ## Context & Scope
+    [Background, operational constraints, concrete areas to touch, related issues]
+
+    ## Acceptance Criteria
+    - [ ] Deterministic requirement, Given/When/Then condition, or checkable milestone
+    - [ ] Automated verification target (e.g. 'just test' or reproduction command)
+
+    ## Out of Scope
+    - [Explicit non-goals or deferred work]
+    ```
+  - **Bug Fix Template:**
+    ```markdown
+    **Priority:** P0 | P1 | P2 | P3
+    **Effort:** XS | S | M | L | XL
+
+    ## Problem Summary
+    [Succinct failure or regression description]
+
+    ## Reproduction & Observed vs Expected
+    1. [Reproduction step]
+    - **Observed:** [Actual behavior or error output]
+    - **Expected:** [Intended correct behavior]
+
+    ## Acceptance Criteria
+    - [ ] Failing reproduction test case is committed
+    - [ ] Fix resolves the issue without regression in related test suites
+    ```
 - **Issue to PR Flow:** Adopt a GitHub issue to pull request lifecycle for code changes. Create and/or inspect assigned task requirements using `@modelcontextprotocol/server-github` or `gh issue view <id> --json title,body,labels` before proposing logic changes.
 - **Atomic Issue Scope & Lifecycle Protection:** Each issue must tackle one atomic code change addressed by a corresponding PR. Ensure the issue and PR scopes are aligned 1:1 so that merging a PR delivers the entire scope of the issue. A PR must not close an issue prematurely before all concerns, requirements, and acceptance criteria in the issue are completely satisfied. Never use auto-closing keywords (`Fixes #<id>`, `Closes #<id>`) if residual tasks, sub-tasks, or unresolved concerns remain open.
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
@@ -163,7 +203,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Cognitively Small PRs:** Keep pull requests as small as possible, single-concern, and straightforward to review. A PR too large to hold in your head must be decomposed into sequential, independent PRs (e.g. database schema/queries -> core engine/adapters -> UI presentation) merged incrementally into the default branch, never into stacked or chained PR branches. If a PR title requires "and" to summarize its scope, decompose it into smaller independent increments.
 - **PR Review Audit Trail (gordonpn/*):** For all repositories under the gordonpn/ namespace, leave explicit audit replies on PR review threads (both peer reviews and automated bots like CodeRabbit) whenever addressing or triaging feedback. Document what decision was made, why that choice was selected, why alternatives were rejected, and reference the resolving commit SHA. Never silently resolve, ignore, or bypass review comments without a clear audit record.
 - **Issue Maintenance (gordonpn/*):** When requested work relates to an existing issue in a `gordonpn/*` repository, read it and keep it current at meaningful milestones and handoff. This rule authorizes relevant progress comments and verified checklist updates unless the task explicitly forbids GitHub writes. Record verified outcomes, blockers, remaining work, test results, and commit or PR links when available; avoid duplicate updates and preserve others' edits. Do not create issues solely to satisfy this rule, expand their scope, or close them without explicit authorization and complete, verified acceptance criteria. If an update cannot be published, report it and provide the intended update in the handoff.
-- **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux (like dotfiles), always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
+- **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux, always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
 - **Single-Turn Verification Focus:** Conclude each execution turn with the exact atomic outcome and the single immediate verification command or target (e.g. `Run 'just test' to verify the reproduction suite passes`).
 - **Two-Attempt Circuit Breaker:** If a tool call, test fix, or command fails twice on the same step, stop immediately. Document what failed, reassess assumptions, and re-plan rather than retrying blindly.
 - **Triad Evaluation (UX, DX, AX):** When evaluating architectural trade-offs, weigh User Experience (UX), Developer Experience (DX), and Agent Experience (AX: greppability, unambiguous symbols, explicit types, and clean tool parsing).
@@ -561,7 +601,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 ## External Agent Delegation
 
 - **Primary Orchestrator:** Codex or Antigravity acts as the primary orchestrator owning integration, test execution, commits, and PR submission.
-- **Skill Discovery & Parity:** Use the authoritative `delegate-coding-agents` skill (`~/.agents/skills/delegate-coding-agents/`) synchronized across Codex, Antigravity, and OpenCode via `bin/mcp-sync`.
+- **Skill Discovery & Parity:** Use the authoritative `delegate-coding-agents` skill (`~/.agents/skills/delegate-coding-agents/`) synchronized across Codex, Antigravity, and OpenCode via `mcp-sync` (`dotfiles/bin/mcp-sync`).
 - **Automatic Routing:** In repositories where `agents.delegationAllowed=true`, Antigravity CLI adopts a delegation-first posture routing sequentially through `agy-cli -> codex -> opencode -> github copilot student`. Antigravity delegates via `--agent codex`: Codex CLI executes first in an isolated worktree, falling back on classified provider, quota, rate-limit, or model-availability errors to OpenCode (`opencode/deepseek-v4.1-flash-free` with high variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`), then to GitHub Copilot Student (`--model auto`). Codex as orchestrator delegates sequentially: OpenCode free models first, then GitHub Copilot Student only after all prior candidates fail with classified provider, quota, rate-limit, or model-availability errors. OpenCode free models operate anonymously without requiring an account or login. Authentication and provider-initialization errors (such as `ProviderInitError` or HTTP 403) are hard stops across all candidates with actionable login/credential/configuration guidance (`codex login`, `copilot login`, or check OpenCode credentials); do not try another candidate. Stop when a worker completes successfully; never parallelize providers or retry for task errors, failed tests, or ambiguous results. For Antigravity, continue directly with the orchestrator if all candidates in the chain fail. For Codex, continue directly with the orchestrator only after documented OpenCode and Copilot routes are exhausted. Keep cross-cutting architecture, sensitive decisions, complex integration, and final verification with the orchestrator.
 - **Execution Gate:** Invoke the skill's `scripts/delegate.sh` with the correct `--orchestrator`, `--agent`, `--mode`, and `--automatic` flags. Automatic delegation is allowed only when the current repository has local Git config `agents.delegationAllowed=true`; otherwise continue directly. Do not bypass this gate for private or confidential code. The script also requires a clean checkout so the worktree snapshot matches the reviewed commit.
 - **Delegate Model Defaults:** Codex uses its default CLI model (via `CODEX_DELEGATE_MODEL`, defaulting to `auto` which omits `-m` to let Codex decide). OpenCode cycles across free models (`opencode/deepseek-v4.1-flash-free` with high variant, then `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free` with default variants). GitHub Copilot Student uses automatic model selection only (`--model auto`). These OpenCode free offers may change; verify availability and never switch to a paid model silently. Do not invoke Antigravity CLI (`agy -p`) as a Codex worker under a consumer plan.
