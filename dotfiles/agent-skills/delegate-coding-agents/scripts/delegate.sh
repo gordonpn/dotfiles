@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset CDPATH
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 usage() {
   cat <<'HELP'
@@ -12,14 +15,21 @@ Options:
   --base REF           Git revision to snapshot (default: HEAD)
   --orchestrator NAME  codex|agy (default: codex)
   --automatic          Enforce per-repository opt-in for auto delegation
+  --mcp-profile PROF   MCP profile for delegated agents (minimal|none|full|PATH, default: minimal)
   --help               Display this help
 
 Environment:
-  CODEX_DELEGATE_MODEL      Default: auto (omit -m, let Codex decide)
-  OPENCODE_DELEGATE_MODEL   Default: opencode/deepseek-v4.1-flash-free
-  OPENCODE_DELEGATE_MODELS  Comma-separated fallback chain
-  COPILOT_DELEGATE_MODEL    Default: auto
-  DELEGATE_WORKTREE_ROOT    External directory for Git worktrees/logs
+  DELEGATE_MCP_PROFILE           Default MCP profile if --mcp-profile omitted (default: minimal)
+  DELEGATE_MCP_SERVERS           Allowed servers for minimal profile (default: cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking)
+  CODEX_DELEGATE_MODEL           Default: auto (omit -m, let Codex decide)
+  CODEX_DELEGATE_MCP_PROFILE     Codex MCP profile override if DELEGATE_MCP_PROFILE omitted
+  CODEX_DELEGATE_MCP_SERVERS     Codex allowed servers override if DELEGATE_MCP_SERVERS omitted
+  OPENCODE_DELEGATE_MODEL        Default: opencode/deepseek-v4.1-flash-free
+  OPENCODE_DELEGATE_MODELS       Comma-separated fallback chain
+  OPENCODE_DELEGATE_MCP_PROFILE  OpenCode MCP profile override if DELEGATE_MCP_PROFILE omitted
+  OPENCODE_DELEGATE_MCP_SERVERS  OpenCode allowed servers override if DELEGATE_MCP_SERVERS omitted
+  COPILOT_DELEGATE_MODEL         Default: auto
+  DELEGATE_WORKTREE_ROOT         External directory for Git worktrees/logs
 
 Runs are isolated in Git worktrees. BUILD changes remain uncommitted on a
 new agent-specific branch. The caller (Codex or agy) reviews and integrates them.
@@ -84,21 +94,27 @@ is_provider_quota_error() {
     <<< "$stderr_log"
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
+CLI_MCP_PROFILE=''
 while (($#)); do
   case "$1" in
-    --agent|--mode|--task|--task-file|--id|--model|--base|--orchestrator)
+    --agent|--mode|--task|--task-file|--id|--model|--base|--orchestrator|--mcp-profile)
       key=$1; shift; (($#)) || die "Missing value for $key"
       case "$key" in
         --agent) AGENT=$1 ;; --mode) MODE=$1 ;; --task) TASK=$1 ;;
         --task-file) TASK_FILE=$1 ;; --id) TASK_ID=$1 ;;
         --model) MODEL=$1 ;; --base) BASE=$1 ;;
         --orchestrator) ORCHESTRATOR=$1 ;;
+        --mcp-profile) CLI_MCP_PROFILE=$1 ;;
       esac; shift ;;
     --automatic) AUTOMATIC=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
+if [[ -n "$CLI_MCP_PROFILE" && "$CLI_MCP_PROFILE" != "minimal" && "$CLI_MCP_PROFILE" != "none" && "$CLI_MCP_PROFILE" != "full" ]]; then
+  [[ -f "$CLI_MCP_PROFILE" ]] || die "MCP profile file not found: $CLI_MCP_PROFILE"
+  CLI_MCP_PROFILE=$(cd "$(dirname "$CLI_MCP_PROFILE")" && pwd)/$(basename "$CLI_MCP_PROFILE")
+fi
 if [[ -z $AGENT ]]; then
   if [[ $ORCHESTRATOR == agy ]]; then
     AGENT=codex
@@ -231,9 +247,358 @@ SAFE_ID=${SAFE_ID:0:48}
 RUN_ID="${AGENT}-${MODE}-${SAFE_ID}-$(date '+%Y%m%d%H%M%S')-$$"
 RUN_ROOT=${DELEGATE_WORKTREE_ROOT:-"$(dirname "$ROOT")/.agent-worktrees-$(basename "$ROOT")"}
 mkdir -p "$RUN_ROOT/logs"
+RUN_ROOT=$(cd "$RUN_ROOT" >/dev/null && pwd)
 WORKTREE="$RUN_ROOT/$RUN_ID"
 LOG_DIR="$RUN_ROOT/logs/$RUN_ID"
 mkdir -p "$LOG_DIR"
+
+OPENCODE_MCP_PROFILE=''
+OPENCODE_PROFILE_PATH=''
+OPENCODE_CONTENT_PATH=''
+# shellcheck disable=SC2016
+resolve_opencode_mcp_profile() {
+  local target_file="$LOG_DIR/opencode-profile.json"
+  local content_file="$LOG_DIR/opencode-content.json"
+  local base_profile="$SCRIPT_DIR/../profiles/opencode-minimal-profile.json"
+  local cfg_dir="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
+  local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${OPENCODE_DELEGATE_MCP_PROFILE:-${OPENCODE_MCP_PROFILE:-minimal}}}}"
+
+  if [[ "$prof" != "minimal" && "$prof" != "none" && "$prof" != "full" ]]; then
+    [[ -f "$prof" ]] || die "OpenCode MCP profile file not found: $prof"
+    prof=$(cd "$(dirname "$prof")" >/dev/null && pwd)/$(basename "$prof")
+  fi
+  OPENCODE_MCP_PROFILE="$prof"
+
+  if [[ "$prof" == "full" ]]; then
+    OPENCODE_PROFILE_PATH=''
+    OPENCODE_CONTENT_PATH=''
+    return 0
+  fi
+
+  if [[ "$prof" != "minimal" && "$prof" != "none" ]]; then
+    OPENCODE_PROFILE_PATH="$prof"
+    OPENCODE_CONTENT_PATH=''
+    return 0
+  fi
+
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+  if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$content_file" "$base_profile" "$cfg_dir" "$ROOT" "$BASE_SHA" "${OPENCODE_CONFIG:-}" "${OPENCODE_CONFIG_CONTENT:-}" <<'PY'
+import json
+import os
+import re
+import sys
+
+prof, allowed_csv, target_file, content_file, base_profile, cfg_dir, root_dir, base_sha, caller_cfg, caller_content_raw = sys.argv[1:11]
+allow_set = {s.strip() for s in allowed_csv.split(",") if s.strip()}
+
+TOKEN_AND_COMMA_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\r\n]*|/\*[\s\S]*?\*/|,\s*([}\]])')
+
+def strip_jsonc(text: str) -> str:
+    def repl(m):
+        s = m.group(0)
+        if s.startswith('"'):
+            return s
+        if s.startswith('//') or s.startswith('/*'):
+            return ""
+        return m.group(1)
+
+    prev = None
+    curr = text
+    while prev != curr:
+        prev = curr
+        curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
+    return curr
+
+def load_jsonc_text(raw: str):
+    if not raw or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        try:
+            data = json.loads(strip_jsonc(raw))
+        except Exception:
+            return None
+    return data if isinstance(data, dict) else None
+
+def load_jsonc(path: str):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            raw = f.read()
+        return load_jsonc_text(raw)
+    except Exception:
+        return None
+
+def load_git_blob(root, rev, relpath):
+    if not root or not rev or not relpath:
+        return None
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["git", "-C", root, "show", f"{rev}:{relpath}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8-sig",
+        )
+        if res.returncode == 0 and res.stdout:
+            return load_jsonc_text(res.stdout)
+    except Exception:
+        pass
+    return None
+
+discovered_servers = []
+seen = set()
+
+def collect_servers(data):
+    if not isinstance(data, dict):
+        return
+    mcp = data.get("mcp")
+    if isinstance(mcp, dict):
+        for k in mcp.keys():
+            if isinstance(k, str) and k not in seen:
+                seen.add(k)
+                discovered_servers.append(k)
+
+# 1. Inspect BASE_SHA checkout or fallback to root_dir
+for candidate_rel in [
+    "opencode.json",
+    "opencode.jsonc",
+    os.path.join(".opencode", "opencode.json"),
+    os.path.join(".opencode", "opencode.jsonc"),
+]:
+    data = load_git_blob(root_dir, base_sha, candidate_rel)
+    if data is None:
+        data = load_jsonc(os.path.join(root_dir, candidate_rel))
+    collect_servers(data)
+
+# 2. Inspect global user configuration directory
+for candidate in [
+    os.path.join(cfg_dir, "opencode.json"),
+    os.path.join(cfg_dir, "opencode.jsonc"),
+]:
+    collect_servers(load_jsonc(candidate))
+
+# 3. Inspect caller config and caller content
+caller_data = load_jsonc(caller_cfg)
+collect_servers(caller_data)
+
+caller_content_data = load_jsonc_text(caller_content_raw)
+collect_servers(caller_content_data)
+
+# 4. Fallback to base profile if nothing discovered
+if not discovered_servers:
+    collect_servers(load_jsonc(base_profile))
+
+# Build target profile for OPENCODE_CONFIG
+if isinstance(caller_data, dict):
+    out_obj = dict(caller_data)
+    out_obj.setdefault("$schema", "https://opencode.ai/config.json")
+    mcp_map = dict(out_obj.get("mcp")) if isinstance(out_obj.get("mcp"), dict) else {}
+else:
+    out_obj = {"$schema": "https://opencode.ai/config.json"}
+    mcp_map = {}
+
+mcp_disables = {}
+for srv in discovered_servers:
+    if prof == "none" or srv not in allow_set:
+        mcp_map[srv] = {"enabled": False}
+        mcp_disables[srv] = {"enabled": False}
+
+out_obj["mcp"] = mcp_map
+
+tmp_path = target_file + ".tmp"
+with open(tmp_path, "w", encoding="utf-8") as f:
+    json.dump(out_obj, f, indent=2)
+    f.write("\n")
+os.replace(tmp_path, target_file)
+
+# Build OPENCODE_CONFIG_CONTENT for high-priority inline override
+if isinstance(caller_content_data, dict):
+    content_obj = dict(caller_content_data)
+    content_mcp = dict(content_obj.get("mcp")) if isinstance(content_obj.get("mcp"), dict) else {}
+    content_mcp.update(mcp_disables)
+    content_obj["mcp"] = content_mcp
+else:
+    content_obj = {
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": mcp_disables,
+    }
+
+content_tmp = content_file + ".tmp"
+with open(content_tmp, "w", encoding="utf-8") as f:
+    json.dump(content_obj, f, separators=(",", ":"))
+os.replace(content_tmp, content_file)
+PY
+  then
+    OPENCODE_PROFILE_PATH="$target_file"
+    OPENCODE_CONTENT_PATH="$content_file"
+    return 0
+  fi
+
+  die "Failed to generate OpenCode MCP profile '$prof' in '$target_file'"
+}
+resolve_opencode_mcp_profile
+
+CODEX_MCP_PROFILE=''
+CODEX_MCP_ARGS=()
+CODEX_DOTTED_SERVERS=()
+CODEX_PROFILE_PATH=''
+resolve_codex_mcp_profile() {
+  local target_file="$LOG_DIR/codex-mcp-overrides.txt"
+  local codex_cfg="${CODEX_CONFIG:-${CODEX_HOME:-$HOME/.codex}/config.toml}"
+  local project_codex_cfg="$ROOT/.codex/config.toml"
+  local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${CODEX_DELEGATE_MCP_PROFILE:-minimal}}}"
+
+  if [[ "$prof" != "minimal" && "$prof" != "none" && "$prof" != "full" ]]; then
+    [[ -f "$prof" ]] || die "Codex MCP profile file not found: $prof"
+    prof=$(cd "$(dirname "$prof")" >/dev/null && pwd)/$(basename "$prof")
+  fi
+  CODEX_MCP_PROFILE="$prof"
+
+  if [[ "$prof" == "full" ]]; then
+    CODEX_PROFILE_PATH=''
+    CODEX_MCP_ARGS=()
+    CODEX_DOTTED_SERVERS=()
+    return 0
+  fi
+
+  local cfg_files=()
+  [[ -f "$codex_cfg" ]] && cfg_files+=("$codex_cfg")
+  [[ -f "$project_codex_cfg" && "$project_codex_cfg" != "$codex_cfg" ]] && cfg_files+=("$project_codex_cfg")
+
+  local defined_servers=''
+  if [[ ${#cfg_files[@]} -gt 0 ]]; then
+    defined_servers=$(awk -F'[][]' -v sq="'" '
+      /^[[:space:]]*\[mcp_servers\./ {
+        s = $2
+        sub(/^[[:space:]]*mcp_servers\./, "", s)
+        gsub(/^[[:space:]]+/, "", s)
+        name = ""
+        if (substr(s, 1, 1) == "\"") {
+          match(s, /^"([^"\\]|\\.)*"/)
+          quoted = substr(s, 1, RLENGTH)
+          name = substr(quoted, 2, length(quoted) - 2)
+        } else if (substr(s, 1, 1) == sq) {
+          idx = index(substr(s, 2), sq)
+          if (idx > 0) name = substr(s, 2, idx - 1)
+        } else {
+          match(s, /^[^.[:space:]]+/)
+          name = substr(s, 1, RLENGTH)
+        }
+        if (length(name) > 0 && !seen[name]++) print name
+      }
+    ' "${cfg_files[@]}" 2>/dev/null || true)
+  fi
+
+  local servers=''
+  if [[ "$prof" != "minimal" && "$prof" != "none" ]]; then
+    CODEX_PROFILE_PATH="$prof"
+    local raw_disabled=''
+    if [[ -f "$prof" ]]; then
+      if command -v jq >/dev/null 2>&1 && jq -e '.mcp or .mcpServers' "$prof" >/dev/null 2>&1; then
+        raw_disabled=$(jq -r '(.mcp // .mcpServers // {}) | to_entries[] | select(.value.enabled == false) | .key' "$prof" 2>/dev/null || true)
+      elif grep -q '\[mcp_servers\.' "$prof" 2>/dev/null; then
+        raw_disabled=$(awk -F'[][]' -v sq="'" '
+          /^[[:space:]]*\[/ { curr = "" }
+          /^[[:space:]]*\[mcp_servers\./ {
+            s = $2
+            sub(/^[[:space:]]*mcp_servers\./, "", s)
+            gsub(/^[[:space:]]+/, "", s)
+            if (substr(s, 1, 1) == "\"") {
+              if (match(s, /^"([^"\\]|\\.)*"/)) {
+                quoted = substr(s, 1, RLENGTH)
+                if (substr(s, RLENGTH + 1, 1) == ".") {
+                  curr = ""
+                } else {
+                  curr = substr(quoted, 2, length(quoted) - 2)
+                }
+              } else {
+                curr = ""
+              }
+            } else if (substr(s, 1, 1) == sq) {
+              idx = index(substr(s, 2), sq)
+              if (idx > 0 && substr(s, idx + 2, 1) == ".") {
+                curr = ""
+              } else if (idx > 0) {
+                curr = substr(s, 2, idx - 1)
+              } else {
+                curr = ""
+              }
+            } else if (s ~ /\./) {
+              curr = ""
+            } else {
+              match(s, /^[^.[:space:]]+/)
+              curr = substr(s, 1, RLENGTH)
+            }
+          }
+          /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false/ { if (curr != "") { print curr; curr = "" } }
+        ' "$prof" 2>/dev/null || true)
+      fi
+    fi
+    if [[ -n "$raw_disabled" && -n "$defined_servers" ]]; then
+      servers=$(awk '
+        NR == FNR { if (length($0) > 0) def[$0] = 1; next }
+        length($0) > 0 && def[$0] && !seen[$0]++ { print $0 }
+      ' <(printf '%s\n' "$defined_servers") <(printf '%s\n' "$raw_disabled"))
+    fi
+  elif [[ "$prof" == "none" ]]; then
+    servers="$defined_servers"
+    CODEX_PROFILE_PATH="$target_file"
+  else
+    local allowed_csv="${DELEGATE_MCP_SERVERS:-${CODEX_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+    if [[ -n "$defined_servers" ]]; then
+      servers=$(awk -v allowed="$allowed_csv" '
+        BEGIN {
+          n = split(allowed, arr, ",")
+          for (i = 1; i <= n; i++) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", arr[i])
+            if (length(arr[i]) > 0) allow_map[arr[i]] = 1
+          }
+        }
+        length($0) > 0 && !seen[$0]++ {
+          if (!allow_map[$0]) print $0
+        }
+      ' <<< "$defined_servers")
+    fi
+    CODEX_PROFILE_PATH="$target_file"
+  fi
+
+  CODEX_MCP_ARGS=()
+  CODEX_DOTTED_SERVERS=()
+  : > "$target_file"
+  while IFS= read -r s; do
+    [[ -n "$s" ]] || continue
+    if [[ "$s" == *"."* || "$s" =~ [^a-zA-Z0-9_-] ]]; then
+      CODEX_DOTTED_SERVERS+=("$s")
+    else
+      CODEX_MCP_ARGS+=(-c "mcp_servers.${s}.enabled=false")
+    fi
+    printf '%s\n' "$s" >> "$target_file"
+  done <<< "$servers"
+}
+resolve_codex_mcp_profile
+
+resolve_active_profile() {
+  case "$1" in
+    codex) echo "${CODEX_MCP_PROFILE:-(none)}" ;;
+    opencode) echo "${OPENCODE_MCP_PROFILE:-(none)}" ;;
+    copilot) echo '(not applicable)' ;;
+    *) echo '(none)' ;;
+  esac
+}
+
+resolve_active_profile_path() {
+  case "$1" in
+    codex) echo "${CODEX_PROFILE_PATH:-(none)}" ;;
+    opencode) echo "${OPENCODE_PROFILE_PATH:-(none)}" ;;
+    copilot) echo '(not applicable)' ;;
+    *) echo '(none)' ;;
+  esac
+}
+
 BRANCH='(detached)'
 if [[ $MODE == build ]]; then
   BRANCH="delegate/${AGENT}/${RUN_ID}"
@@ -248,6 +613,8 @@ orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
 mode=$MODE
 requested_model=${MODEL:-'(default)'}
+mcp_profile=$(resolve_active_profile "$AGENT")
+mcp_profile_path=$(resolve_active_profile_path "$AGENT")
 base=$BASE_SHA
 branch=$BRANCH
 worktree=$WORKTREE
@@ -307,6 +674,9 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   fi
 
   if [[ $CURRENT_AGENT == codex ]]; then
+    if [[ ${#CODEX_DOTTED_SERVERS[@]} -gt 0 ]]; then
+      die "Codex CLI does not support disabling dotted MCP server names via -c overrides: ${CODEX_DOTTED_SERVERS[*]}"
+    fi
     ARGS=(exec -C "$WORKTREE" --color never --ephemeral -o "$LOG_DIR/report.md")
     if [[ $MODE == plan ]]; then
       ARGS+=(--sandbox read-only)
@@ -315,6 +685,9 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     fi
     if [[ -n $CURRENT_MODEL && $CURRENT_MODEL != default && $CURRENT_MODEL != auto ]]; then
       ARGS+=(-m "$CURRENT_MODEL")
+    fi
+    if [[ ${#CODEX_MCP_ARGS[@]} -gt 0 ]]; then
+      ARGS+=("${CODEX_MCP_ARGS[@]}")
     fi
     ARGS+=("$PROMPT")
   elif [[ $CURRENT_AGENT == opencode ]]; then
@@ -335,7 +708,19 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   if [[ $CURRENT_AGENT == codex ]]; then
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" codex "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   elif [[ $CURRENT_AGENT == opencode ]]; then
-    (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+    if [[ -n "$OPENCODE_PROFILE_PATH" ]]; then
+      inline_content=''
+      if [[ -n "$OPENCODE_CONTENT_PATH" && -f "$OPENCODE_CONTENT_PATH" ]]; then
+        inline_content=$(cat "$OPENCODE_CONTENT_PATH")
+      fi
+      if [[ -n "$inline_content" ]]; then
+        (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" OPENCODE_CONFIG="$OPENCODE_PROFILE_PATH" OPENCODE_CONFIG_CONTENT="$inline_content" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+      else
+        (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" OPENCODE_CONFIG="$OPENCODE_PROFILE_PATH" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+      fi
+    else
+      (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" opencode "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
+    fi
   elif [[ $CURRENT_AGENT == copilot ]]; then
     (cd "$WORKTREE" && CODING_DELEGATE_ACTIVE=1 CODING_DELEGATE_ORCHESTRATOR="$ORCHESTRATOR" copilot "${ARGS[@]}") >"$LOG_DIR/stdout.log" 2>"$LOG_DIR/stderr.log"
   fi
@@ -394,7 +779,7 @@ done
 
 AGENT=${SUCCESSFUL_AGENT:-${CURRENT_AGENT:-$AGENT}}
 MODEL=${SUCCESSFUL_MODEL:-${CURRENT_MODEL:-}}
-printf 'resolved_agent=%s\nresolved_model=%s\nexit_code=%s\n' "$AGENT" "${MODEL:-'(default)'}" "$EXIT_CODE" >>"$LOG_DIR/manifest.txt"
+printf 'resolved_agent=%s\nresolved_model=%s\nexit_code=%s\nresolved_mcp_profile=%s\nresolved_mcp_profile_path=%s\n' "$AGENT" "${MODEL:-'(default)'}" "$EXIT_CODE" "$(resolve_active_profile "$AGENT")" "$(resolve_active_profile_path "$AGENT")" >>"$LOG_DIR/manifest.txt"
 
 # Review both tracked and untracked changes: git diff alone omits new files.
 git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
@@ -422,6 +807,7 @@ printf '  Agent: %s (%s)\n' "$ENTRY_AGENT" "$MODE"
 printf '  Worker: %s\n' "$AGENT"
 printf '  Orchestrator: %s\n' "$ORCHESTRATOR"
 printf '  Model: %s\n' "${MODEL:-default}"
+printf '  MCP profile: %s\n' "$(resolve_active_profile "$AGENT")"
 printf '  Worktree: %s\n' "$WORKTREE"
 printf '  Branch: %s\n' "$BRANCH"
 printf '  Logs: %s\n' "$LOG_DIR"

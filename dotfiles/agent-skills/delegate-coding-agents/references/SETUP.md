@@ -69,4 +69,5 @@ enable global shell-approval bypass.
 - If no repo opt-in exists, the agent should complete tasks itself or explain that delegation is blocked.
 - Both delegations operate on a clean committed checkout; current uncommitted edits cannot be safely inherited.
 - To run a delegate manually without the opt-in gate, omit `--automatic`, but still ensure the repository is appropriate for external inference.
+- One-shot OpenCode and Codex delegations apply a minimal MCP profile (`minimal` by default) to disable unrelated cloud, database, monitoring, and chat servers without mutating user configurations (via `OPENCODE_CONFIG` for OpenCode and ephemeral `-c` overrides for Codex).
 - Plans stay in an isolated detached worktree, builds on new `delegate/...` branches; review and integrate only verified changes.

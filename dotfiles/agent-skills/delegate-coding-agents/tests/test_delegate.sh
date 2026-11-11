@@ -20,6 +20,8 @@ while (($#)); do
  shift
 done
 [[ -z ${OPENCODE_MOCK_CALL_LOG:-} ]] || printf '%s %s\n' "$mode" "$model" >>"$OPENCODE_MOCK_CALL_LOG"
+[[ -z ${OPENCODE_MOCK_CONFIG_LOG:-} ]] || printf '%s\n' "${OPENCODE_CONFIG:-NONE}" >>"$OPENCODE_MOCK_CONFIG_LOG"
+[[ -z ${OPENCODE_MOCK_CONTENT_LOG:-} ]] || printf '%s\n' "${OPENCODE_CONFIG_CONTENT:-NONE}" >>"$OPENCODE_MOCK_CONTENT_LOG"
 if [[ ${OPENCODE_MOCK_COMPILER_ERROR:-} == 1 ]]; then
   if [[ $mode == build ]]; then printf 'compiler error uncommitted\n' > compiler-error.txt; fi
   echo 'src/server.ts:502:12 - error TS2304: Cannot find name foo' >&2
@@ -88,8 +90,9 @@ while (($#)); do
     --sandbox) shift; sandbox=$1 ;;
     -o) shift; out_file=$1 ;;
     -m) shift; model=$1 ;;
+    -c|--config) shift; [[ -z ${CODEX_MOCK_CONFIG_LOG:-} ]] || printf '%s\n' "$1" >>"$CODEX_MOCK_CONFIG_LOG" ;;
     -C) shift ;;
-    --color|--ephemeral) ;;
+    --color|--ephemeral|--skip-git-repo-check|--non-interactive) ;;
   esac
   shift
 done
@@ -119,9 +122,12 @@ MOCK
 chmod +x "$TMP/bin/opencode" "$TMP/bin/copilot" "$TMP/bin/codex"
 export PATH="$TMP/bin:$PATH" DELEGATE_WORKTREE_ROOT="$TMP/worktrees"
 export OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
+export OPENCODE_MOCK_CONFIG_LOG="$TMP/opencode.config"
+export OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode.content"
 export COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls"
 export CODEX_MOCK_CALL_LOG="$TMP/codex.calls"
-unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL
+export CODEX_MOCK_CONFIG_LOG="$TMP/codex.config"
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL OPENCODE_DELEGATE_MCP_PROFILE OPENCODE_DELEGATE_MCP_SERVERS OPENCODE_MCP_PROFILE DELEGATE_MCP_PROFILE DELEGATE_MCP_SERVERS CODEX_DELEGATE_MCP_PROFILE CODEX_DELEGATE_MCP_SERVERS
 
 cd "$TMP/repo"
 git init -q
@@ -460,6 +466,426 @@ if "$SCRIPT" --agent agy --mode plan --task 'Unsupported worker' > "$TMP/agy-wor
  echo 'Expected Antigravity worker rejection' >&2; exit 1
 fi
 grep -q 'Use --agent codex, opencode, or copilot' "$TMP/agy-worker.out"
+
+# MCP profile: Minimal profile generation and non-mutation of normal user profile
+mkdir -p "$TMP/user-config/opencode"
+cat > "$TMP/user-config/opencode/opencode.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "mcp": {
+    "cclsp": {
+      "command": "/usr/local/bin/cclsp"
+    },
+    "slack": {
+      "command": "npx -y @modelcontextprotocol/server-slack"
+    },
+    "uptime-kuma": {
+      "command": "npx -y @davidfuchs/mcp-uptime-kuma"
+    },
+    "docker": {
+      "command": "npx -y @hypnosis/docker-mcp-server"
+    }
+  }
+}
+JSON
+hash_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+ORIG_CFG_HASH=$(hash_file "$TMP/user-config/opencode/opencode.json")
+
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" "$SCRIPT" --agent opencode --mode plan --id mcp-minimal --task 'Test minimal MCP profile' > "$TMP/mcp-minimal.out"
+grep -q 'Exit: 0' "$TMP/mcp-minimal.out"
+grep -q 'MCP profile: minimal' "$TMP/mcp-minimal.out"
+MCP_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-minimal.out" | head -n 1)
+[[ -f "$MCP_LOG_DIR/opencode-profile.json" ]]
+grep -q 'mcp_profile=minimal' "$MCP_LOG_DIR/manifest.txt"
+grep -q "mcp_profile_path=$MCP_LOG_DIR/opencode-profile.json" "$MCP_LOG_DIR/manifest.txt"
+
+# Verify OPENCODE_CONFIG passed to OpenCode points to the generated minimal profile
+LAST_OPENCODE_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_OPENCODE_CFG" == "$MCP_LOG_DIR/opencode-profile.json" ]]
+
+# Verify unnecessary servers were disabled in the generated profile and minimal ones retained
+jq -e '.mcp["slack"].enabled == false' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["docker"].enabled == false' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$MCP_LOG_DIR/opencode-profile.json" >/dev/null
+
+# Verify the user normal profile was NOT mutated
+POST_CFG_HASH=$(hash_file "$TMP/user-config/opencode/opencode.json")
+[[ "$ORIG_CFG_HASH" == "$POST_CFG_HASH" ]]
+
+# MCP profile: Selection override with --mcp-profile none disables all servers
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" "$SCRIPT" --agent opencode --mode plan --mcp-profile none --id mcp-none --task 'Test none MCP profile' > "$TMP/mcp-none.out"
+grep -q 'Exit: 0' "$TMP/mcp-none.out"
+grep -q 'MCP profile: none' "$TMP/mcp-none.out"
+MCP_NONE_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-none.out" | head -n 1)
+jq -e '.mcp["cclsp"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["docker"].enabled == false' "$MCP_NONE_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile: Selection override with --mcp-profile full preserves full profile (no OPENCODE_CONFIG)
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" "$SCRIPT" --agent opencode --mode plan --mcp-profile full --id mcp-full --task 'Test full MCP profile' > "$TMP/mcp-full.out"
+grep -q 'Exit: 0' "$TMP/mcp-full.out"
+grep -q 'MCP profile: full' "$TMP/mcp-full.out"
+LAST_FULL_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_FULL_CFG" == "NONE" ]]
+MCP_FULL_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-full.out" | head -n 1)
+grep -q 'mcp_profile=full' "$MCP_FULL_LOG_DIR/manifest.txt"
+grep -q 'mcp_profile_path=(none)' "$MCP_FULL_LOG_DIR/manifest.txt"
+
+# MCP profile: Custom profile path
+cat > "$TMP/custom-mcp.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "custom-server": { "command": "custom-cmd" }
+  }
+}
+JSON
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+"$SCRIPT" --agent opencode --mode plan --mcp-profile "$TMP/custom-mcp.json" --id mcp-custom --task 'Test custom MCP profile' > "$TMP/mcp-custom.out"
+grep -q 'Exit: 0' "$TMP/mcp-custom.out"
+LAST_CUSTOM_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_CUSTOM_CFG" == "$TMP/custom-mcp.json" ]]
+
+# MCP profile: Relative custom profile path is normalized to absolute
+(
+  cd "$TMP/repo"
+  : >"$OPENCODE_MOCK_CONFIG_LOG"
+  "$SCRIPT" --agent opencode --mode plan --mcp-profile "../custom-mcp.json" --id mcp-custom-rel --task 'Test relative custom MCP profile' > "$TMP/mcp-custom-rel.out"
+  grep -q 'Exit: 0' "$TMP/mcp-custom-rel.out"
+  LAST_REL_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+  [[ "$LAST_REL_CFG" == "$TMP/custom-mcp.json" ]]
+)
+
+# MCP profile: Missing profile path rejection
+if "$SCRIPT" --agent opencode --mode plan --mcp-profile "$TMP/missing-profile.json" --task 'Missing profile' > "$TMP/mcp-missing.out" 2>&1; then
+  echo 'Expected missing profile path rejection' >&2; exit 1
+fi
+grep -q 'MCP profile file not found' "$TMP/mcp-missing.out"
+
+# MCP profile: Custom servers list via OPENCODE_DELEGATE_MCP_SERVERS
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" OPENCODE_DELEGATE_MCP_SERVERS="docker,cclsp" "$SCRIPT" --agent opencode --mode plan --id mcp-servers-override --task 'Test servers override' > "$TMP/mcp-servers-override.out"
+grep -q 'Exit: 0' "$TMP/mcp-servers-override.out"
+MCP_OVERRIDE_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/mcp-servers-override.out" | head -n 1)
+jq -e '.mcp | has("docker") | not' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["uptime-kuma"].enabled == false' "$MCP_OVERRIDE_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile for Codex: Minimal profile overrides and non-mutation of normal user profile
+mkdir -p "$TMP/user-config/codex"
+cat > "$TMP/user-config/codex/config.toml" <<'TOML'
+[mcp_servers."cclsp"]
+command = "/usr/local/bin/cclsp"
+
+[mcp_servers."slack"]
+command = "npx -y @modelcontextprotocol/server-slack"
+
+[mcp_servers."uptime-kuma"]
+command = "npx -y @davidfuchs/mcp-uptime-kuma"
+
+[mcp_servers."docker"]
+command = "npx -y @hypnosis/docker-mcp-server"
+TOML
+ORIG_CODEX_CFG_HASH=$(hash_file "$TMP/user-config/codex/config.toml")
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-mcp-minimal --task 'Test codex minimal MCP profile' > "$TMP/codex-mcp-minimal.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-minimal.out"
+grep -q 'MCP profile: minimal' "$TMP/codex-mcp-minimal.out"
+CODEX_MCP_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/codex-mcp-minimal.out" | head -n 1)
+[[ -f "$CODEX_MCP_LOG_DIR/codex-mcp-overrides.txt" ]]
+grep -q 'mcp_profile=minimal' "$CODEX_MCP_LOG_DIR/manifest.txt"
+grep -q "mcp_profile_path=$CODEX_MCP_LOG_DIR/codex-mcp-overrides.txt" "$CODEX_MCP_LOG_DIR/manifest.txt"
+
+# Verify unnecessary servers were disabled via -c and minimal servers kept
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.uptime-kuma.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.docker.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled for codex minimal profile' >&2; exit 1
+fi
+
+# Verify user codex config.toml was NOT mutated
+POST_CODEX_CFG_HASH=$(hash_file "$TMP/user-config/codex/config.toml")
+[[ "$ORIG_CODEX_CFG_HASH" == "$POST_CODEX_CFG_HASH" ]]
+
+# MCP profile for Codex: Selection override with --mcp-profile none disables all servers
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile none --id codex-mcp-none --task 'Test codex none MCP profile' > "$TMP/codex-mcp-none.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-none.out"
+grep -q 'MCP profile: none' "$TMP/codex-mcp-none.out"
+grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.uptime-kuma.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.docker.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
+# MCP profile for Codex: Selection override with --mcp-profile full preserves full profile (no -c overrides)
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile full --id codex-mcp-full --task 'Test codex full MCP profile' > "$TMP/codex-mcp-full.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-full.out"
+grep -q 'MCP profile: full' "$TMP/codex-mcp-full.out"
+[[ ! -s "$CODEX_MOCK_CONFIG_LOG" ]]
+CODEX_FULL_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/codex-mcp-full.out" | head -n 1)
+grep -q 'mcp_profile=full' "$CODEX_FULL_LOG_DIR/manifest.txt"
+grep -q 'mcp_profile_path=(none)' "$CODEX_FULL_LOG_DIR/manifest.txt"
+
+# MCP profile for Codex: Custom servers list via CODEX_DELEGATE_MCP_SERVERS
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" CODEX_DELEGATE_MCP_SERVERS="docker,cclsp" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-mcp-override --task 'Test codex servers override' > "$TMP/codex-mcp-override.out"
+grep -q 'Exit: 0' "$TMP/codex-mcp-override.out"
+if grep -q 'mcp_servers.docker.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected docker to remain enabled in override' >&2; exit 1
+fi
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled in override' >&2; exit 1
+fi
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+grep -q 'mcp_servers.uptime-kuma.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
+# MCP profile for Codex: Custom TOML profile resets state across sections
+cat > "$TMP/custom-codex.toml" <<'TOML'
+[mcp_servers."cclsp"]
+command = "cclsp"
+
+[features]
+enabled = false
+
+[mcp_servers."slack"]
+enabled = false
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-codex.toml" --id codex-custom-toml --task 'Test codex custom toml' > "$TMP/codex-custom-toml.out"
+grep -q 'Exit: 0' "$TMP/codex-custom-toml.out"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled despite subsequent section having enabled=false' >&2; exit 1
+fi
+
+# MCP profile: Environment variable isolation between agents
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" CODEX_DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent opencode --mode plan --id opencode-iso --task 'Test profile isolation' > "$TMP/opencode-iso.out"
+grep -q 'Exit: 0' "$TMP/opencode-iso.out"
+grep -q 'MCP profile: minimal' "$TMP/opencode-iso.out"
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" OPENCODE_DELEGATE_MCP_PROFILE="none" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-iso --task 'Test profile isolation' > "$TMP/codex-iso.out"
+grep -q 'Exit: 0' "$TMP/codex-iso.out"
+grep -q 'MCP profile: minimal' "$TMP/codex-iso.out"
+if grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected cclsp to remain enabled when OPENCODE_DELEGATE_MCP_PROFILE is set' >&2; exit 1
+fi
+
+# MCP profile: Global DELEGATE_MCP_PROFILE applies to both workers when specific override is omitted
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/user-config" DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent opencode --mode plan --id opencode-global --task 'Test global profile' > "$TMP/opencode-global.out"
+grep -q 'Exit: 0' "$TMP/opencode-global.out"
+grep -q 'MCP profile: none' "$TMP/opencode-global.out"
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" DELEGATE_MCP_PROFILE="none" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-global --task 'Test global profile' > "$TMP/codex-global.out"
+grep -q 'Exit: 0' "$TMP/codex-global.out"
+grep -q 'MCP profile: none' "$TMP/codex-global.out"
+grep -q 'mcp_servers.cclsp.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
+# MCP profile: Preservation of caller OPENCODE_CONFIG settings and allowed server definitions
+cat > "$TMP/caller-opencode.json" <<'JSON'
+{
+  "provider": { "my-provider": { "apiKey": "xyz" } },
+  "permissions": { "allow": ["read"] },
+  "model": "custom/model",
+  "custom_pattern": "contains ,} and ,] verbatim",
+  "mcp": {
+    "cclsp": { "command": "/usr/local/bin/cclsp" },
+    "slack": { "command": "npx -y slack-server" }
+  }
+}
+JSON
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+OPENCODE_CONFIG="$TMP/caller-opencode.json" "$SCRIPT" --agent opencode --mode plan --id caller-preserve --task 'Preserve caller config' > "$TMP/caller-preserve.out"
+grep -q 'Exit: 0' "$TMP/caller-preserve.out"
+CALLER_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/caller-preserve.out" | head -n 1)
+jq -e '.provider["my-provider"].apiKey == "xyz"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.permissions.allow[0] == "read"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.model == "custom/model"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.custom_pattern == "contains ,} and ,] verbatim"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["cclsp"].command == "/usr/local/bin/cclsp"' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$CALLER_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile: OpenCode opencode.jsonc discovery and JSONC syntax parsing
+mkdir -p "$TMP/jsonc-config/opencode"
+cat > "$TMP/jsonc-config/opencode/opencode.jsonc" <<'JSONC'
+{
+  // Single line comment
+  /* Multi
+     line
+     comment */
+  "url": "https://example.com/api",
+  "string_with_comma_brace": "contains ,} and ,] verbatim",
+  "mcp": {
+    "cclsp": {
+      "command": "/usr/local/bin/cclsp",
+    },
+    "slack": {
+      "command": "npx -y slack-server",
+    },
+  },
+}
+JSONC
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/jsonc-config" "$SCRIPT" --agent opencode --mode plan --id jsonc-test --task 'Test jsonc parsing' > "$TMP/jsonc-test.out"
+grep -q 'Exit: 0' "$TMP/jsonc-test.out"
+JSONC_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/jsonc-test.out" | head -n 1)
+jq -e '.mcp["slack"].enabled == false' "$JSONC_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$JSONC_LOG_DIR/opencode-profile.json" >/dev/null
+
+# MCP profile: Malformed user OpenCode config falls back gracefully and filters via allowed list
+mkdir -p "$TMP/bad-json-config/opencode"
+printf '{ malformed json: not valid' > "$TMP/bad-json-config/opencode/opencode.json"
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+XDG_CONFIG_HOME="$TMP/bad-json-config" OPENCODE_DELEGATE_MCP_SERVERS="docker" "$SCRIPT" --agent opencode --mode plan --id bad-json --task 'Handle malformed config' > "$TMP/bad-json.out"
+grep -q 'Exit: 0' "$TMP/bad-json.out"
+BAD_JSON_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/bad-json.out" | head -n 1)
+jq -e '.mcp | has("docker") | not' "$BAD_JSON_LOG_DIR/opencode-profile.json" >/dev/null
+jq -e '.mcp["slack"].enabled == false' "$BAD_JSON_LOG_DIR/opencode-profile.json" >/dev/null
+
+# Relative DELEGATE_WORKTREE_ROOT is resolved to absolute paths
+: >"$OPENCODE_MOCK_CONFIG_LOG"
+DELEGATE_WORKTREE_ROOT="./rel-worktrees" "$SCRIPT" --agent opencode --mode plan --id rel-worktree --task 'Test relative worktree' > "$TMP/rel-worktree.out"
+grep -q 'Exit: 0' "$TMP/rel-worktree.out"
+LAST_REL_CFG=$(tail -n 1 "$OPENCODE_MOCK_CONFIG_LOG")
+[[ "$LAST_REL_CFG" =~ ^/ ]]
+rm -rf rel-worktrees
+
+# Codex: Missing config.toml emits zero -c overrides instead of undefined servers
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-cfg-check --task 'Codex with config' > "$TMP/codex-cfg-check.out"
+grep -q 'Exit: 0' "$TMP/codex-cfg-check.out"
+[[ -s "$CODEX_MOCK_CONFIG_LOG" ]]
+
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/nonexistent/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-no-cfg --task 'Codex with no config' > "$TMP/codex-no-cfg.out"
+grep -q 'Exit: 0' "$TMP/codex-no-cfg.out"
+[[ ! -s "$CODEX_MOCK_CONFIG_LOG" ]]
+
+# Codex: Custom profile does not emit overrides for undefined servers
+cat > "$TMP/custom-unknown.json" <<'JSON'
+{
+  "mcp": {
+    "slack": { "enabled": false },
+    "unknown-server": { "enabled": false }
+  }
+}
+JSON
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-unknown.json" --id codex-custom-defined --task 'Codex custom defined only' > "$TMP/codex-custom-defined.out"
+grep -q 'Exit: 0' "$TMP/codex-custom-defined.out"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.unknown-server.enabled=false' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected unknown server not to be emitted for Codex' >&2; exit 1
+fi
+
+# Codex: Custom TOML profile disabling unquoted server emits override
+cat > "$TMP/custom-slack.toml" <<'TOML'
+[mcp_servers.slack]
+enabled = false
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-slack.toml" --id codex-custom-toml-slack --task 'Codex custom toml slack' > "$TMP/codex-custom-toml-slack.out"
+grep -q 'Exit: 0' "$TMP/codex-custom-toml-slack.out"
+grep -q 'mcp_servers.slack.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+
+# Codex: Nested TOML tables (.env) do not produce invalid server overrides
+mkdir -p "$TMP/nested-codex"
+cat > "$TMP/nested-codex/config.toml" <<'TOML'
+[mcp_servers.node_repl]
+command = "/path/to/node_repl"
+
+[mcp_servers.node_repl.env]
+NODE_ENV = "production"
+TOKEN = "secret"
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/nested-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-nested --task 'Codex nested toml' > "$TMP/codex-nested.out"
+grep -q 'Exit: 0' "$TMP/codex-nested.out"
+grep -q 'mcp_servers.node_repl.enabled=false' "$CODEX_MOCK_CONFIG_LOG"
+if grep -q 'mcp_servers.node_repl.env' "$CODEX_MOCK_CONFIG_LOG"; then
+  echo 'Expected nested table .env not to be emitted as a server override' >&2; exit 1
+fi
+
+# Codex: Dotted server names fail Codex invocation with clear error without blocking other workers or full profile
+mkdir -p "$TMP/quoted-codex"
+cat > "$TMP/quoted-codex/config.toml" <<'TOML'
+[mcp_servers."foo.bar"]
+command = "/path/to/foo_bar"
+
+[mcp_servers.plain_server]
+command = "/path/to/plain"
+TOML
+: >"$CODEX_MOCK_CONFIG_LOG"
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id codex-quoted --task 'Codex quoted server' > "$TMP/codex-quoted.out" 2>"$TMP/codex-quoted.err" || true
+grep -q 'Codex CLI does not support disabling dotted MCP server names' "$TMP/codex-quoted.err"
+
+# Full profile on Codex is not blocked by dotted server names
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mcp-profile full --mode plan --id codex-full-quoted --task 'Codex full profile with quoted server' > "$TMP/codex-full-quoted.out"
+grep -q 'Exit: 0' "$TMP/codex-full-quoted.out"
+
+# Other workers (OpenCode) are not blocked by Codex dotted servers
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent opencode --mode plan --id opencode-unblocked --task 'OpenCode worker unaffected' > "$TMP/opencode-unblocked.out"
+grep -q 'Exit: 0' "$TMP/opencode-unblocked.out"
+
+# Codex: Custom TOML profile disabling quoted dotted server is parsed and fails closed
+cat > "$TMP/custom-dotted.toml" <<'TOML'
+[mcp_servers."foo.bar"]
+enabled = false
+TOML
+CODEX_CONFIG="$TMP/quoted-codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --mode plan --mcp-profile "$TMP/custom-dotted.toml" --id codex-custom-dotted --task 'Codex custom dotted' > "$TMP/codex-custom-dotted.out" 2>"$TMP/codex-custom-dotted.err" || true
+grep -q 'Codex CLI does not support disabling dotted MCP server names' "$TMP/codex-custom-dotted.err"
+
+# OpenCode: Inline OPENCODE_CONFIG_CONTENT is emitted to override project-level configs
+OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode-content.log"
+: >"$OPENCODE_MOCK_CONTENT_LOG"
+"$SCRIPT" --agent opencode --mode plan --id opencode-content-test --task 'OpenCode inline content' > "$TMP/opencode-content.out"
+grep -q 'Exit: 0' "$TMP/opencode-content.out"
+[[ -s "$OPENCODE_MOCK_CONTENT_LOG" ]]
+jq -e '.mcp["slack"].enabled == false' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
+jq -e '.mcp | has("cclsp") | not' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
+
+# OpenCode: Project config committed at BASE_SHA is discovered by server discovery
+git checkout -b base-sha-test-branch >/dev/null 2>&1
+cat > opencode.json <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "git_blob_server": {
+      "command": "/usr/local/bin/git_blob_server"
+    }
+  }
+}
+JSON
+git add opencode.json
+git commit -m "test: commit opencode.json for base sha test" >/dev/null 2>&1
+TEST_BASE_SHA=$(git rev-parse HEAD)
+git checkout - >/dev/null 2>&1
+git branch -D base-sha-test-branch >/dev/null 2>&1
+rm -f opencode.json
+
+: >"$OPENCODE_MOCK_CONTENT_LOG"
+"$SCRIPT" --agent opencode --mode plan --base "$TEST_BASE_SHA" --id base-sha-test --task 'Discover from BASE_SHA' > "$TMP/base-sha-test.out"
+grep -q 'Exit: 0' "$TMP/base-sha-test.out"
+jq -e '.mcp["git_blob_server"].enabled == false' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
 
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
