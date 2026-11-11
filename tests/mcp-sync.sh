@@ -178,6 +178,9 @@ mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-skill"
 touch "${GEMINI_CONFIG_DIR}/skills/gemini-skill/SKILL.md"
 mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill"
 touch "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill/SKILL.md"
+mkdir -p "${HOME}/.agents/skills/incomplete-shared-skill"
+mkdir -p "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill"
+touch "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill/SKILL.md"
 
 # Directly exercise the collision suffix loop in backup_with_collision_avoidance
 printf 'existing\n' >"${test_tmp_dir}/collide.bak"
@@ -266,6 +269,8 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ ! -e "${OPENCODE_DIR}/skills/shared-skill" && ! -L "${OPENCODE_DIR}/skills/shared-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
+[[ "$(readlink "${OPENCODE_DIR}/skills/incomplete-shared-skill")" == "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/incomplete-shared-skill")" == "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/thinking-model-router" && ! -L "${OPENCODE_DIR}/skills/thinking-model-router" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
