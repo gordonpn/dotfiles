@@ -42,7 +42,7 @@ Each worker in the delegation chain has specific authentication requirements:
   - To log in for commercial providers, run `opencode auth login` (or configure provider environment variables like `ANTHROPIC_API_KEY`).
 - **Failure and fallback behavior:**
   - Unauthenticated requests to non-free models fail with exit code 1 (`UnknownError: Unexpected server error` or `ProviderAuthError`), which stops fallback immediately.
-  - Rate limits or temporary capacity limits on free models return HTTP 429 (`Free usage limit reached` or `FreeUsageLimitError`). `delegate.sh` catches these in `is_provider_quota_error` and automatically cascades to the next free candidate model in sequence before falling back to GitHub Copilot Student.
+  - Rate limits or temporary capacity limits on free models (such as HTTP 429, `Free usage limit reached`, or `Free usage exceeded`) are classified by `is_provider_quota_error`. When running without an explicit `--model`, `delegate.sh` automatically cascades to the next candidate free model in sequence before falling back to GitHub Copilot Student. When an explicit `--model` is specified, delegation targets only that candidate without cascading.
 
 ### 3. GitHub Copilot CLI
 - **Login required:** Yes.
