@@ -174,6 +174,8 @@ mkdir -p "${HOME}/.local/share/cc-thinking-skills/skills/thinking-model-router"
 touch "${HOME}/.local/share/cc-thinking-skills/skills/thinking-model-router/SKILL.md"
 mkdir -p "${HOME}/.agents/skills/shared-skill"
 touch "${HOME}/.agents/skills/shared-skill/SKILL.md"
+mkdir -p "${HOME}/.agents/skills/shared-dir-skill"
+touch "${HOME}/.agents/skills/shared-dir-skill/SKILL.md"
 mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-skill"
 touch "${GEMINI_CONFIG_DIR}/skills/gemini-skill/SKILL.md"
 mkdir -p "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill"
@@ -195,6 +197,10 @@ touch "${OPENCODE_DIR}/skills/manual-skill/SKILL.md"
 # Colliding skill directory in OpenCode to verify directory collision backup
 mkdir -p "${OPENCODE_DIR}/skills/gemini-dir-skill"
 printf 'colliding opencode skill\n' >"${OPENCODE_DIR}/skills/gemini-dir-skill/collision.txt"
+
+# Colliding skill directory in OpenCode for shared skill to verify backup without redundant link
+mkdir -p "${OPENCODE_DIR}/skills/shared-dir-skill"
+printf 'colliding shared opencode skill\n' >"${OPENCODE_DIR}/skills/shared-dir-skill/collision.txt"
 
 # Colliding custom symlink in OpenCode to verify symlink collision backup
 ln -s "${HOME}/external-skill" "${OPENCODE_DIR}/skills/gemini-skill"
@@ -267,6 +273,7 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/shared-skill" && ! -L "${OPENCODE_DIR}/skills/shared-skill" ]]
+[[ ! -e "${OPENCODE_DIR}/skills/shared-dir-skill" && ! -L "${OPENCODE_DIR}/skills/shared-dir-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/incomplete-shared-skill")" == "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill" ]]
@@ -292,6 +299,11 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 opencode_skill_backups=("${GEMINI_DIR}/skill-backups/opencode-gemini-dir-skill.bak."*)
 [[ ${#opencode_skill_backups[@]} -ge 1 && -d "${opencode_skill_backups[0]}" ]]
 [[ -f "${opencode_skill_backups[0]}/collision.txt" ]]
+
+# Colliding skill directory for shared skill in OpenCode was backed up without creating redundant link
+opencode_shared_dir_backups=("${GEMINI_DIR}/skill-backups/opencode-shared-dir-skill.bak."*)
+[[ ${#opencode_shared_dir_backups[@]} -ge 1 && -d "${opencode_shared_dir_backups[0]}" ]]
+[[ -f "${opencode_shared_dir_backups[0]}/collision.txt" ]]
 
 # Colliding skill symlink in OpenCode was backed up and preserved
 opencode_symlink_backups=("${GEMINI_DIR}/skill-backups/opencode-gemini-skill.bak."*)
