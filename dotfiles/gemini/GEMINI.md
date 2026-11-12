@@ -55,7 +55,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Simplicity First:** Write the minimum code that solves the stated problem. No features beyond what was asked, no abstraction for a single call site, no configurability nobody requested, no error handling for cases that cannot occur. If it could be substantially shorter, rewrite it before showing it.
 - **Surgical Changes:** Touch only what the request requires. Do not improve adjacent code, comments, or formatting, and do not refactor what is not broken. Match the surrounding style even where you would write it differently.
 - **Clean Up Only Your Own Mess:** Remove the imports, variables, and helpers that *this* change orphaned. Report unrelated dead code instead of deleting it.
-- **Refactoring Backlog:** Keep unrelated cleanup out of active changes. Report concrete opportunities with exact file and line references and the proposed cleanup. When useful, offer a dedicated follow-up branch and PR or a tracked issue; obtain authorization before creating them.
+- **Discovery Capture & Scope Discipline:** Keep active changes strictly surgical and bounded to the immediate task requirements. When unexpected defects, missing test coverage, refactoring opportunities, technical debt, security gaps, performance bottlenecks, or logical extensions are discovered in adjacent code during implementation, do not expand the current task's scope. Instead, proactively document each distinct finding into a new GitHub Issue without asking for approval (following repository naming and body conventions with priority and effort sizing), linking back to the origin task. Fall back to logging it in `NEXT.md` under LATER only where the repository does not use GitHub Issues. Never leave discovered problems, technical debt, or deferred improvements untracked.
 - **Traceability:** Every changed line should trace to the request. An unrequested change shows up in the diff, not in the summary.
 - **Technical Challenge Protocol:** Act as a senior technical peer, not a passive implementation assistant. The user's proposed implementation is a hypothesis; the underlying objective, constraints, and repository invariants are authoritative. Before implementing a non-trivial change, actively investigate why the proposal might be incorrect, over-complicated, or inconsistent with existing architecture. Evaluate proposals across three challenge classes:
   1. Correctness Challenge: Proposed change fails to resolve the bug, creates race conditions, sets incorrect transaction boundaries, or misunderstands API semantics. Block implementation until resolved.
@@ -118,7 +118,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Issue Hierarchy & Work Breakdown:** Model work in GitHub Issues using a strict 4-level hierarchy before writing code:
   1. **Initiative:** Strategic multi-epic objective spanning projects or repositories. Represented by a high-level GitHub Issue (labeled `initiative`) or a GitHub Project view tracking cross-cutting milestones.
   2. **Epic:** Large capability or architectural shift requiring multiple deliverables. Represented by a parent GitHub Issue (labeled `epic`) linking child Stories via GitHub native sub-issues or markdown task lists (`- [ ] #<id>`). Contains overarching architecture notes and end-to-end acceptance criteria.
-  3. **Story:** Single vertical slice of user-facing or developer value delivering an end-to-end increment. Represented by an Issue (labeled `story` or `feature`) parented by an Epic. Must include user value narrative ("As a... I want to... So that..."), deterministic acceptance criteria (`Given/When/Then`), and maps 1:1 to a single-concern draft PR.
+  3. **Story:** Single vertical slice of user-facing or developer value delivering an end-to-end increment. Represented by an Issue (labeled `story` or `feature`) parented by an Epic. Must include user value narrative ("As a... I want to... So that..."), deterministic acceptance criteria (`Given/When/Then`), and maps 1:1 to a single-concern pull request ready for review.
   4. **Task / Subtask:** Atomic engineering implementation unit (e.g., schema migration, adapter, test suite). Represented by a native GitHub Sub-issue (using `sub_issue_write`) or checklist items (`- [ ]`) within a Story issue.
 - **Issue Effort & Priority Classification:** Every created GitHub issue must define both **Priority** and **Effort (T-Shirt Size)** in its body metadata and as GitHub labels:
   - **Priority Scale:**
@@ -138,6 +138,50 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
     **Effort:** XS | S | M | L | XL
     ```
     Attach the matching labels (`priority:p<0-3>`, `effort:<xs|s|m|l|xl>`). If the labels do not exist in the target repository, create them on first use.
+- **Issue Naming Convention (Title):** Follow the Conventional Commits specification for all issue titles:
+  `<type>(<optional-scope>): <imperative summary>`
+  - **Types:** `feat` (new user or developer capability), `fix` (bug resolution), `perf` (performance or resource improvement), `refactor` (code restructuring without behavior change), `docs` (documentation and ADRs), `test` (test coverage and harness work), `chore` (maintenance, CI/CD, dependencies), `investigation` (spikes, research, architectural evaluation).
+  - **Rules:** Lowercase type and scope, imperative present-tense verb ("add", "resolve", "lean out"), no issue numbers or PR links in the title, no trailing period, no emojis, and no em dashes.
+- **Issue Body Convention & Lean Templates:** Every created issue must begin with the metadata block followed by structured sections. Keep issue descriptions concise and bounded to the atomic scope:
+  - **Task / Story / Investigation Template:**
+    ```markdown
+    **Priority:** P0 | P1 | P2 | P3
+    **Effort:** XS | S | M | L | XL
+
+    ## Objective
+    [User narrative 'As a... I want... So that...' or concise statement of intent]
+
+    ## Context & Scope
+    [Background, technical constraints, concrete areas to touch, related issues]
+
+    ## Acceptance Criteria
+    - [ ] Given [context], when [action], then [verifiable outcome]
+    - [ ] Automated verification target (e.g. 'just test' or reproduction command)
+
+    ## Out of Scope
+    - [Explicit non-goals or deferred work]
+    ```
+  - **Bug Fix Template:**
+    ```markdown
+    **Priority:** P0 | P1 | P2 | P3
+    **Effort:** XS | S | M | L | XL
+
+    ## Problem Summary
+    [Succinct failure or regression description]
+
+    ## Technical Constraints
+    [Relevant technical constraints, or state that none apply]
+
+    ## Reproduction & Observed vs Expected
+    1. [Reproduction step]
+    - **Observed:** [Actual behavior or error output]
+    - **Expected:** [Intended correct behavior]
+
+    ## Acceptance Criteria
+    - [ ] Given [context], when [action], then [verifiable outcome]
+    - [ ] Failing reproduction test case is committed
+    - [ ] Fix resolves the issue without regression in related test suites
+    ```
 - **Issue to PR Flow:** Adopt a GitHub issue to pull request lifecycle for code changes. Create and/or inspect assigned task requirements using `@modelcontextprotocol/server-github` or `gh issue view <id> --json title,body,labels` before proposing logic changes.
 - **Atomic Issue Scope & Lifecycle Protection:** Each issue must tackle one atomic code change addressed by a corresponding PR. Ensure the issue and PR scopes are aligned 1:1 so that merging a PR delivers the entire scope of the issue. A PR must not close an issue prematurely before all concerns, requirements, and acceptance criteria in the issue are completely satisfied. Never use auto-closing keywords (`Fixes #<id>`, `Closes #<id>`) if residual tasks, sub-tasks, or unresolved concerns remain open.
 - **Deterministic Acceptance Criteria Gate:** Refuse implementation and request clarification if the issue description lacks deterministic acceptance criteria (Given/When/Then) or technical constraints.
@@ -152,18 +196,18 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
   8. State the verified root cause and make the smallest coherent change.
   9. Run targeted tests, local quality gates (`just test`, `just lint`), and broader verification.
   10. Verify actual runtime behavior (UI verification loop if frontend).
-  11. Create a task branch -> review staged diff against original requirements -> atomic Conventional Commit -> automated review via OCR -> draft PR.
+  11. Create a task branch -> review staged diff against original requirements -> atomic Conventional Commit -> automated review via OCR -> pull request ready for review.
 - **Read-Only Production Guard:** Treat production and cloud services (GitHub, databases, Cloudflare, Sentry, cloud infrastructure) as read-only by default. Freely query and inspect runtime state, logs, and metrics to gather diagnostic evidence, but never perform mutations, schema alterations, or write operations against production services without explicit authorization. Do not write to production merely to investigate a problem.
 - **Review by Dimension:** Review a change as separate focused passes (architecture and layering, missing test cases, missed capability in an installed dependency, API documentation, style) rather than one generic review pass, then merge and deduplicate the findings by file and line. Cap the fix rounds and report what is still unresolved instead of looping indefinitely.
 - **Automated Review Gate (OCR):** Always execute Open Code Review via the `ocr` CLI before pushing code to a remote repository or opening a pull request. If an external LLM provider is configured in OCR, run `ocr review --audience agent`. In delegated or offline agent workflows, run deterministic inspection via `ocr delegate preview --format json` and `ocr delegate rule --format json` to resolve review rules and evaluate findings against them. Address all critical, high, and medium severity findings before delivering changes.
-- **Draft PR Delivery:** Push the dedicated task branch and open a draft PR targeting the default branch, linking a root issue when one exists. Never push directly to the default branch or bypass the pull request lifecycle. If the user explicitly forbids pushing or opening a PR, leave commits on the task branch and report that the PR remains unopened; never substitute a commit on the default branch.
-- **User-Only PR Merging:** Never call `merge_pull_request` or execute `gh pr merge`. Only the user merges pull requests. Agents prepare changes, push branches, open draft or ready PRs, and address review feedback, leaving merge execution strictly to the human maintainer.
+- **Pull Request Delivery:** Push the dedicated task branch and open a pull request ready for review targeting the default branch, linking a root issue when one exists. Never push directly to the default branch or bypass the pull request lifecycle. If the user explicitly forbids pushing or opening a PR, leave commits on the task branch and report that the PR remains unopened; never substitute a commit on the default branch.
+- **User-Only PR Merging:** Never call `merge_pull_request` or execute `gh pr merge`. Only the user merges pull requests. Agents prepare changes, push branches, open pull requests ready for review, and address review feedback, leaving merge execution strictly to the human maintainer.
 - **No Stacked PRs with GitHub:** Never create stacked pull requests or chain PR branches (where a branch is cut from another unmerged PR branch or targets a non-default branch). Every PR must target the repository default branch (`main` or `master`) directly from an isolated branch based on the latest default branch. Merge each PR into the default branch before branching downstream work from the updated default branch.
 - **Distinct PR Branches & Merge Isolation:** Each PR must originate from its own distinct, dedicated branch based on the default target branch. Never share or daisy-chain branches across concurrent PRs: when a PR merges and its remote branch is deleted, no other active or pending PR should be affected, broken, or invalidated.
 - **Cognitively Small PRs:** Keep pull requests as small as possible, single-concern, and straightforward to review. A PR too large to hold in your head must be decomposed into sequential, independent PRs (e.g. database schema/queries -> core engine/adapters -> UI presentation) merged incrementally into the default branch, never into stacked or chained PR branches. If a PR title requires "and" to summarize its scope, decompose it into smaller independent increments.
 - **PR Review Audit Trail (gordonpn/*):** For all repositories under the gordonpn/ namespace, leave explicit audit replies on PR review threads (both peer reviews and automated bots like CodeRabbit) whenever addressing or triaging feedback. Document what decision was made, why that choice was selected, why alternatives were rejected, and reference the resolving commit SHA. Never silently resolve, ignore, or bypass review comments without a clear audit record.
-- **Issue Maintenance (gordonpn/*):** When requested work relates to an existing issue in a `gordonpn/*` repository, read it and keep it current at meaningful milestones and handoff. This rule authorizes relevant progress comments and verified checklist updates unless the task explicitly forbids GitHub writes. Record verified outcomes, blockers, remaining work, test results, and commit or PR links when available; avoid duplicate updates and preserve others' edits. Do not create issues solely to satisfy this rule, expand their scope, or close them without explicit authorization and complete, verified acceptance criteria. If an update cannot be published, report it and provide the intended update in the handoff.
-- **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux (like dotfiles), always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
+- **Issue Maintenance (gordonpn/*):** When requested work relates to an existing issue in a `gordonpn/*` repository, read it and keep it current at meaningful milestones and handoff. This rule authorizes relevant progress comments, implementation decision records, verified checklist updates, and the proactive creation of separate, scoped GitHub Issues for newly discovered out-of-scope defects, technical debt, or follow-ups. Record verified outcomes, technical choices, blockers, remaining work, test results, and commit or PR links when available; avoid duplicate updates and preserve others' edits. Do not expand the active issue's scope, and do not close issues without explicit authorization and complete, verified acceptance criteria. If an update cannot be published, report it and provide the intended update in the handoff.
+- **Cross-Platform Compatibility:** When working on projects shared between macOS and Linux, always verify that commands and environment variables are wrapped in appropriate OS checks where necessary.
 - **Single-Turn Verification Focus:** Conclude each execution turn with the exact atomic outcome and the single immediate verification command or target (e.g. `Run 'just test' to verify the reproduction suite passes`).
 - **Two-Attempt Circuit Breaker:** If a tool call, test fix, or command fails twice on the same step, stop immediately. Document what failed, reassess assumptions, and re-plan rather than retrying blindly.
 - **Triad Evaluation (UX, DX, AX):** When evaluating architectural trade-offs, weigh User Experience (UX), Developer Experience (DX), and Agent Experience (AX: greppability, unambiguous symbols, explicit types, and clean tool parsing).
@@ -304,8 +348,9 @@ When executing a selected task:
 6. Add or update appropriate tests.
 7. Run relevant verification.
 8. Review the resulting changes for unintended consequences.
-9. Record significant discoveries or blockers.
-10. Update GitHub and the execution queue as appropriate.
+9. Record significant discoveries, out-of-scope technical debt, or blockers by proactively creating dedicated GitHub Issues.
+10. Record implementation decisions in `docs/decisions.md` (or an ADR when architectural) within the same PR.
+11. Update GitHub and the execution queue as appropriate.
 
 Prefer minimal, focused changes.
 
@@ -328,18 +373,19 @@ When supported by the repository's conventions:
 
 Do not overwrite another contributor's active ownership or work.
 
-#### When Discovering Missing Work
+#### When Discovering Missing Work & Scope Discipline
 
-If implementation reveals a previously unknown task:
+If implementation reveals a previously unknown task, defect, or enhancement:
 
-1. Determine whether it belongs within the current issue's scope.
-2. Search for an existing GitHub Issue.
-3. If necessary, create a new issue with clear acceptance criteria.
-4. Set an appropriate priority (`P0`-`P3`) and effort estimate (T-shirt size: `XS`, `S`, `M`, `L`, `XL`).
-5. Link it to the current task when relevant.
-6. Reassess the execution queue only if the discovery materially changes priorities or dependencies.
+1. Determine whether it strictly belongs within the current issue's acceptance criteria.
+2. If it is an out-of-scope defect, refactoring opportunity, technical debt, or follow-up, do not expand the current task.
+3. Search existing GitHub Issues to avoid duplication.
+4. Create a new GitHub Issue for every distinct finding at any priority (`P0` to `P3`) without asking for approval, using the standard naming convention (`<type>(<scope>): <summary>`), priority, effort estimate, and lean body template so the finding is never lost.
+5. Cross-reference the origin issue or pull request in the new issue description.
+6. Record the finding in `NEXT.md` under LATER or NEXT as appropriate based on severity.
+7. Reassess the execution queue only if the discovery is a blocker (`P0`) that materially invalidates the current task.
 
-Do not expand the current implementation indefinitely to address unrelated discoveries.
+Never expand the current implementation indefinitely to address unrelated discoveries.
 
 #### When Blocked
 
@@ -561,7 +607,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
 ## External Agent Delegation
 
 - **Primary Orchestrator:** Codex or Antigravity acts as the primary orchestrator owning integration, test execution, commits, and PR submission.
-- **Skill Discovery & Parity:** Use the authoritative `delegate-coding-agents` skill (`~/.agents/skills/delegate-coding-agents/`) synchronized across Codex, Antigravity, and OpenCode via `bin/mcp-sync`.
+- **Skill Discovery & Parity:** Use the authoritative `delegate-coding-agents` skill (`~/.agents/skills/delegate-coding-agents/`) synchronized across Codex, Antigravity, and OpenCode via `mcp-sync`.
 - **Automatic Routing:** In repositories where `agents.delegationAllowed=true`, Antigravity CLI adopts a delegation-first posture routing sequentially through `agy-cli -> codex -> opencode -> github copilot student`. Antigravity delegates via `--agent codex`: Codex CLI executes first in an isolated worktree, falling back on classified provider, quota, rate-limit, or model-availability errors to OpenCode (`opencode/deepseek-v4.1-flash-free` with high variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`), then to GitHub Copilot Student (`--model auto`). Codex as orchestrator delegates sequentially: OpenCode free models first, then GitHub Copilot Student only after all prior candidates fail with classified provider, quota, rate-limit, or model-availability errors. OpenCode free models operate anonymously without requiring an account or login. Authentication and provider-initialization errors (such as `ProviderInitError` or HTTP 403) are hard stops across all candidates with actionable login/credential/configuration guidance (`codex login`, `copilot login`, or check OpenCode credentials); do not try another candidate. Stop when a worker completes successfully; never parallelize providers or retry for task errors, failed tests, or ambiguous results. For Antigravity, continue directly with the orchestrator if all candidates in the chain fail. For Codex, continue directly with the orchestrator only after documented OpenCode and Copilot routes are exhausted. Keep cross-cutting architecture, sensitive decisions, complex integration, and final verification with the orchestrator.
 - **Execution Gate:** Invoke the skill's `scripts/delegate.sh` with the correct `--orchestrator`, `--agent`, `--mode`, and `--automatic` flags. Automatic delegation is allowed only when the current repository has local Git config `agents.delegationAllowed=true`; otherwise continue directly. Do not bypass this gate for private or confidential code. The script also requires a clean checkout so the worktree snapshot matches the reviewed commit.
 - **Delegate Model Defaults:** Codex uses its default CLI model (via `CODEX_DELEGATE_MODEL`, defaulting to `auto` which omits `-m` to let Codex decide). OpenCode cycles across free models (`opencode/deepseek-v4.1-flash-free` with high variant, then `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free` with default variants). GitHub Copilot Student uses automatic model selection only (`--model auto`). These OpenCode free offers may change; verify availability and never switch to a paid model silently. Do not invoke Antigravity CLI (`agy -p`) as a Codex worker under a consumer plan.
@@ -577,18 +623,14 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
   - Never delegate recursively (`CODING_DELEGATE_ACTIVE=1` guards recursion).
   - Snapshotting requires a clean working tree. Never delegate with uncommitted or untracked changes in the base repository.
   - Treat delegate output as untrusted proposals. Verify all claims against actual source code before adopting.
-  - Always run the repository's configured Alibaba Open Code Review workflow before PR creation; do not submit with unresolved blocking findings.
+  - Where configured in the repository, run the Open Code Review workflow before PR creation; do not submit with unresolved blocking findings.
 
 ## Documentation & Infrastructure
 - **Documentation Parity:** When code changes introduce, modify, or deprecate user-facing behavior, CLI commands, configuration keys, environment variables, or operational workflows, update the corresponding `README.md` and `/docs/` documentation within the same commit or PR. Never leave documentation out of sync with working code.
 - **Persistent Documentation:** Write durable architecture decisions, non-obvious quirks, and markdown artifacts under `/docs/` in the repository, not in temporary session folders.
-- **Architectural Decision Protocol (ADRs):** Document significant architectural decisions under `docs/adr/` numbered sequentially (e.g. `docs/adr/0001-use-d1-for-local-first-storage.md`). Maintain an index table in `docs/adr/README.md` tracking ID, Title, Status (`Proposed`, `Accepted`, `Superseded`, `Rejected`), Date, and Decision. Each ADR must include: Context (problem statement, drivers, operational constraints), Decision (chosen approach and rejected alternatives with rationale), Consequences (positive gains, trade-offs, operational burdens), and Reconsideration Triggers (specific conditions, volume thresholds, or requirements that would reopen the decision). Once accepted, do not reopen settled decisions unless recorded reconsideration triggers occur.
+- **Implementation Decision Records:** When making non-obvious design, dependency, schema, or implementation choices during a task, record the decision, rationale, trade-offs, and rejected alternatives in `docs/decisions.md` in the same PR (create the file if absent). Keep the log newest-first, one entry per decision, each with: date, title, decision, rationale, rejected alternatives, and a link to the originating issue or PR. Mention the entry in the active issue or PR description. Promote a decision to an ADR under `docs/adr/` when it is architectural, expensive to reverse, or cross-cutting, and link the ADR from the log entry. Never let decisions, trade-offs, or discarded alternatives remain solely in ephemeral conversation context.
+- **Architectural Decision Protocol (ADRs):** Where a project adopts Architectural Decision Records, document significant architectural decisions under `docs/adr/` numbered sequentially. Maintain an index table in `docs/adr/README.md` tracking ID, Title, Status (`Proposed`, `Accepted`, `Superseded`, `Rejected`), Date, and Decision. Each ADR must include: Context (problem statement, drivers, operational constraints), Decision (chosen approach and rejected alternatives with rationale), Consequences (positive gains, trade-offs, operational burdens), and Reconsideration Triggers (specific conditions, volume thresholds, or requirements that would reopen the decision). Once accepted, do not reopen settled decisions unless recorded reconsideration triggers occur.
 - **Operational Runbooks:** When introducing deployment steps, background daemons, or infrastructure components, document setup, execution commands, and diagnostics in `docs/RUNBOOK.md` or under `/docs/`.
 - **Everything as Code (* as Code):** Always opt for declarative, version-controlled code over manual configuration, web console clicks, or ad-hoc host changes. Define infrastructure (Terraform/OpenTofu), container runtimes, CI/CD pipelines, dashboards, alerting, and operational environments in tracked configuration files. Ensure provisioning is reproducible, automated, and audit-traceable. Use variables for sensitive values and keep local state/secrets in `.gitignore`.
 - **Release & Versioning Discipline:** Follow semantic versioning (`vMAJOR.MINOR.PATCH`) for software releases and tags (`git tag -a`), accompanied by human-readable changelog notes.
-
-## Lessons
-<!-- Newest on top. Delete what no longer applies. -->
-
-- When a service targets different hosted and self-hosted databases, keep dialect-specific SQL and migrations behind storage adapters and verify each supported backend.
 
