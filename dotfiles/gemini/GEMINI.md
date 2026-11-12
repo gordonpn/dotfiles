@@ -152,10 +152,10 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
     [User narrative 'As a... I want... So that...' or concise statement of intent]
 
     ## Context & Scope
-    [Background, operational constraints, concrete areas to touch, related issues]
+    [Background, technical constraints, concrete areas to touch, related issues]
 
     ## Acceptance Criteria
-    - [ ] Deterministic requirement, Given/When/Then condition, or checkable milestone
+    - [ ] Given [context], when [action], then [verifiable outcome]
     - [ ] Automated verification target (e.g. 'just test' or reproduction command)
 
     ## Out of Scope
@@ -169,12 +169,16 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
     ## Problem Summary
     [Succinct failure or regression description]
 
+    ## Technical Constraints
+    [Relevant technical constraints, or state that none apply]
+
     ## Reproduction & Observed vs Expected
     1. [Reproduction step]
     - **Observed:** [Actual behavior or error output]
     - **Expected:** [Intended correct behavior]
 
     ## Acceptance Criteria
+    - [ ] Given [context], when [action], then [verifiable outcome]
     - [ ] Failing reproduction test case is committed
     - [ ] Fix resolves the issue without regression in related test suites
     ```
