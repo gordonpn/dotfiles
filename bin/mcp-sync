@@ -761,15 +761,49 @@ allowed_opencode_servers, opencode_profile_label = resolve_allowed_servers(
     'OPENCODE_MCP_PROFILE', 'OPENCODE_MCP_SERVERS', DEFAULT_CORE_SERVERS
 )
 
+TOKEN_AND_COMMA_RE = re.compile(
+    r'\"(?:\\\\.|[^\"\\\\])*\"|//[^\\r\\n]*|/\\*[\\s\\S]*?\\*/|,\\s*([}\\]])'
+)
+
+def strip_jsonc(text):
+    def repl(match):
+        token = match.group(0)
+        if token.startswith('\"'):
+            return token
+        if token.startswith('//') or token.startswith('/*'):
+            return ''
+        return match.group(1)
+
+    prev = None
+    curr = text
+    while prev != curr:
+        prev = curr
+        curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
+    return curr
+
 opencode_data = {}
 if os.path.exists(opencode_config):
-    with open(opencode_config, 'r') as f:
+    with open(opencode_config, 'r', encoding='utf-8-sig') as f:
+        raw_opencode = f.read()
+    if raw_opencode.strip():
         try:
-            loaded = json.load(f)
-            if isinstance(loaded, dict):
-                opencode_data = loaded
-        except json.JSONDecodeError as exc:
-            print(f'Warning: Could not parse existing {opencode_config} ({exc}); regenerating MCP section', file=sys.stderr)
+            loaded = json.loads(raw_opencode)
+        except json.JSONDecodeError:
+            try:
+                loaded = json.loads(strip_jsonc(raw_opencode))
+            except json.JSONDecodeError as exc:
+                print(
+                    f'Error: Could not parse existing {opencode_config} ({exc}); aborting without overwriting',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        if not isinstance(loaded, dict):
+            print(
+                f'Error: Expected JSON object in {opencode_config}; aborting without overwriting',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        opencode_data = loaded
 
 if '\$schema' not in opencode_data:
     opencode_data['\$schema'] = 'https://opencode.ai/config.json'

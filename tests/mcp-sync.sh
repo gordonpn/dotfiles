@@ -173,6 +173,35 @@ sync_mcp_config
 [[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+
+# Verify OpenCode parses JSONC (comments and trailing commas) without losing settings
+cat >"${OPENCODE_DIR}/opencode.json" <<'JSONC'
+{
+  // Line comment with URL https://example.com/a//b
+  "$schema": "https://opencode.ai/config.json",
+  /* Block comment */
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "mcp": {
+    "custom-jsonc": {
+      "type": "local",
+      "command": ["echo", "jsonc"],
+      "enabled": true,
+    },
+  },
+}
+JSONC
+sync_mcp_config
+[[ "$(jq -r '.model' "${OPENCODE_DIR}/opencode.json")" == "opencode/deepseek-v4.1-flash-free" ]]
+[[ "$(jq -r '.mcp["custom-jsonc"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+
+# Verify OpenCode aborts without overwriting when existing config is invalid JSON/JSONC
+printf '{ invalid json\n' >"${OPENCODE_DIR}/opencode.json"
+if sync_mcp_config 2>/dev/null; then
+  echo 'Expected invalid opencode.json to abort sync_mcp_config' >&2
+  exit 1
+fi
+[[ "$(<"${OPENCODE_DIR}/opencode.json")" == '{ invalid json' ]]
+
 rm -f "${OPENCODE_DIR}/opencode.json"
 sync_mcp_config
 uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" --configs-only --require-minimal
