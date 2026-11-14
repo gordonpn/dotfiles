@@ -185,10 +185,24 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
 | Client / Harness | Version | Provider / Model | Startup Processes | Tool Loading | Deferred Search | Default Profile & Visible MCP Tools | Fallback / Override |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Antigravity CLI (`agy`)** | Primary | Gemini / configured default | 0 eager MCP processes (spawned on demand) | Lazy-loaded on demand from disk | Native | Full (`37` servers, `0` turn-0 schema overhead) | N/A |
-| **Codex CLI (`codex`)** | `0.167.2` | OpenAI / configured default (`auto` in `delegate.sh`) | 9 managed servers (`+ node_repl`; 8 in `delegate.sh`) | Eager at startup (`~/.codex/config.toml`) | Unavailable (`tool_search` `removed`; `code_mode_tool_search` `under development false`) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--codex-servers` |
-| **OpenCode (`opencode`)** | `1.19.3` | OpenCode free models / configured default | 9 managed servers (8 in `delegate.sh`) | Eager at startup (`~/.config/opencode/opencode.json`) | Unavailable | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `--opencode-profile`, `--opencode-servers`, `delegate.sh --mcp-profile` |
-| **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | via OpenCode `1.19.3` | `opencode/deepseek-v4.1-flash-free` (`high` variant) | 8 managed servers (`OPENCODE_CONFIG` override) | Eager via `delegate.sh --agent opencode` | Unavailable | `minimal` (`8` servers, excluding `ai-memory`) | `DELEGATE_MCP_PROFILE`, `OPENCODE_DELEGATE_MCP_PROFILE`, `DELEGATE_MCP_SERVERS` |
+| **Codex CLI (`codex`)** | `0.167.2` | OpenAI / `gpt-6.1-terra` | 9 managed servers (`+ node_repl`; 8 in `delegate.sh`) | Eager at startup (`~/.codex/config.toml`) | `tool_search` `removed`; `code_mode_tool_search` `under development` (`false`) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--codex-servers` |
+| **OpenCode (`opencode`)** | `1.19.3` | OpenCode / `opencode/deepseek-v4.1-flash-free` | 9 managed servers (8 in `delegate.sh`) | Eager at startup (`~/.config/opencode/opencode.json`) | Disabled by default (`OPENCODE_EXPERIMENTAL_CODE_MODE=1` enables `tools.$codemode.search` while still starting enabled servers eagerly) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `--opencode-profile`, `--opencode-servers`, `delegate.sh --mcp-profile` |
+| **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | via OpenCode `1.19.3` | `opencode/deepseek-v4.1-flash-free` (`high` variant) | 8 managed servers (`OPENCODE_CONFIG` override) | Eager via `delegate.sh --agent opencode` | Unavailable by default | `minimal` (`8` servers, excluding `ai-memory`) | `DELEGATE_MCP_PROFILE`, `OPENCODE_DELEGATE_MCP_PROFILE`, `DELEGATE_MCP_SERVERS` |
 | **GitHub Copilot Student (`copilot`)** | Delegated | Copilot Student (`--model auto`) | 0 MCP servers spawned | Built-in CLI tools only (`--available-tools`) | N/A | Built-in tools only (`view,grep,glob` / `edit,view,grep,glob`; `--deny-tool=shell`) | Falls back across `delegate.sh` chain |
+
+### Deferred Tool Search & Code Mode Verification
+
+Experimental probes against the live toolchains (keeping default `bin/mcp-sync` configs unchanged) established the following behavior:
+
+1. **Codex CLI (`0.167.2`, OpenAI `gpt-6.1-terra`):**
+   - `codex features list` reports `search_tool`, `tool_search`, and `tool_search_always_defer_mcp_tools` as `removed`, while `code_mode` and `code_mode_tool_search` are `under development` (`false` by default).
+   - Passing `--enable tool_search` is silently ignored and falls back to eager schema loading (`46,103` input tokens vs `44,243` baseline; `15.8s-20.4s` turn time).
+   - Passing `--enable code_mode --enable code_mode_tool_search` exposes `functions.exec` and `tools.tool_search`, and `tool_search` successfully resolves deferred tools across enabled servers (verified with `mcp_servers.github.enabled=true`: `mcp__github__get_me`, `mcp__context7__resolve_library_id` in `15.84s`). However, it emits an `under development` warning banner, still loads ~44.4k-49k input tokens per turn, and eagerly starts enabled MCP servers at startup.
+2. **OpenCode (`1.19.3`, `opencode/deepseek-v4.1-flash-free`):**
+   - Under default V1 configuration, per-server `codemode` settings are stripped with `"Omitted native setting that cannot be represented in V1"`, and enabled MCP tools load eagerly (`9.0s-11.8s` turn time).
+   - Setting `OPENCODE_EXPERIMENTAL_CODE_MODE=1` activates the `execute` tool and `tools.$codemode.search(...)` (`29.37s` measured with `sequentialthinking` and default servers), while still connecting enabled MCP servers eagerly at startup.
+3. **Sync & Fallback Policy:**
+   - Keep `code_mode_tool_search` and `OPENCODE_EXPERIMENTAL_CODE_MODE` disabled in default synced configs. Both Codex and OpenCode fall back to the static `minimal` profile (`9` servers locally; `8` servers in `delegate.sh`), using per-session CLI overrides (`-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--opencode-profile`, `--codex-servers`, `--opencode-servers`) when additional servers are required.
 
 ---
 
