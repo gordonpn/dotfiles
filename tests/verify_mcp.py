@@ -83,7 +83,12 @@ def verify_configs(require_minimal: bool = False) -> Path:
     codex: object = tomllib.loads((home / ".codex/config.toml").read_text())
     opencode_path = xdg_config_home / "opencode/opencode.json"
     opencode: object = json.loads(opencode_path.read_text())
-    copilot_path = home / ".copilot/mcp-config.json"
+    copilot_dir = Path(
+        os.environ.get("COPILOT_DIR")
+        or os.environ.get("COPILOT_HOME")
+        or str(home / ".copilot")
+    )
+    copilot_path = copilot_dir / "mcp-config.json"
     copilot: object = json.loads(copilot_path.read_text())
     expected: dict[str, object] = {"command": str(executable), "args": []}
     expected_opencode: dict[str, object] = {
@@ -146,6 +151,10 @@ def verify_configs(require_minimal: bool = False) -> Path:
             for name, entry in copilot_servers.items()
             if isinstance(entry, dict) and not entry.get("disabled", False)
         )
+        assert not any(
+            isinstance(entry, dict) and entry.get("disabled", False)
+            for entry in copilot_servers.values()
+        ), "Copilot config must omit disabled managed entries instead of setting disabled=true"
         assert enabled_copilot == EXPECTED_MINIMAL_SERVERS, (
             f"Copilot minimal profile mismatch. Missing: {sorted(EXPECTED_MINIMAL_SERVERS - enabled_copilot)}, "
             f"Unexpected: {sorted(enabled_copilot - EXPECTED_MINIMAL_SERVERS)}"

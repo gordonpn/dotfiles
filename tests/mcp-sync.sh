@@ -382,25 +382,26 @@ JSON
 sync_mcp_config
 [[ "$(jq -r '.customSetting' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["custom-copilot"].command' "${COPILOT_DIR}/mcp-config.json")" == "echo" ]]
-[[ "$(jq -r '.mcpServers["cclsp"].disabled // false' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
-[[ "$(jq -r '.mcpServers["docker"].disabled' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
-[[ "$(jq -r '.mcpServers["memory"].disabled' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("cclsp")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["cclsp"] | has("disabled")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("memory")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 COPILOT_MCP_PROFILE=full sync_mcp_config
-[[ "$(jq -r '.mcpServers["docker"].disabled // false' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
-[[ "$(jq -r '.mcpServers["memory"].disabled' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("memory")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 COPILOT_MCP_SERVERS="cclsp,docker" sync_mcp_config
-[[ "$(jq -r '.mcpServers["docker"].disabled // false' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
-[[ "$(jq -r '.mcpServers["git"].disabled' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("git")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 unset COPILOT_MCP_SERVERS
 
 (main --configs-only --copilot-profile full)
-[[ "$(jq -r '.mcpServers["docker"].disabled // false' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
 
 (main --configs-only --copilot-servers=cclsp,docker)
-[[ "$(jq -r '.mcpServers["docker"].disabled // false' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
-[[ "$(jq -r '.mcpServers["git"].disabled' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("git")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 if (main --configs-only --copilot-profile 2>/dev/null); then
   echo 'Expected missing --copilot-profile argument to fail' >&2
@@ -413,7 +414,7 @@ fi
 
 copilot_warn_output="$(COPILOT_MCP_PROFILE=unknown sync_mcp_config 2>&1)"
 [[ "${copilot_warn_output}" == *"Warning: Unrecognized COPILOT_MCP_PROFILE \"unknown\", defaulting to \"minimal\""* ]]
-[[ "$(jq -r '.mcpServers["docker"].disabled' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 printf '{ invalid json\n' >"${COPILOT_DIR}/mcp-config.json"
 if sync_mcp_config 2>/dev/null; then
@@ -423,6 +424,15 @@ fi
 [[ "$(<"${COPILOT_DIR}/mcp-config.json")" == '{ invalid json' ]]
 
 rm -f "${COPILOT_DIR}/mcp-config.json"
+
+# Verify COPILOT_HOME override when COPILOT_DIR is unset
+copilot_home_override="${HOME}/custom-copilot-home"
+env -u COPILOT_DIR COPILOT_HOME="${copilot_home_override}" HOME="${HOME}" XDG_CONFIG_HOME="${XDG_CONFIG_HOME}" PATH="${PATH}" \
+  bash "${REPO_DIR}/bin/mcp-sync" --configs-only >/dev/null
+[[ -f "${copilot_home_override}/mcp-config.json" ]]
+[[ ! -e "${HOME}/.copilot/mcp-config.json" ]]
+rm -rf "${copilot_home_override}"
+
 unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS OPENCODE_MCP_PROFILE OPENCODE_MCP_SERVERS COPILOT_MCP_PROFILE COPILOT_MCP_SERVERS
 sync_mcp_config
 

@@ -12,7 +12,7 @@ GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
 CODEX_DIR="${HOME}/.codex"
 OPENCODE_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/opencode"
-COPILOT_DIR="${COPILOT_DIR:-${HOME}/.copilot}"
+COPILOT_DIR="${COPILOT_DIR:-${COPILOT_HOME:-${HOME}/.copilot}}"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
 LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
@@ -884,9 +884,10 @@ for name, s in data.get('mcpServers', {}).items():
     copilot_enabled = (not globally_disabled) and (
         allowed_copilot_servers is None or name in allowed_copilot_servers
     )
-    if copilot_enabled:
-        copilot_enabled_count += 1
+    if not copilot_enabled:
+        continue
 
+    copilot_enabled_count += 1
     entry = {
         'type': 'local',
         'command': cmd,
@@ -895,13 +896,11 @@ for name, s in data.get('mcpServers', {}).items():
     }
     if env:
         entry['env'] = env
-    if not copilot_enabled:
-        entry['disabled'] = True
     copilot_mcp[name] = entry
 
 copilot_data['mcpServers'] = copilot_mcp
 safe_write_config(copilot_config, json.dumps(copilot_data, indent=2) + '\n')
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {copilot_config} ({copilot_enabled_count} enabled, profile: {copilot_profile_label})')
+print(f'Synchronized {copilot_enabled_count} enabled MCP servers to {copilot_config} (profile: {copilot_profile_label})')
 "
 }
 
