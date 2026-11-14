@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -76,13 +77,22 @@ def verify_configs(require_minimal: bool = False) -> Path:
         AssertionError: If configurations, permissions, or server assertions fail.
     """
     home = Path.home()
+    xdg_config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(home / ".config")))
     executable = home / ".local/share/codebase-memory-mcp/codebase-memory-mcp"
     agy: object = json.loads((home / ".gemini/config/mcp_config.json").read_text())
     codex: object = tomllib.loads((home / ".codex/config.toml").read_text())
+    opencode_path = xdg_config_home / "opencode/opencode.json"
+    opencode: object = json.loads(opencode_path.read_text())
     expected: dict[str, object] = {"command": str(executable), "args": []}
+    expected_opencode: dict[str, object] = {
+        "type": "local",
+        "command": [str(executable)],
+        "enabled": True,
+    }
 
     assert server_entry(agy, "mcpServers") == expected
     assert server_entry(codex, "mcp_servers") == expected
+    assert server_entry(opencode, "mcp") == expected_opencode
 
     # Verify codebase-memory-mcp is present and enabled in Codex
     assert isinstance(codex, dict)
@@ -90,6 +100,10 @@ def verify_configs(require_minimal: bool = False) -> Path:
     assert isinstance(codex_servers, dict)
     cbm = codex_servers.get(SERVER_NAME)
     assert isinstance(cbm, dict) and cbm.get("enabled", True), f"{SERVER_NAME} must be enabled in Codex"
+
+    assert isinstance(opencode, dict)
+    opencode_servers: object = opencode.get("mcp")
+    assert isinstance(opencode_servers, dict)
 
     # Verify minimal profile expectations when explicitly requested
     if require_minimal:
@@ -104,13 +118,21 @@ def verify_configs(require_minimal: bool = False) -> Path:
             f"Unexpected: {sorted(managed_enabled - EXPECTED_MINIMAL_SERVERS)}"
         )
 
+        enabled_opencode: frozenset[str] = frozenset(
+            name
+            for name, entry in opencode_servers.items()
+            if isinstance(entry, dict) and entry.get("enabled", True)
+        )
+        assert enabled_opencode == EXPECTED_MINIMAL_SERVERS, (
+            f"OpenCode minimal profile mismatch. Missing: {sorted(EXPECTED_MINIMAL_SERVERS - enabled_opencode)}, "
+            f"Unexpected: {sorted(enabled_opencode - EXPECTED_MINIMAL_SERVERS)}"
+        )
+
     configs = [
         home / ".gemini/config/mcp_config.json",
         home / ".codex/config.toml",
+        opencode_path,
     ]
-
-    # OpenCode MCP registration is not managed by mcp-sync (only shared skills
-    # and AGENTS.md instructions are synchronized for OpenCode).
 
     for config in configs:
         assert config.stat().st_mode & 0o777 == 0o600, f"Unsafe permissions: {config}"

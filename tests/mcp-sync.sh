@@ -146,7 +146,34 @@ ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-brid
 get_secret() { printf ''; }
 gh() { return 1; }
 
-unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS
+unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS OPENCODE_MCP_PROFILE OPENCODE_MCP_SERVERS
+mkdir -p "${OPENCODE_DIR}"
+cat >"${OPENCODE_DIR}/opencode.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "theme": "flexoki",
+  "mcp": {
+    "custom-local": {
+      "type": "local",
+      "command": ["echo", "custom"],
+      "enabled": true
+    }
+  }
+}
+JSON
+sync_mcp_config
+
+# Verify OpenCode preserved top-level settings and custom unmanaged MCP entry
+[[ "$(jq -r '.model' "${OPENCODE_DIR}/opencode.json")" == "opencode/deepseek-v4.1-flash-free" ]]
+[[ "$(jq -r '.theme' "${OPENCODE_DIR}/opencode.json")" == "flexoki" ]]
+[[ "$(jq -r '.mcp["custom-local"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["ai-memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["cclsp"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+rm -f "${OPENCODE_DIR}/opencode.json"
 sync_mcp_config
 uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" --configs-only --require-minimal
 
@@ -254,9 +281,59 @@ warn_output="$(CODEX_MCP_PROFILE=unknown sync_mcp_config 2>&1)"
 grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
 # Restore default minimal profile
-unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS
+unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS OPENCODE_MCP_PROFILE OPENCODE_MCP_SERVERS
 sync_mcp_config
 grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+
+# OpenCode MCP profile: Full profile enables non-core servers while preserving globally disabled servers
+OPENCODE_MCP_PROFILE=full sync_mcp_config
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+
+# OpenCode MCP profile: Custom server allowlist via OPENCODE_MCP_SERVERS
+OPENCODE_MCP_SERVERS="cclsp,docker" sync_mcp_config
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["cclsp"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["git"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+unset OPENCODE_MCP_SERVERS
+
+# OpenCode MCP profile: CLI arguments validation
+(main --configs-only --opencode-profile full)
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+
+(main --configs-only --opencode-servers=cclsp,docker)
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["git"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+
+# OpenCode MCP profile: Missing CLI option arguments fail cleanly
+if (main --configs-only --opencode-profile 2>/dev/null); then
+  echo 'Expected missing --opencode-profile argument to fail' >&2
+  exit 1
+fi
+if (main --configs-only --opencode-profile --configs-only 2>/dev/null); then
+  echo 'Expected swallowed --opencode-profile flag to fail' >&2
+  exit 1
+fi
+if (main --configs-only --opencode-servers 2>/dev/null); then
+  echo 'Expected missing --opencode-servers argument to fail' >&2
+  exit 1
+fi
+if (main --configs-only --opencode-servers --configs-only 2>/dev/null); then
+  echo 'Expected swallowed --opencode-servers flag to fail' >&2
+  exit 1
+fi
+
+# OpenCode MCP profile: Unrecognized profile warns and falls back to minimal
+opencode_warn_output="$(OPENCODE_MCP_PROFILE=unknown sync_mcp_config 2>&1)"
+[[ "${opencode_warn_output}" == *"Warning: Unrecognized OPENCODE_MCP_PROFILE \"unknown\", defaulting to \"minimal\""* ]]
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+
+# Restore default minimal profile
+unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS OPENCODE_MCP_PROFILE OPENCODE_MCP_SERVERS
+sync_mcp_config
+[[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 
 # Fast-path stamp check for ai-memory
 ai_stamp="${LOCAL_BIN_DIR}/.ai-memory.version"

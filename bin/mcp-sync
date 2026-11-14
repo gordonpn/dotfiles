@@ -471,6 +471,7 @@ sync_mcp_config() {
   local template_file="${TEMPLATE_DIR}/mcp_config.template.json"
   local target_file="${GEMINI_CONFIG_DIR}/mcp_config.json"
   local codex_config="${CODEX_DIR}/config.toml"
+  local opencode_config="${OPENCODE_DIR}/opencode.json"
 
   if [[ ! -f "${template_file}" ]]; then
     echo "Error: Template ${template_file} not found." >&2
@@ -590,14 +591,17 @@ sync_mcp_config() {
   export SONARQUBE_ORG="${sonar_org}"
   export CODEX_MCP_PROFILE="${CODEX_MCP_PROFILE:-minimal}"
   export CODEX_MCP_SERVERS="${CODEX_MCP_SERVERS:-}"
+  export OPENCODE_MCP_PROFILE="${OPENCODE_MCP_PROFILE:-minimal}"
+  export OPENCODE_MCP_SERVERS="${OPENCODE_MCP_SERVERS:-}"
 
   python3 -c "
-import json, os, re
+import json, os, re, sys
 
 template_file = '${template_file}'
 target_file = '${target_file}'
 codex_config = '${codex_config}'
 codex_template = '${REPO_DIR}/dotfiles/codex/config.template.toml'
+opencode_config = '${opencode_config}'
 
 with open(template_file, 'r') as f:
     content = f.read()
@@ -665,10 +669,7 @@ elif os.path.exists(codex_template):
     with open(codex_template, 'r') as f:
         codex_content = f.read()
 
-codex_profile = os.environ.get('CODEX_MCP_PROFILE', 'minimal').strip().lower()
-custom_servers_env = os.environ.get('CODEX_MCP_SERVERS', '').strip()
-
-DEFAULT_CODEX_CORE_SERVERS = {
+DEFAULT_CORE_SERVERS = {
     'ai-memory',
     'cclsp',
     'codebase-memory-mcp',
@@ -680,19 +681,24 @@ DEFAULT_CODEX_CORE_SERVERS = {
     'sequentialthinking',
 }
 
-if codex_profile not in ('minimal', 'full'):
-    import sys
-    print(f'Warning: Unrecognized CODEX_MCP_PROFILE \"{codex_profile}\", defaulting to \"minimal\"', file=sys.stderr)
-    codex_profile = 'minimal'
+def resolve_allowed_servers(profile_env, servers_env, default_servers):
+    profile = os.environ.get(profile_env, 'minimal').strip().lower()
+    custom_raw = os.environ.get(servers_env, '').strip()
 
-if custom_servers_env:
-    allowed_codex_servers = {
-        s.strip() for s in custom_servers_env.split(',') if s.strip()
-    }
-elif codex_profile == 'full':
-    allowed_codex_servers = None
-else:
-    allowed_codex_servers = DEFAULT_CODEX_CORE_SERVERS
+    if profile not in ('minimal', 'full'):
+        print(f'Warning: Unrecognized {profile_env} \"{profile}\", defaulting to \"minimal\"', file=sys.stderr)
+        profile = 'minimal'
+
+    if custom_raw:
+        allowed = {s.strip() for s in custom_raw.split(',') if s.strip()}
+        return allowed, f'custom ({len(allowed)} servers)'
+    if profile == 'full':
+        return None, 'full'
+    return default_servers, 'minimal'
+
+allowed_codex_servers, codex_profile_label = resolve_allowed_servers(
+    'CODEX_MCP_PROFILE', 'CODEX_MCP_SERVERS', DEFAULT_CORE_SERVERS
+)
 
 def toml_str(val):
     escaped = (
@@ -748,8 +754,61 @@ enabled_count = sum(
     1 for name, s in data.get('mcpServers', {}).items()
     if not s.get('disabled', False) and (allowed_codex_servers is None or name in allowed_codex_servers)
 )
-profile_label = f'custom ({len(allowed_codex_servers)} servers)' if custom_servers_env else codex_profile
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config} ({enabled_count} enabled, profile: {profile_label})')
+print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config} ({enabled_count} enabled, profile: {codex_profile_label})')
+
+# 3. OpenCode MCP config (~/.config/opencode/opencode.json)
+allowed_opencode_servers, opencode_profile_label = resolve_allowed_servers(
+    'OPENCODE_MCP_PROFILE', 'OPENCODE_MCP_SERVERS', DEFAULT_CORE_SERVERS
+)
+
+opencode_data = {}
+if os.path.exists(opencode_config):
+    with open(opencode_config, 'r') as f:
+        try:
+            loaded = json.load(f)
+            if isinstance(loaded, dict):
+                opencode_data = loaded
+        except json.JSONDecodeError as exc:
+            print(f'Warning: Could not parse existing {opencode_config} ({exc}); regenerating MCP section', file=sys.stderr)
+
+if '\$schema' not in opencode_data:
+    opencode_data['\$schema'] = 'https://opencode.ai/config.json'
+
+existing_mcp = opencode_data.get('mcp', {})
+if not isinstance(existing_mcp, dict):
+    existing_mcp = {}
+
+managed_names = set(data.get('mcpServers', {}).keys())
+opencode_mcp = {
+    k: v for k, v in existing_mcp.items()
+    if k not in managed_names
+}
+
+opencode_enabled_count = 0
+for name, s in data.get('mcpServers', {}).items():
+    cmd = s.get('command', '')
+    args = s.get('args', [])
+    globally_disabled = s.get('disabled', False)
+    env = s.get('env', {})
+
+    opencode_enabled = (not globally_disabled) and (
+        allowed_opencode_servers is None or name in allowed_opencode_servers
+    )
+    if opencode_enabled:
+        opencode_enabled_count += 1
+
+    entry = {
+        'type': 'local',
+        'command': [cmd, *args] if cmd else list(args),
+        'enabled': opencode_enabled,
+    }
+    if env:
+        entry['environment'] = env
+    opencode_mcp[name] = entry
+
+opencode_data['mcp'] = opencode_mcp
+safe_write_config(opencode_config, json.dumps(opencode_data, indent=2) + '\n')
+print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {opencode_config} ({opencode_enabled_count} enabled, profile: {opencode_profile_label})')
 "
 }
 
@@ -1056,15 +1115,41 @@ main() {
         export CODEX_MCP_SERVERS="$2"
         shift 2
         ;;
+      --opencode-profile=*)
+        export OPENCODE_MCP_PROFILE="${1#*=}"
+        shift
+        ;;
+      --opencode-profile)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          echo "Error: --opencode-profile requires a profile argument ('minimal' or 'full')" >&2
+          exit 1
+        fi
+        export OPENCODE_MCP_PROFILE="$2"
+        shift 2
+        ;;
+      --opencode-servers=*)
+        export OPENCODE_MCP_SERVERS="${1#*=}"
+        shift
+        ;;
+      --opencode-servers)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          echo "Error: --opencode-servers requires a comma-separated list of servers" >&2
+          exit 1
+        fi
+        export OPENCODE_MCP_SERVERS="$2"
+        shift 2
+        ;;
       -h|--help)
         echo "Usage: mcp-sync [OPTIONS]"
         echo ""
         echo "Options:"
-        echo "  --configs-only, --mcp-only    Synchronize configurations and skills without downloading binaries"
-        echo "  --codebase-memory-only        Run only codebase-memory-mcp checks and configuration updates"
-        echo "  --codex-profile <PROFILE>     Codex MCP profile: 'minimal' (default) or 'full'"
-        echo "  --codex-servers <SERVERS>     Comma-separated list of MCP servers to enable in Codex"
-        echo "  -h, --help                    Show this help message and exit"
+        echo "  --configs-only, --mcp-only       Synchronize configurations and skills without downloading binaries"
+        echo "  --codebase-memory-only           Run only codebase-memory-mcp checks and configuration updates"
+        echo "  --codex-profile <PROFILE>        Codex MCP profile: 'minimal' (default) or 'full'"
+        echo "  --codex-servers <SERVERS>        Comma-separated list of MCP servers to enable in Codex"
+        echo "  --opencode-profile <PROFILE>     OpenCode MCP profile: 'minimal' (default) or 'full'"
+        echo "  --opencode-servers <SERVERS>     Comma-separated list of MCP servers to enable in OpenCode"
+        echo "  -h, --help                       Show this help message and exit"
         exit 0
         ;;
       *)
