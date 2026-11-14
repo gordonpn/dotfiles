@@ -30,9 +30,23 @@ This document records non-obvious engineering and implementation decisions made 
 - Rejected alternatives: Retaining legacy `@modelcontextprotocol/server-memory`, Context Mode, Claude-Mem, or overlapping browser/filesystem servers.
 - Source: [#10 feat(mcp): add ai-memory and consolidate mcp servers](https://github.com/gordonpn/dotfiles/pull/10), [#9 chore(agents): remove context capture plugins](https://github.com/gordonpn/dotfiles/pull/9)
 
-## 2026-10-29: Mandatory task-branch PR delivery and Ghostty 1.4 copy-on-select
+## 2026-11-02: Exclude standard path tools from Carapace completions
 
-- Decision: Require every repository change to land via a pull request from a dedicated task branch (never committing directly to default branches), set Ghostty `copy-on-select = both` for Ghostty 1.4.0, and exclude standard PATH tools from Carapace completions where native completions cause issues.
-- Rationale: Maintain reviewable, isolated history across repositories and align terminal selection behavior with Ghostty 1.4.0 behavior on macOS and Linux.
+- Decision: Add standard file and path tools (`basename`, `chmod`, `chown`, `dirname`, `du`, `file`, `readlink`, `realpath`, `stat`, `wc`) to `CARAPACE_EXCLUDES` in `dotfiles/.zshrc_new` alongside existing exclusions, and pass `-e CARAPACE_EXCLUDES -e CARAPACE_MATCH` to `_zcache_source`.
+- Rationale: Prevent Carapace's generic completers from intercepting standard path tool completions and double-escaping paths containing spaces under `fzf-tab`, while ensuring edits to `CARAPACE_EXCLUDES` invalidate the cached Carapace init script.
+- Rejected alternatives: Relying on Carapace's built-in completers for standard file utilities or manually clearing the zsh completion cache after every `CARAPACE_EXCLUDES` edit.
+- Source: [#13 fix(zsh): exclude standard path tools from carapace completions](https://github.com/gordonpn/dotfiles/pull/13)
+
+## 2026-10-29: Enforce mandatory task-branch pull request delivery
+
+- Decision: Require every repository change (code, tests, configuration, documentation, scripts, and agent rules) to be committed on a dedicated task branch and delivered through a pull request targeting the default branch, never committing directly to or fast-forwarding `main` or `master`.
+- Rationale: Maintain reviewable, isolated history across repositories and prevent unreviewed changes from landing directly on shared default branches.
 - Rejected alternatives: Committing or fast-forwarding changes directly onto `main` or `master`.
-- Source: [#12 docs(rules): enforce mandatory pull request delivery for all changes](https://github.com/gordonpn/dotfiles/pull/12), [#8 fix(ghostty): use Ghostty 1.4 copy-on-select value](https://github.com/gordonpn/dotfiles/pull/8), [#13 fix(zsh): exclude standard path tools from carapace completions](https://github.com/gordonpn/dotfiles/pull/13)
+- Source: [#12 docs(rules): enforce mandatory pull request delivery for all changes](https://github.com/gordonpn/dotfiles/pull/12)
+
+## 2026-10-27: Use Ghostty 1.4 copy-on-select=both
+
+- Decision: Set `copy-on-select = both` in the Ghostty configuration for Ghostty 1.4.0 instead of legacy values.
+- Rationale: Align terminal selection-to-clipboard behavior with Ghostty 1.4.0 on macOS and Linux.
+- Rejected alternatives: Retaining the pre-1.4 `copy-on-select` setting that no longer matched Ghostty 1.4.0 behavior.
+- Source: [#8 fix(ghostty): use Ghostty 1.4 copy-on-select value](https://github.com/gordonpn/dotfiles/pull/8)
