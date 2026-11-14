@@ -101,7 +101,7 @@ just setup-codebase-memory
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 37 servers, lazy-loaded on demand by Antigravity CLI), `~/.codex/config.toml`, and `~/.config/opencode/opencode.json` (lean minimal profile by default with 9 core coding servers enabled; 28 heavy, homelab, and database servers defined with `enabled = false`). Profiles can be configured via `--codex-profile`/`CODEX_MCP_PROFILE` and `--opencode-profile`/`OPENCODE_MCP_PROFILE`. GitHub Copilot Student runs through `delegate.sh --agent copilot` using built-in CLI tools (`--available-tools`) rather than a separate MCP config file.
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 37 servers, lazy-loaded on demand by Antigravity CLI), `~/.codex/config.toml`, `~/.config/opencode/opencode.json`, and `~/.copilot/mcp-config.json` (lean minimal profile by default with 9 core coding servers enabled; 28 heavy, homelab, and database servers defined as disabled). Profiles can be configured via `--codex-profile`/`CODEX_MCP_PROFILE`, `--opencode-profile`/`OPENCODE_MCP_PROFILE`, and `--copilot-profile`/`COPILOT_MCP_PROFILE`. Delegated GitHub Copilot Student runs through `delegate.sh --agent copilot` still restrict tools via `--available-tools`.
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories (skipping redundant links in `~/.config/opencode/skills` for skills present in `~/.agents/skills` to eliminate duplicate OpenCode discovery warnings). The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
    Antigravity CLI delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`: Codex CLI runs first, falling back on classified provider, quota, rate-limit, or model-availability failures to OpenCode free models (`opencode/deepseek-v4.1-flash-free` high, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`), then to GitHub Copilot Student (`--model auto`). Codex as orchestrator delegates sequentially across OpenCode free models and GitHub Copilot Student (`--model auto`). OpenCode free models run anonymously without requiring an account or login. Authentication and provider-initialization errors (such as `ProviderInitError` or HTTP 403) are hard stops across all candidates with actionable credential/configuration guidance (`codex login`, `copilot login`, or OpenCode provider configuration). Automatic delegation requires `agents.delegationAllowed=true`.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
@@ -161,12 +161,13 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
    ```
 
 2. **Full Profile via `mcp-sync`:**
-   To enable all configured MCP servers across Codex or OpenCode:
+   To enable all configured MCP servers across Codex, OpenCode, or Copilot:
    ```bash
    mcp-sync --codex-profile full
    mcp-sync --opencode-profile full
+   mcp-sync --copilot-profile full
    # Or set via environment variables:
-   CODEX_MCP_PROFILE=full OPENCODE_MCP_PROFILE=full mcp-sync --configs-only
+   CODEX_MCP_PROFILE=full OPENCODE_MCP_PROFILE=full COPILOT_MCP_PROFILE=full mcp-sync --configs-only
    ```
 
 3. **Custom Server Allowlist:**
@@ -174,9 +175,11 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
    ```bash
    mcp-sync --codex-servers "cclsp,docker,github,context7"
    mcp-sync --opencode-servers "cclsp,docker,github,context7"
+   mcp-sync --copilot-servers "cclsp,docker,github,context7"
    # Or set via environment variables:
    export CODEX_MCP_SERVERS="cclsp,docker,github,context7"
    export OPENCODE_MCP_SERVERS="cclsp,docker,github,context7"
+   export COPILOT_MCP_SERVERS="cclsp,docker,github,context7"
    mcp-sync --configs-only
    ```
 
