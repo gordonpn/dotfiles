@@ -101,7 +101,7 @@ just setup-codebase-memory
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
 6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 37 servers, lazy-loaded on demand by Antigravity CLI), `~/.codex/config.toml`, and `~/.config/opencode/opencode.json` (lean minimal profile by default with 9 core coding servers enabled; 28 heavy, homelab, and database servers defined with `enabled = false`). Profiles can be configured via `--codex-profile`/`CODEX_MCP_PROFILE` and `--opencode-profile`/`OPENCODE_MCP_PROFILE`.
+7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 37 servers, lazy-loaded on demand by Antigravity CLI), `~/.codex/config.toml`, and `~/.config/opencode/opencode.json` (lean minimal profile by default with 9 core coding servers enabled; 28 heavy, homelab, and database servers defined with `enabled = false`). Profiles can be configured via `--codex-profile`/`CODEX_MCP_PROFILE` and `--opencode-profile`/`OPENCODE_MCP_PROFILE`. GitHub Copilot Student runs through `delegate.sh --agent copilot` using built-in CLI tools (`--available-tools`) rather than a separate MCP config file.
 8. **Synchronizes Skills & Instructions:** Links the tracked `delegate-coding-agents` skill and Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` to `~/.codex/AGENTS.md`, and mirrors shared skills into Antigravity, Codex, and OpenCode discovery directories (skipping redundant links in `~/.config/opencode/skills` for skills present in `~/.agents/skills` to eliminate duplicate OpenCode discovery warnings). The tracked sources are `dotfiles/agent-skills/delegate-coding-agents/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
    Antigravity CLI delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`: Codex CLI runs first, falling back on classified provider, quota, rate-limit, or model-availability failures to OpenCode free models (`opencode/deepseek-v4.1-flash-free` high, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`), then to GitHub Copilot Student (`--model auto`). Codex as orchestrator delegates sequentially across OpenCode free models and GitHub Copilot Student (`--model auto`). OpenCode free models run anonymously without requiring an account or login. Authentication and provider-initialization errors (such as `ProviderInitError` or HTTP 403) are hard stops across all candidates with actionable credential/configuration guidance (`codex login`, `copilot login`, or OpenCode provider configuration). Automatic delegation requires `agents.delegationAllowed=true`.
 9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
@@ -117,7 +117,7 @@ To optimize interactive and CLI workflows, `bin/mcp-sync` configures both Codex 
 
 ### Default Minimal Profile
 
-Only 9 core coding and memory servers are enabled by default in `~/.codex/config.toml` and `~/.config/opencode/opencode.json`:
+Only 9 core coding and memory servers are enabled by default in `~/.codex/config.toml` and `~/.config/opencode/opencode.json`. This expands on the 4-server baseline (`context7`, `codebase-memory-mcp`, `ai-memory`, `github`) by keeping local coding, LSP, fetch, git, packing, static-analysis, and reasoning tools available while removing `github` and homelab servers to stay at 84 tools (below the 128-tool cap), matching the Codex minimal profile established in PR #65:
 
 | Server Name | Tools | Role |
 | :--- | :---: | :--- |
@@ -133,7 +133,9 @@ Only 9 core coding and memory servers are enabled by default in `~/.codex/config
 
 All other 28 servers remain fully defined in `~/.codex/config.toml` and `~/.config/opencode/opencode.json` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false` / `"enabled": false`. Existing top-level keys and custom unmanaged `mcp` entries in `~/.config/opencode/opencode.json` are preserved across syncs.
 
-### Measured Performance Reduction
+### Measured Performance Reduction (Codex CLI)
+
+These measurements were captured on Codex CLI (`33` -> `9` managed startup processes, `593` -> `84` tools); cross-client startup and task-success benchmarking for OpenCode, DeepSeek, and Copilot is tracked in GitHub issue `#20`.
 
 | Metric | Before (Full Profile) | After (Minimal Profile) | Change |
 | :--- | :---: | :---: | :---: |
@@ -180,13 +182,13 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
 
 ### Client & Harness Compatibility Matrix
 
-| Client / Harness | Version | Tool Loading | Deferred Search | Default Profile & Visible MCP Tools | Fallback / Override |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Antigravity CLI (`agy`)** | Primary | Lazy-loaded on demand from disk | Native | Full (`37` servers, `0` turn-0 schema overhead) | N/A |
-| **Codex CLI (`codex`)** | `0.167.2` | Eager at startup (`~/.codex/config.toml`) | Unavailable (`tool_search` `removed`; `code_mode_tool_search` `under development false`) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--codex-servers` |
-| **OpenCode (`opencode`)** | `1.19.3` | Eager at startup (`~/.config/opencode/opencode.json`) | Unavailable | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `--opencode-profile`, `--opencode-servers`, `delegate.sh --mcp-profile` |
-| **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | via OpenCode `1.19.3` | Eager via `delegate.sh --agent opencode` | Unavailable | `minimal` (`8` servers via `OPENCODE_CONFIG` override, excluding `ai-memory`) | `DELEGATE_MCP_PROFILE`, `OPENCODE_DELEGATE_MCP_PROFILE`, `DELEGATE_MCP_SERVERS` |
-| **GitHub Copilot Student (`copilot`)** | Delegated | Built-in CLI tools only (`--available-tools`) | N/A | Built-in tools only (`view,grep,glob` / `edit,view,grep,glob`; `--deny-tool=shell`) | Falls back across `delegate.sh` chain |
+| Client / Harness | Version | Provider / Model | Startup Processes | Tool Loading | Deferred Search | Default Profile & Visible MCP Tools | Fallback / Override |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Antigravity CLI (`agy`)** | Primary | Gemini / configured default | 0 eager MCP processes (spawned on demand) | Lazy-loaded on demand from disk | Native | Full (`37` servers, `0` turn-0 schema overhead) | N/A |
+| **Codex CLI (`codex`)** | `0.167.2` | OpenAI / configured default (`auto` in `delegate.sh`) | 9 managed servers (`+ node_repl`; 8 in `delegate.sh`) | Eager at startup (`~/.codex/config.toml`) | Unavailable (`tool_search` `removed`; `code_mode_tool_search` `under development false`) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--codex-servers` |
+| **OpenCode (`opencode`)** | `1.19.3` | OpenCode free models / configured default | 9 managed servers (8 in `delegate.sh`) | Eager at startup (`~/.config/opencode/opencode.json`) | Unavailable | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `--opencode-profile`, `--opencode-servers`, `delegate.sh --mcp-profile` |
+| **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | via OpenCode `1.19.3` | `opencode/deepseek-v4.1-flash-free` (`high` variant) | 8 managed servers (`OPENCODE_CONFIG` override) | Eager via `delegate.sh --agent opencode` | Unavailable | `minimal` (`8` servers, excluding `ai-memory`) | `DELEGATE_MCP_PROFILE`, `OPENCODE_DELEGATE_MCP_PROFILE`, `DELEGATE_MCP_SERVERS` |
+| **GitHub Copilot Student (`copilot`)** | Delegated | Copilot Student (`--model auto`) | 0 MCP servers spawned | Built-in CLI tools only (`--available-tools`) | N/A | Built-in tools only (`view,grep,glob` / `edit,view,grep,glob`; `--deny-tool=shell`) | Falls back across `delegate.sh` chain |
 
 ---
 
