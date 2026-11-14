@@ -83,16 +83,25 @@ def verify_configs(require_minimal: bool = False) -> Path:
     codex: object = tomllib.loads((home / ".codex/config.toml").read_text())
     opencode_path = xdg_config_home / "opencode/opencode.json"
     opencode: object = json.loads(opencode_path.read_text())
+    copilot_path = home / ".copilot/mcp-config.json"
+    copilot: object = json.loads(copilot_path.read_text())
     expected: dict[str, object] = {"command": str(executable), "args": []}
     expected_opencode: dict[str, object] = {
         "type": "local",
         "command": [str(executable)],
         "enabled": True,
     }
+    expected_copilot: dict[str, object] = {
+        "type": "local",
+        "command": str(executable),
+        "args": [],
+        "tools": ["*"],
+    }
 
     assert server_entry(agy, "mcpServers") == expected
     assert server_entry(codex, "mcp_servers") == expected
     assert server_entry(opencode, "mcp") == expected_opencode
+    assert server_entry(copilot, "mcpServers") == expected_copilot
 
     # Verify codebase-memory-mcp is present and enabled in Codex
     assert isinstance(codex, dict)
@@ -104,6 +113,10 @@ def verify_configs(require_minimal: bool = False) -> Path:
     assert isinstance(opencode, dict)
     opencode_servers: object = opencode.get("mcp")
     assert isinstance(opencode_servers, dict)
+
+    assert isinstance(copilot, dict)
+    copilot_servers: object = copilot.get("mcpServers")
+    assert isinstance(copilot_servers, dict)
 
     # Verify minimal profile expectations when explicitly requested
     if require_minimal:
@@ -128,10 +141,21 @@ def verify_configs(require_minimal: bool = False) -> Path:
             f"Unexpected: {sorted(enabled_opencode - EXPECTED_MINIMAL_SERVERS)}"
         )
 
+        enabled_copilot: frozenset[str] = frozenset(
+            name
+            for name, entry in copilot_servers.items()
+            if isinstance(entry, dict) and not entry.get("disabled", False)
+        )
+        assert enabled_copilot == EXPECTED_MINIMAL_SERVERS, (
+            f"Copilot minimal profile mismatch. Missing: {sorted(EXPECTED_MINIMAL_SERVERS - enabled_copilot)}, "
+            f"Unexpected: {sorted(enabled_copilot - EXPECTED_MINIMAL_SERVERS)}"
+        )
+
     configs = [
         home / ".gemini/config/mcp_config.json",
         home / ".codex/config.toml",
         opencode_path,
+        copilot_path,
     ]
 
     for config in configs:

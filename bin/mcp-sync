@@ -12,6 +12,7 @@ GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
 CODEX_DIR="${HOME}/.codex"
 OPENCODE_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/opencode"
+COPILOT_DIR="${COPILOT_DIR:-${HOME}/.copilot}"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
 LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
@@ -472,6 +473,7 @@ sync_mcp_config() {
   local target_file="${GEMINI_CONFIG_DIR}/mcp_config.json"
   local codex_config="${CODEX_DIR}/config.toml"
   local opencode_config="${OPENCODE_DIR}/opencode.json"
+  local copilot_config="${COPILOT_DIR}/mcp-config.json"
 
   if [[ ! -f "${template_file}" ]]; then
     echo "Error: Template ${template_file} not found." >&2
@@ -593,6 +595,8 @@ sync_mcp_config() {
   export CODEX_MCP_SERVERS="${CODEX_MCP_SERVERS:-}"
   export OPENCODE_MCP_PROFILE="${OPENCODE_MCP_PROFILE:-minimal}"
   export OPENCODE_MCP_SERVERS="${OPENCODE_MCP_SERVERS:-}"
+  export COPILOT_MCP_PROFILE="${COPILOT_MCP_PROFILE:-minimal}"
+  export COPILOT_MCP_SERVERS="${COPILOT_MCP_SERVERS:-}"
 
   python3 -c "
 import json, os, re, sys
@@ -602,6 +606,7 @@ target_file = '${target_file}'
 codex_config = '${codex_config}'
 codex_template = '${REPO_DIR}/dotfiles/codex/config.template.toml'
 opencode_config = '${opencode_config}'
+copilot_config = '${copilot_config}'
 
 with open(template_file, 'r') as f:
     content = f.read()
@@ -781,29 +786,39 @@ def strip_jsonc(text):
         curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
     return curr
 
-opencode_data = {}
-if os.path.exists(opencode_config):
-    with open(opencode_config, 'r', encoding='utf-8-sig') as f:
-        raw_opencode = f.read()
-    if raw_opencode.strip():
-        try:
-            loaded = json.loads(raw_opencode)
-        except json.JSONDecodeError:
-            try:
-                loaded = json.loads(strip_jsonc(raw_opencode))
-            except json.JSONDecodeError as exc:
-                print(
-                    f'Error: Could not parse existing {opencode_config} ({exc}); aborting without overwriting',
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-        if not isinstance(loaded, dict):
+def load_json_dict(path, allow_jsonc=False):
+    if not os.path.exists(path):
+        return {}
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        raw = f.read()
+    if not raw.strip():
+        return {}
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        if not allow_jsonc:
             print(
-                f'Error: Expected JSON object in {opencode_config}; aborting without overwriting',
+                f'Error: Could not parse existing {path} ({exc}); aborting without overwriting',
                 file=sys.stderr,
             )
             sys.exit(1)
-        opencode_data = loaded
+        try:
+            loaded = json.loads(strip_jsonc(raw))
+        except json.JSONDecodeError as jsonc_exc:
+            print(
+                f'Error: Could not parse existing {path} ({jsonc_exc}); aborting without overwriting',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    if not isinstance(loaded, dict):
+        print(
+            f'Error: Expected JSON object in {path}; aborting without overwriting',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return loaded
+
+opencode_data = load_json_dict(opencode_config, allow_jsonc=True)
 
 if '\$schema' not in opencode_data:
     opencode_data['\$schema'] = 'https://opencode.ai/config.json'
@@ -843,6 +858,50 @@ for name, s in data.get('mcpServers', {}).items():
 opencode_data['mcp'] = opencode_mcp
 safe_write_config(opencode_config, json.dumps(opencode_data, indent=2) + '\n')
 print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {opencode_config} ({opencode_enabled_count} enabled, profile: {opencode_profile_label})')
+
+# 4. GitHub Copilot CLI MCP config (~/.copilot/mcp-config.json)
+allowed_copilot_servers, copilot_profile_label = resolve_allowed_servers(
+    'COPILOT_MCP_PROFILE', 'COPILOT_MCP_SERVERS', DEFAULT_CORE_SERVERS
+)
+
+copilot_data = load_json_dict(copilot_config)
+existing_copilot_mcp = copilot_data.get('mcpServers', {})
+if not isinstance(existing_copilot_mcp, dict):
+    existing_copilot_mcp = {}
+
+copilot_mcp = {
+    k: v for k, v in existing_copilot_mcp.items()
+    if k not in managed_names
+}
+
+copilot_enabled_count = 0
+for name, s in data.get('mcpServers', {}).items():
+    cmd = s.get('command', '')
+    args = s.get('args', [])
+    globally_disabled = s.get('disabled', False)
+    env = s.get('env', {})
+
+    copilot_enabled = (not globally_disabled) and (
+        allowed_copilot_servers is None or name in allowed_copilot_servers
+    )
+    if copilot_enabled:
+        copilot_enabled_count += 1
+
+    entry = {
+        'type': 'local',
+        'command': cmd,
+        'args': list(args),
+        'tools': ['*'],
+    }
+    if env:
+        entry['env'] = env
+    if not copilot_enabled:
+        entry['disabled'] = True
+    copilot_mcp[name] = entry
+
+copilot_data['mcpServers'] = copilot_mcp
+safe_write_config(copilot_config, json.dumps(copilot_data, indent=2) + '\n')
+print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {copilot_config} ({copilot_enabled_count} enabled, profile: {copilot_profile_label})')
 "
 }
 
@@ -1173,6 +1232,30 @@ main() {
         export OPENCODE_MCP_SERVERS="$2"
         shift 2
         ;;
+      --copilot-profile=*)
+        export COPILOT_MCP_PROFILE="${1#*=}"
+        shift
+        ;;
+      --copilot-profile)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          echo "Error: --copilot-profile requires a profile argument ('minimal' or 'full')" >&2
+          exit 1
+        fi
+        export COPILOT_MCP_PROFILE="$2"
+        shift 2
+        ;;
+      --copilot-servers=*)
+        export COPILOT_MCP_SERVERS="${1#*=}"
+        shift
+        ;;
+      --copilot-servers)
+        if [[ $# -lt 2 || "$2" == --* ]]; then
+          echo "Error: --copilot-servers requires a comma-separated list of servers" >&2
+          exit 1
+        fi
+        export COPILOT_MCP_SERVERS="$2"
+        shift 2
+        ;;
       -h|--help)
         echo "Usage: mcp-sync [OPTIONS]"
         echo ""
@@ -1183,6 +1266,8 @@ main() {
         echo "  --codex-servers <SERVERS>        Comma-separated list of MCP servers to enable in Codex"
         echo "  --opencode-profile <PROFILE>     OpenCode MCP profile: 'minimal' (default) or 'full'"
         echo "  --opencode-servers <SERVERS>     Comma-separated list of MCP servers to enable in OpenCode"
+        echo "  --copilot-profile <PROFILE>      Copilot MCP profile: 'minimal' (default) or 'full'"
+        echo "  --copilot-servers <SERVERS>      Comma-separated list of MCP servers to enable in Copilot"
         echo "  -h, --help                       Show this help message and exit"
         exit 0
         ;;
