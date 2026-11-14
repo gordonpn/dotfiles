@@ -50,5 +50,4 @@ None. Issues #31 and #19 are unblocked and ready for immediate implementation; #
 
 Lower-priority deferred tasks are tracked directly in GitHub Issues:
 - [#20: investigation: establish a cross-client MCP performance baseline](https://github.com/gordonpn/dotfiles/issues/20) (P3, Effort: S)
-- [#21: investigation: verify Codex deferred MCP tool search compatibility](https://github.com/gordonpn/dotfiles/issues/21) (P3, Effort: XS)
 - [#27: investigation: evaluate project-specific MCP profiles](https://github.com/gordonpn/dotfiles/issues/27) (P3, Effort: S)
