@@ -714,7 +714,24 @@ elif prof == "minimal":
 else:
     custom_data = load_jsonc(prof)
     if custom_data is not None:
-        custom_map = extract_server_map(custom_data, allow_top_level=True)
+        if "mcpServers" in custom_data:
+            sub = custom_data.get("mcpServers")
+            if not isinstance(sub, dict) or not all(isinstance(k, str) and isinstance(v, dict) for k, v in sub.items()):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
+            custom_map = sub
+        elif "mcp" in custom_data:
+            sub = custom_data.get("mcp")
+            if not isinstance(sub, dict) or not all(isinstance(k, str) and isinstance(v, dict) for k, v in sub.items()):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
+            custom_map = sub
+        else:
+            custom_map = extract_server_map(custom_data, allow_top_level=True)
+            non_meta = [k for k in custom_data.keys() if isinstance(k, str) and not k.startswith(("$", "_"))]
+            if len(custom_map) != len(non_meta):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
         explicit_disabled = {
             k for k, v in custom_map.items()
             if v.get("enabled") is False or v.get("disabled") is True
@@ -728,15 +745,18 @@ else:
             import tomllib
             with open(prof, "rb") as f:
                 toml_data = tomllib.load(f)
-            toml_servers = toml_data.get("mcp_servers")
-            if isinstance(toml_servers, dict):
-                toml_disabled = {
-                    k for k, v in toml_servers.items()
-                    if isinstance(k, str) and isinstance(v, dict) and v.get("enabled") is False
-                }
-                disabled_servers = [s for s in discovered_servers if s in toml_disabled]
-        except Exception:
-            pass
+        except Exception as exc:
+            sys.stderr.write(f"Invalid Copilot MCP profile {prof}: {exc}\n")
+            sys.exit(1)
+        toml_servers = toml_data.get("mcp_servers")
+        if not isinstance(toml_servers, dict):
+            sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+            sys.exit(1)
+        toml_disabled = {
+            k for k, v in toml_servers.items()
+            if isinstance(k, str) and isinstance(v, dict) and v.get("enabled") is False
+        }
+        disabled_servers = [s for s in discovered_servers if s in toml_disabled]
 
 with open(target_file, "w", encoding="utf-8") as f:
     for s in disabled_servers:
@@ -758,7 +778,9 @@ PY
 
   die "Failed to resolve Copilot MCP profile '$prof' in '$target_file'"
 }
-resolve_copilot_mcp_profile
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" copilot "* ]]; then
+  resolve_copilot_mcp_profile
+fi
 
 resolve_active_profile() {
   case "$1" in

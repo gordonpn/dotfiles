@@ -1022,6 +1022,23 @@ if grep -qx 'git' "$COPILOT_MOCK_MCP_LOG"; then
   echo 'Expected allowed minimal server git in .mcp.json to remain enabled' >&2; exit 1
 fi
 
+# MCP profile for Copilot: Malformed or unsupported custom profile fails closed
+printf '{ malformed json\n' > "$TMP/bad-copilot-profile.json"
+if COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile "$TMP/bad-copilot-profile.json" --id copilot-bad-profile --task 'Reject malformed profile' >"$TMP/copilot-bad-profile.out" 2>&1; then
+  echo 'Expected malformed Copilot custom profile to fail' >&2; exit 1
+fi
+grep -q 'Failed to resolve Copilot MCP profile' "$TMP/copilot-bad-profile.out"
+
+printf '{"unexpected": "scalar"}\n' > "$TMP/unsupported-copilot-profile.json"
+if COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile "$TMP/unsupported-copilot-profile.json" --id copilot-unsupported-profile --task 'Reject unsupported profile' >"$TMP/copilot-unsupported-profile.out" 2>&1; then
+  echo 'Expected unsupported Copilot custom profile structure to fail' >&2; exit 1
+fi
+grep -q 'Failed to resolve Copilot MCP profile' "$TMP/copilot-unsupported-profile.out"
+
+# MCP profile for Copilot: Unused COPILOT_DELEGATE_MCP_PROFILE does not break single-agent Codex runs
+COPILOT_DELEGATE_MCP_PROFILE="$TMP/nonexistent-copilot-profile.json" CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --model custom-codex --mode plan --id codex-ignores-copilot-prof --task 'Ignore unused Copilot profile' > "$TMP/codex-ignores-copilot-prof.out"
+grep -q 'Exit: 0' "$TMP/codex-ignores-copilot-prof.out"
+
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
 if "$SCRIPT" --agent opencode --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then
