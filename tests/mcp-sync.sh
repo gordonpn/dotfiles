@@ -703,6 +703,18 @@ rm -f "${user_plugin}"
   [[ ! -e "${CLAUDE_DIR}" ]]
 )
 
+# Verify symlinked agent skills directory (CLAUDE_DIR/skills -> ~/.agents/skills) preserves repository links
+(
+  CLAUDE_DIR="${test_tmp_dir}/symlinked-claude"
+  mkdir -p "${CLAUDE_DIR}"
+  ln -s "${HOME}/.agents/skills" "${CLAUDE_DIR}/skills"
+  sync_skills_and_instructions
+  [[ -L "${HOME}/.agents/skills/engineering-standards" ]]
+  [[ "$(readlink "${HOME}/.agents/skills/engineering-standards")" == "${repo_dir}/dotfiles/agent-skills/engineering-standards" ]]
+  [[ -L "${HOME}/.agents/skills/delegate-coding-agents" ]]
+  [[ "$(readlink "${HOME}/.agents/skills/delegate-coding-agents")" == "${repo_dir}/dotfiles/agent-skills/delegate-coding-agents" ]]
+)
+
 install_codebase_memory_mcp() { echo codebase >>"$calls"; }
 install_ai_memory() { echo ai-memory >>"$calls"; }
 install_thinking_skills() { echo thinking-skills >>"$calls"; }

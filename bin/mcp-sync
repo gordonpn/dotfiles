@@ -923,6 +923,9 @@ link_skill_into() {
   local skill_path="$3"
   local backup_prefix="$4"
   local dest_skill="${target_dir}/${skill_name}"
+  if [[ "${dest_skill}" -ef "${skill_path}" ]]; then
+    return 0
+  fi
   local needs_backup=0
   if [[ -L "${dest_skill}" ]]; then
     [[ "$(readlink "${dest_skill}" || true)" == "${skill_path}" ]] || needs_backup=1
