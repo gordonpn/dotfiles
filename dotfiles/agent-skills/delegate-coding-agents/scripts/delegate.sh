@@ -29,6 +29,8 @@ Environment:
   OPENCODE_DELEGATE_MCP_PROFILE  OpenCode MCP profile override if DELEGATE_MCP_PROFILE omitted
   OPENCODE_DELEGATE_MCP_SERVERS  OpenCode allowed servers override if DELEGATE_MCP_SERVERS omitted
   COPILOT_DELEGATE_MODEL         Default: auto
+  COPILOT_DELEGATE_MCP_PROFILE   Copilot MCP profile override if DELEGATE_MCP_PROFILE omitted
+  COPILOT_DELEGATE_MCP_SERVERS   Copilot allowed servers override if DELEGATE_MCP_SERVERS omitted
   DELEGATE_WORKTREE_ROOT         External directory for Git worktrees/logs
 
 Runs are isolated in Git worktrees. BUILD changes remain uncommitted on a
@@ -581,11 +583,210 @@ resolve_codex_mcp_profile() {
 }
 resolve_codex_mcp_profile
 
+COPILOT_MCP_PROFILE=''
+COPILOT_MCP_ARGS=()
+COPILOT_PROFILE_PATH=''
+# shellcheck disable=SC2016
+resolve_copilot_mcp_profile() {
+  local target_file="$LOG_DIR/copilot-mcp-overrides.txt"
+  local copilot_cfg="${COPILOT_MCP_CONFIG:-${COPILOT_DIR:-${COPILOT_HOME:-$HOME/.copilot}}/mcp-config.json}"
+  local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${COPILOT_DELEGATE_MCP_PROFILE:-minimal}}}"
+
+  if [[ "$prof" != "minimal" && "$prof" != "none" && "$prof" != "full" ]]; then
+    [[ -f "$prof" ]] || die "Copilot MCP profile file not found: $prof"
+    prof=$(cd "$(dirname "$prof")" >/dev/null && pwd)/$(basename "$prof")
+  fi
+  COPILOT_MCP_PROFILE="$prof"
+
+  if [[ "$prof" == "full" ]]; then
+    COPILOT_PROFILE_PATH=''
+    COPILOT_MCP_ARGS=()
+    return 0
+  fi
+
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${COPILOT_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+  if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$copilot_cfg" "$ROOT" "$BASE_SHA" <<'PY'
+import json
+import os
+import re
+import subprocess
+import sys
+
+prof, allowed_csv, target_file, copilot_cfg, root_dir, base_sha = sys.argv[1:7]
+allow_set = {s.strip() for s in allowed_csv.split(",") if s.strip()}
+
+TOKEN_AND_COMMA_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\r\n]*|/\*[\s\S]*?\*/|,\s*([}\]])')
+
+def strip_jsonc(text: str) -> str:
+    def repl(m):
+        s = m.group(0)
+        if s.startswith('"'):
+            return s
+        if s.startswith('//') or s.startswith('/*'):
+            return ""
+        return m.group(1)
+
+    prev = None
+    curr = text
+    while prev != curr:
+        prev = curr
+        curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
+    return curr
+
+def load_jsonc_text(raw: str):
+    if not raw or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        try:
+            data = json.loads(strip_jsonc(raw))
+        except Exception:
+            return None
+    return data if isinstance(data, dict) else None
+
+def load_jsonc(path: str):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            return load_jsonc_text(f.read())
+    except Exception:
+        return None
+
+def load_git_blob(root: str, rev: str, relpath: str):
+    if not root or not rev or not relpath:
+        return None
+    try:
+        res = subprocess.run(
+            ["git", "-C", root, "show", f"{rev}:{relpath}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8-sig",
+        )
+        if res.returncode == 0 and res.stdout:
+            return load_jsonc_text(res.stdout)
+    except Exception:
+        pass
+    return None
+
+def extract_server_map(data, allow_top_level: bool):
+    if not isinstance(data, dict):
+        return {}
+    for key in ("mcpServers", "mcp"):
+        sub = data.get(key)
+        if isinstance(sub, dict):
+            return {k: v for k, v in sub.items() if isinstance(k, str) and isinstance(v, dict)}
+    if allow_top_level:
+        return {
+            k: v for k, v in data.items()
+            if isinstance(k, str) and not k.startswith(("$", "_")) and isinstance(v, dict)
+        }
+    return {}
+
+discovered_servers = []
+seen = set()
+
+def collect_names(srv_map):
+    for k in srv_map.keys():
+        if k not in seen:
+            seen.add(k)
+            discovered_servers.append(k)
+
+collect_names(extract_server_map(load_jsonc(copilot_cfg), allow_top_level=False))
+
+for rel, allow_top in [
+    (".mcp.json", True),
+    (os.path.join(".github", "mcp.json"), False),
+    (os.path.join(".github", "mcp-config.json"), False),
+]:
+    blob = load_git_blob(root_dir, base_sha, rel)
+    if blob is None:
+        blob = load_jsonc(os.path.join(root_dir, rel))
+    collect_names(extract_server_map(blob, allow_top_level=allow_top))
+
+disabled_servers = []
+if prof == "none":
+    disabled_servers = list(discovered_servers)
+elif prof == "minimal":
+    disabled_servers = [s for s in discovered_servers if s not in allow_set]
+else:
+    custom_data = load_jsonc(prof)
+    if custom_data is not None:
+        if "mcpServers" in custom_data:
+            sub = custom_data.get("mcpServers")
+            if not isinstance(sub, dict) or not all(isinstance(k, str) and isinstance(v, dict) for k, v in sub.items()):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
+            custom_map = sub
+        elif "mcp" in custom_data:
+            sub = custom_data.get("mcp")
+            if not isinstance(sub, dict) or not all(isinstance(k, str) and isinstance(v, dict) for k, v in sub.items()):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
+            custom_map = sub
+        else:
+            custom_map = extract_server_map(custom_data, allow_top_level=True)
+            non_meta = [k for k in custom_data.keys() if isinstance(k, str) and not k.startswith(("$", "_"))]
+            if len(custom_map) != len(non_meta):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
+        explicit_disabled = {
+            k for k, v in custom_map.items()
+            if v.get("enabled") is False or v.get("disabled") is True
+        }
+        if explicit_disabled:
+            disabled_servers = [s for s in discovered_servers if s in explicit_disabled]
+        else:
+            disabled_servers = [s for s in discovered_servers if s not in custom_map]
+    else:
+        try:
+            import tomllib
+            with open(prof, "rb") as f:
+                toml_data = tomllib.load(f)
+        except Exception as exc:
+            sys.stderr.write(f"Invalid Copilot MCP profile {prof}: {exc}\n")
+            sys.exit(1)
+        toml_servers = toml_data.get("mcp_servers")
+        if not isinstance(toml_servers, dict):
+            sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+            sys.exit(1)
+        toml_disabled = {
+            k for k, v in toml_servers.items()
+            if isinstance(k, str) and isinstance(v, dict) and v.get("enabled") is False
+        }
+        disabled_servers = [s for s in discovered_servers if s in toml_disabled]
+
+with open(target_file, "w", encoding="utf-8") as f:
+    for s in disabled_servers:
+        f.write(f"{s}\n")
+PY
+  then
+    COPILOT_MCP_ARGS=()
+    while IFS= read -r s; do
+      [[ -n "$s" ]] || continue
+      COPILOT_MCP_ARGS+=(--disable-mcp-server "$s")
+    done < "$target_file"
+    if [[ "$prof" == "minimal" || "$prof" == "none" ]]; then
+      COPILOT_PROFILE_PATH="$target_file"
+    else
+      COPILOT_PROFILE_PATH="$prof"
+    fi
+    return 0
+  fi
+
+  die "Failed to resolve Copilot MCP profile '$prof' in '$target_file'"
+}
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" copilot "* ]]; then
+  resolve_copilot_mcp_profile
+fi
+
 resolve_active_profile() {
   case "$1" in
     codex) echo "${CODEX_MCP_PROFILE:-(none)}" ;;
     opencode) echo "${OPENCODE_MCP_PROFILE:-(none)}" ;;
-    copilot) echo '(not applicable)' ;;
+    copilot) echo "${COPILOT_MCP_PROFILE:-(none)}" ;;
     *) echo '(none)' ;;
   esac
 }
@@ -594,7 +795,7 @@ resolve_active_profile_path() {
   case "$1" in
     codex) echo "${CODEX_PROFILE_PATH:-(none)}" ;;
     opencode) echo "${OPENCODE_PROFILE_PATH:-(none)}" ;;
-    copilot) echo '(not applicable)' ;;
+    copilot) echo "${COPILOT_PROFILE_PATH:-(none)}" ;;
     *) echo '(none)' ;;
   esac
 }
@@ -700,6 +901,9 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
       ARGS+=(--mode plan "--available-tools=view,grep,glob" --deny-tool=write --deny-tool=shell)
     else
       ARGS+=("--available-tools=edit,view,grep,glob" --allow-tool=write --deny-tool=shell)
+    fi
+    if [[ ${#COPILOT_MCP_ARGS[@]} -gt 0 ]]; then
+      ARGS+=("${COPILOT_MCP_ARGS[@]}")
     fi
   fi
 

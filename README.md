@@ -80,7 +80,7 @@ candidates directing the user to log in (`codex login`, `copilot login`, or
 check OpenCode credentials; supported OpenCode free models operate anonymously
 without an account or login). Automatic delegation requires the repository-local
 opt-in `agents.delegationAllowed=true`.
-See [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
+Delegated GitHub Copilot Student workers isolate MCP exposure via `--mcp-profile` or `COPILOT_DELEGATE_MCP_PROFILE` without mutating interactive configuration; see [MCP setup](docs/mcp-setup.md) and [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
 ### Installing and usage
 
