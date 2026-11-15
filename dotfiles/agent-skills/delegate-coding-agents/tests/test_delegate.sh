@@ -1116,6 +1116,20 @@ if grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG"; then
   echo 'Expected resolver not to discover from COPILOT_DIR or COPILOT_MCP_CONFIG when COPILOT_HOME differs' >&2; exit 1
 fi
 
+# MCP profile for Copilot: A server literally named --disable-builtin-mcps still receives --disable-mcp-server
+mkdir -p "$TMP/copilot-flag-collision"
+cat > "$TMP/copilot-flag-collision/mcp-config.json" <<'JSON'
+{
+  "mcpServers": {
+    "--disable-builtin-mcps": { "type": "local", "command": "npx" }
+  }
+}
+JSON
+: >"$COPILOT_MOCK_CALL_LOG"
+COPILOT_HOME="$TMP/copilot-flag-collision" "$SCRIPT" --agent copilot --mode plan --mcp-profile none --id copilot-flag-collision --task 'Preserve server named like built-in flag' >"$TMP/copilot-flag-collision.out"
+grep -q 'Exit: 0' "$TMP/copilot-flag-collision.out"
+grep -q -- '--disable-mcp-server --disable-builtin-mcps' "$COPILOT_MOCK_CALL_LOG"
+
 # MCP profile for Copilot: Unused COPILOT_DELEGATE_MCP_PROFILE does not break single-agent Codex runs
 COPILOT_DELEGATE_MCP_PROFILE="$TMP/nonexistent-copilot-profile.json" CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --model custom-codex --mode plan --id codex-ignores-copilot-prof --task 'Ignore unused Copilot profile' > "$TMP/codex-ignores-copilot-prof.out"
 grep -q 'Exit: 0' "$TMP/codex-ignores-copilot-prof.out"

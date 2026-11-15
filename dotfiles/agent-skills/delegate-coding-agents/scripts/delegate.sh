@@ -780,19 +780,18 @@ else:
 
 with open(target_file, "w", encoding="utf-8") as f:
     if disable_builtins:
-        f.write("--disable-builtin-mcps\n")
+        f.write("builtin:disable\n")
     for s in disabled_servers:
-        f.write(f"{s}\n")
+        f.write(f"server:{s}\n")
 PY
   then
     COPILOT_MCP_ARGS=()
-    while IFS= read -r s; do
-      [[ -n "$s" ]] || continue
-      if [[ "$s" == "--disable-builtin-mcps" ]]; then
-        COPILOT_MCP_ARGS+=(--disable-builtin-mcps)
-      else
-        COPILOT_MCP_ARGS+=(--disable-mcp-server "$s")
-      fi
+    while IFS= read -r rec; do
+      case "$rec" in
+        "") ;;
+        builtin:disable) COPILOT_MCP_ARGS+=(--disable-builtin-mcps) ;;
+        server:*) COPILOT_MCP_ARGS+=(--disable-mcp-server "${rec#server:}") ;;
+      esac
     done < "$target_file"
     if [[ "$prof" == "minimal" || "$prof" == "none" ]]; then
       COPILOT_PROFILE_PATH="$target_file"
