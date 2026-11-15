@@ -5,13 +5,14 @@
 
 prSections:
   - title: "All Project PRs"
-    filters: "is:open user:gordonpn"
+    filters: "is:open user:gordonpn sort:updated-asc"
   - title: "Review Required"
-    filters: "is:open user:gordonpn review:required"
+    filters: "is:open user:gordonpn review:required sort:updated-asc"
   - title: "Recently Active"
     filters: >-
       is:open user:gordonpn
       updated:>={{ nowModify "-7d" }}
+      sort:updated-asc
 
 issuesSections:
   - title: "Created"
