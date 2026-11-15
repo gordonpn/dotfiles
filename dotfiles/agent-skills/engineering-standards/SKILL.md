@@ -15,12 +15,12 @@ If the project already defines a convention or contract, preserve it and validat
 | --- | --- |
 | [references/http-apis.md](references/http-apis.md) | Public/internal HTTP APIs or clients (RFC 9110/9111, OpenAPI, JSON Schema, RFC 9457, RFC 3339) |
 | [references/events.md](references/events.md) | Queues, brokers, and asynchronous messages (AsyncAPI, CloudEvents 1.0, schema compatibility, delivery semantics) |
-| [references/observability.md](references/observability.md) | Runtime telemetry, structured logs, metrics, or tracing (OpenTelemetry, OTLP, W3C Trace Context, redaction) |
+| [references/observability.md](references/observability.md) | Service processes, asynchronous operations, operationally important integrations, telemetry, logs, metrics, or tracing (OpenTelemetry, OTLP, W3C Trace Context, redaction) |
 | [references/identity-security.md](references/identity-security.md) | Authentication, authorization, sensitive data, or public endpoints (OWASP ASVS 5.0, NIST SSDF, OAuth RFC 9700/10017, OIDC, WebAuthn, SPIFFE) |
 | [references/supply-chain.md](references/supply-chain.md) | Dependencies, licenses, CI/CD, releases, or containers (SPDX, OCI, SBOM, SLSA v1.2, in-toto, pinned GitHub Actions, `zizmor`) |
 | [references/frontend.md](references/frontend.md) | User-facing web UI and accessibility (WCAG 2.2 Level AA, semantic HTML, WAI-ARIA APG) |
-| [references/data-architecture.md](references/data-architecture.md) | Formal data products, analytic pipelines, or substantial architecture changes (ODCS, Parquet/Arrow/Iceberg, FINOS CALM, TLA+/Quint) |
-| [references/ai-agents.md](references/ai-agents.md) | AI agent products, agent tools, MCP/ACP/A2A boundaries, sandboxing, or evals |
+| [references/data-architecture.md](references/data-architecture.md) | Externally consumed or public datasets, formal data products, analytic pipelines, or substantial architecture changes (ODCS, Parquet/Arrow/Iceberg, FINOS CALM, TLA+/Quint) |
+| [references/ai-agents.md](references/ai-agents.md) | Configuring agent coding workflows (`AGENTS.md`), building AI agent products or tools, MCP/ACP/A2A boundaries, sandboxing, or evals |
 
 ## Compatibility and verification rules
 
