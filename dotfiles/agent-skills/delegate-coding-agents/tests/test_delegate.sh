@@ -60,6 +60,9 @@ while (($#)); do
     -p) shift; has_prompt=1 ;;
     --mode) shift; mode=$1 ;;
     --model) shift; model=$1 ;;
+    --disable-builtin-mcps)
+      [[ -z ${COPILOT_MOCK_MCP_LOG:-} ]] || printf '%s\n' '--disable-builtin-mcps' >>"$COPILOT_MOCK_MCP_LOG"
+      ;;
     --disable-mcp-server)
       shift
       [[ -z ${COPILOT_MOCK_MCP_LOG:-} ]] || printf '%s\n' "$1" >>"$COPILOT_MOCK_MCP_LOG"
@@ -916,6 +919,7 @@ COPILOT_MCP_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/copilot-mcp-minimal.out" | h
 [[ -f "$COPILOT_MCP_LOG_DIR/copilot-mcp-overrides.txt" ]]
 grep -q 'mcp_profile=minimal' "$COPILOT_MCP_LOG_DIR/manifest.txt"
 grep -q "mcp_profile_path=$COPILOT_MCP_LOG_DIR/copilot-mcp-overrides.txt" "$COPILOT_MCP_LOG_DIR/manifest.txt"
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'ai-memory' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'uptime-kuma' "$COPILOT_MOCK_MCP_LOG"
@@ -931,6 +935,7 @@ POST_COPILOT_CFG_HASH=$(hash_file "$TMP/user-config/copilot/mcp-config.json")
 COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile none --id copilot-mcp-none --task 'Test copilot none MCP profile' > "$TMP/copilot-mcp-none.out"
 grep -q 'Exit: 0' "$TMP/copilot-mcp-none.out"
 grep -q 'MCP profile: none' "$TMP/copilot-mcp-none.out"
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'ai-memory' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
@@ -954,6 +959,7 @@ grep -q 'Exit: 0' "$TMP/copilot-mcp-override.out"
 if grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG" || grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
   echo 'Expected docker and cclsp to remain enabled in copilot override' >&2; exit 1
 fi
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'ai-memory' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
 
@@ -972,6 +978,7 @@ grep -q 'Exit: 0' "$TMP/copilot-custom-allow.out"
 if grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG" || grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
   echo 'Expected custom allowlist servers to remain enabled for Copilot' >&2; exit 1
 fi
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'uptime-kuma' "$COPILOT_MOCK_MCP_LOG"
 
@@ -980,6 +987,7 @@ grep -qx 'uptime-kuma' "$COPILOT_MOCK_MCP_LOG"
 COPILOT_HOME="$TMP/user-config/copilot" CODEX_DELEGATE_MCP_PROFILE="none" OPENCODE_DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent copilot --mode plan --id copilot-iso --task 'Test copilot env isolation' > "$TMP/copilot-iso.out"
 grep -q 'Exit: 0' "$TMP/copilot-iso.out"
 grep -q 'MCP profile: minimal' "$TMP/copilot-iso.out"
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
 if grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
   echo 'Expected CODEX/OPENCODE env profiles not to alter copilot profile' >&2; exit 1
 fi
@@ -988,6 +996,7 @@ fi
 COPILOT_HOME="$TMP/user-config/copilot" DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent copilot --mode plan --id copilot-global --task 'Test copilot global profile' > "$TMP/copilot-global.out"
 grep -q 'Exit: 0' "$TMP/copilot-global.out"
 grep -q 'MCP profile: none' "$TMP/copilot-global.out"
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"
 
 # MCP profile for Copilot: Repo-local .mcp.json and .github/mcp.json at BASE_SHA are discovered and isolated
@@ -1034,6 +1043,92 @@ if COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan
   echo 'Expected unsupported Copilot custom profile structure to fail' >&2; exit 1
 fi
 grep -q 'Failed to resolve Copilot MCP profile' "$TMP/copilot-unsupported-profile.out"
+
+# MCP profile for Copilot: Malformed or non-table TOML server entries fail closed
+cat > "$TMP/bad-copilot-toml-scalar.toml" <<'TOML'
+[mcp_servers]
+slack = false
+TOML
+if COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile "$TMP/bad-copilot-toml-scalar.toml" --id copilot-bad-toml-scalar --task 'Reject non-table TOML server entry' >"$TMP/copilot-bad-toml-scalar.out" 2>&1; then
+  echo 'Expected non-table TOML server entry to fail' >&2; exit 1
+fi
+grep -q 'Failed to resolve Copilot MCP profile' "$TMP/copilot-bad-toml-scalar.out"
+
+cat > "$TMP/bad-copilot-toml-bool.toml" <<'TOML'
+[mcp_servers.slack]
+enabled = "false"
+TOML
+if COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile "$TMP/bad-copilot-toml-bool.toml" --id copilot-bad-toml-bool --task 'Reject non-boolean TOML enabled flag' >"$TMP/copilot-bad-toml-bool.out" 2>&1; then
+  echo 'Expected non-boolean TOML enabled flag to fail' >&2; exit 1
+fi
+grep -q 'Failed to resolve Copilot MCP profile' "$TMP/copilot-bad-toml-bool.out"
+
+cat > "$TMP/valid-copilot-toml-deny.toml" <<'TOML'
+[mcp_servers.slack]
+enabled = false
+TOML
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile "$TMP/valid-copilot-toml-deny.toml" --id copilot-valid-toml --task 'Apply valid TOML disable profile' >"$TMP/copilot-valid-toml.out"
+grep -q 'Exit: 0' "$TMP/copilot-valid-toml.out"
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+if grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected built-in MCPs to stay enabled unless explicitly disabled in denylist TOML' >&2; exit 1
+fi
+
+# MCP profile for Copilot: --mcp-profile none still disables built-ins with no config files
+mkdir -p "$TMP/empty-copilot-home"
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/empty-copilot-home" "$SCRIPT" --agent copilot --mode plan --mcp-profile none --id copilot-empty-none --task 'Disable built-ins with empty config' >"$TMP/copilot-empty-none.out"
+grep -q 'Exit: 0' "$TMP/copilot-empty-none.out"
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
+
+# MCP profile for Copilot: Allowing github-mcp-server explicitly omits --disable-builtin-mcps
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" COPILOT_DELEGATE_MCP_SERVERS="github-mcp-server,cclsp" "$SCRIPT" --agent copilot --mode plan --id copilot-allow-builtin --task 'Allow github-mcp-server explicitly' >"$TMP/copilot-allow-builtin.out"
+grep -q 'Exit: 0' "$TMP/copilot-allow-builtin.out"
+if grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected --disable-builtin-mcps to be omitted when github-mcp-server is allowed' >&2; exit 1
+fi
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+
+# MCP profile for Copilot: Discovery uses COPILOT_HOME (not COPILOT_DIR or COPILOT_MCP_CONFIG)
+mkdir -p "$TMP/copilot-home-only" "$TMP/copilot-dir-other"
+cat > "$TMP/copilot-home-only/mcp-config.json" <<'JSON'
+{
+  "mcpServers": {
+    "slack": { "type": "local", "command": "npx" }
+  }
+}
+JSON
+cat > "$TMP/copilot-dir-other/mcp-config.json" <<'JSON'
+{
+  "mcpServers": {
+    "docker": { "type": "local", "command": "npx" }
+  }
+}
+JSON
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/copilot-home-only" COPILOT_DIR="$TMP/copilot-dir-other" COPILOT_MCP_CONFIG="$TMP/copilot-dir-other/mcp-config.json" "$SCRIPT" --agent copilot --mode plan --mcp-profile none --id copilot-home-precedence --task 'Match COPILOT_HOME worker config' >"$TMP/copilot-home-precedence.out"
+grep -q 'Exit: 0' "$TMP/copilot-home-precedence.out"
+grep -qx -- '--disable-builtin-mcps' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+if grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected resolver not to discover from COPILOT_DIR or COPILOT_MCP_CONFIG when COPILOT_HOME differs' >&2; exit 1
+fi
+
+# MCP profile for Copilot: A server literally named --disable-builtin-mcps still receives --disable-mcp-server
+mkdir -p "$TMP/copilot-flag-collision"
+cat > "$TMP/copilot-flag-collision/mcp-config.json" <<'JSON'
+{
+  "mcpServers": {
+    "--disable-builtin-mcps": { "type": "local", "command": "npx" }
+  }
+}
+JSON
+: >"$COPILOT_MOCK_CALL_LOG"
+COPILOT_HOME="$TMP/copilot-flag-collision" "$SCRIPT" --agent copilot --mode plan --mcp-profile none --id copilot-flag-collision --task 'Preserve server named like built-in flag' >"$TMP/copilot-flag-collision.out"
+grep -q 'Exit: 0' "$TMP/copilot-flag-collision.out"
+grep -q -- '--disable-mcp-server --disable-builtin-mcps' "$COPILOT_MOCK_CALL_LOG"
 
 # MCP profile for Copilot: Unused COPILOT_DELEGATE_MCP_PROFILE does not break single-agent Codex runs
 COPILOT_DELEGATE_MCP_PROFILE="$TMP/nonexistent-copilot-profile.json" CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --model custom-codex --mode plan --id codex-ignores-copilot-prof --task 'Ignore unused Copilot profile' > "$TMP/codex-ignores-copilot-prof.out"
