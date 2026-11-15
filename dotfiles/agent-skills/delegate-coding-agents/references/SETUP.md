@@ -49,6 +49,7 @@ Each worker in the delegation chain has specific authentication requirements:
 - **Login command:** `copilot login` (or `gh auth login`)
 - **Prerequisite:** Active GitHub Copilot entitlement (such as Copilot Student).
 - **Behavior when unauthenticated:** Fails with authentication errors (`not authenticated` or `authentication required`), prompting immediate halt without further fallback.
+- **MCP isolation & fallback behavior:** `delegate.sh` keeps user `${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json` and authentication state intact while disabling non-allowed user and repo-local (`.mcp.json`, `.github/mcp.json`) MCP servers via ephemeral `--disable-mcp-server <name>` flags (`minimal` by default; override via `--mcp-profile` or `COPILOT_DELEGATE_MCP_PROFILE` / `COPILOT_DELEGATE_MCP_SERVERS`). Built-in CLI tool filtering (`--available-tools` and `--deny-tool=shell`) remains enforced even when MCP or deferred tool search is unavailable. On classified quota/rate-limit/model unavailability, `--orchestrator agy` falls back to Antigravity directly while `--orchestrator codex` exits after reporting the Copilot failure.
 
 Automatic delegation requires explicit opt-in in each eligible repository:
 
@@ -69,5 +70,5 @@ enable global shell-approval bypass.
 - If no repo opt-in exists, the agent should complete tasks itself or explain that delegation is blocked.
 - Both delegations operate on a clean committed checkout; current uncommitted edits cannot be safely inherited.
 - To run a delegate manually without the opt-in gate, omit `--automatic`, but still ensure the repository is appropriate for external inference.
-- One-shot OpenCode and Codex delegations apply a minimal MCP profile (`minimal` by default) to disable unrelated cloud, database, monitoring, and chat servers without mutating user configurations (via `OPENCODE_CONFIG` for OpenCode and ephemeral `-c` overrides for Codex).
+- One-shot OpenCode, Codex, and Copilot Student delegations apply a minimal MCP profile (`minimal` by default) to disable unrelated cloud, database, monitoring, and chat servers without mutating user configurations (via `OPENCODE_CONFIG` for OpenCode, ephemeral `-c` overrides for Codex, and ephemeral `--disable-mcp-server` flags for Copilot).
 - Plans stay in an isolated detached worktree, builds on new `delegate/...` branches; review and integrate only verified changes.
