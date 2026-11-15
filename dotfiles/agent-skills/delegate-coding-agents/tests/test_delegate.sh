@@ -60,6 +60,10 @@ while (($#)); do
     -p) shift; has_prompt=1 ;;
     --mode) shift; mode=$1 ;;
     --model) shift; model=$1 ;;
+    --disable-mcp-server)
+      shift
+      [[ -z ${COPILOT_MOCK_MCP_LOG:-} ]] || printf '%s\n' "$1" >>"$COPILOT_MOCK_MCP_LOG"
+      ;;
   esac
   shift
 done
@@ -125,9 +129,10 @@ export OPENCODE_MOCK_CALL_LOG="$TMP/opencode.calls"
 export OPENCODE_MOCK_CONFIG_LOG="$TMP/opencode.config"
 export OPENCODE_MOCK_CONTENT_LOG="$TMP/opencode.content"
 export COPILOT_MOCK_CALL_LOG="$TMP/copilot.calls"
+export COPILOT_MOCK_MCP_LOG="$TMP/copilot.mcp"
 export CODEX_MOCK_CALL_LOG="$TMP/codex.calls"
 export CODEX_MOCK_CONFIG_LOG="$TMP/codex.config"
-unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL OPENCODE_DELEGATE_MCP_PROFILE OPENCODE_DELEGATE_MCP_SERVERS OPENCODE_MCP_PROFILE DELEGATE_MCP_PROFILE DELEGATE_MCP_SERVERS CODEX_DELEGATE_MCP_PROFILE CODEX_DELEGATE_MCP_SERVERS
+unset OPENCODE_DELEGATE_MODEL OPENCODE_DELEGATE_MODELS COPILOT_DELEGATE_MODEL CODEX_DELEGATE_MODEL OPENCODE_DELEGATE_MCP_PROFILE OPENCODE_DELEGATE_MCP_SERVERS OPENCODE_MCP_PROFILE DELEGATE_MCP_PROFILE DELEGATE_MCP_SERVERS CODEX_DELEGATE_MCP_PROFILE CODEX_DELEGATE_MCP_SERVERS COPILOT_DELEGATE_MCP_PROFILE COPILOT_DELEGATE_MCP_SERVERS COPILOT_MCP_CONFIG COPILOT_DIR COPILOT_HOME
 
 cd "$TMP/repo"
 git init -q
@@ -886,6 +891,136 @@ rm -f opencode.json
 "$SCRIPT" --agent opencode --mode plan --base "$TEST_BASE_SHA" --id base-sha-test --task 'Discover from BASE_SHA' > "$TMP/base-sha-test.out"
 grep -q 'Exit: 0' "$TMP/base-sha-test.out"
 jq -e '.mcp["git_blob_server"].enabled == false' "$OPENCODE_MOCK_CONTENT_LOG" >/dev/null
+
+# MCP profile for Copilot: Minimal profile isolation via --disable-mcp-server and non-mutation of user config
+mkdir -p "$TMP/user-config/copilot"
+cat > "$TMP/user-config/copilot/mcp-config.json" <<'JSON'
+{
+  "mcpServers": {
+    "cclsp": { "type": "local", "command": "/usr/local/bin/cclsp", "args": [], "tools": ["*"] },
+    "ai-memory": { "type": "local", "command": "ai-memory", "args": [], "tools": ["*"] },
+    "slack": { "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"], "tools": ["*"] },
+    "uptime-kuma": { "type": "local", "command": "npx", "args": ["-y", "@davidfuchs/mcp-uptime-kuma"], "tools": ["*"] },
+    "docker": { "type": "local", "command": "npx", "args": ["-y", "@hypnosis/docker-mcp-server"], "tools": ["*"] }
+  }
+}
+JSON
+ORIG_COPILOT_CFG_HASH=$(hash_file "$TMP/user-config/copilot/mcp-config.json")
+
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --id copilot-mcp-minimal --task 'Test copilot minimal MCP profile' > "$TMP/copilot-mcp-minimal.out"
+grep -q 'Exit: 0' "$TMP/copilot-mcp-minimal.out"
+grep -q 'Worker: copilot' "$TMP/copilot-mcp-minimal.out"
+grep -q 'MCP profile: minimal' "$TMP/copilot-mcp-minimal.out"
+COPILOT_MCP_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/copilot-mcp-minimal.out" | head -n 1)
+[[ -f "$COPILOT_MCP_LOG_DIR/copilot-mcp-overrides.txt" ]]
+grep -q 'mcp_profile=minimal' "$COPILOT_MCP_LOG_DIR/manifest.txt"
+grep -q "mcp_profile_path=$COPILOT_MCP_LOG_DIR/copilot-mcp-overrides.txt" "$COPILOT_MCP_LOG_DIR/manifest.txt"
+grep -qx 'ai-memory' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'uptime-kuma' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG"
+if grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected cclsp to remain enabled for copilot minimal profile' >&2; exit 1
+fi
+POST_COPILOT_CFG_HASH=$(hash_file "$TMP/user-config/copilot/mcp-config.json")
+[[ "$ORIG_COPILOT_CFG_HASH" == "$POST_COPILOT_CFG_HASH" ]]
+
+# MCP profile for Copilot: --mcp-profile none disables all servers
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile none --id copilot-mcp-none --task 'Test copilot none MCP profile' > "$TMP/copilot-mcp-none.out"
+grep -q 'Exit: 0' "$TMP/copilot-mcp-none.out"
+grep -q 'MCP profile: none' "$TMP/copilot-mcp-none.out"
+grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'ai-memory' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'uptime-kuma' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG"
+
+# MCP profile for Copilot: --mcp-profile full emits zero --disable-mcp-server flags
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile full --id copilot-mcp-full --task 'Test copilot full MCP profile' > "$TMP/copilot-mcp-full.out"
+grep -q 'Exit: 0' "$TMP/copilot-mcp-full.out"
+grep -q 'MCP profile: full' "$TMP/copilot-mcp-full.out"
+[[ ! -s "$COPILOT_MOCK_MCP_LOG" ]]
+COPILOT_FULL_LOG_DIR=$(sed -n 's/^  Logs: //p' "$TMP/copilot-mcp-full.out" | head -n 1)
+grep -q 'mcp_profile=full' "$COPILOT_FULL_LOG_DIR/manifest.txt"
+grep -q 'mcp_profile_path=(none)' "$COPILOT_FULL_LOG_DIR/manifest.txt"
+
+# MCP profile for Copilot: COPILOT_DELEGATE_MCP_SERVERS allowlist override
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" COPILOT_DELEGATE_MCP_SERVERS="docker,cclsp" "$SCRIPT" --agent copilot --mode plan --id copilot-mcp-override --task 'Test copilot servers override' > "$TMP/copilot-mcp-override.out"
+grep -q 'Exit: 0' "$TMP/copilot-mcp-override.out"
+if grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG" || grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected docker and cclsp to remain enabled in copilot override' >&2; exit 1
+fi
+grep -qx 'ai-memory' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+
+# MCP profile for Copilot: Custom JSON allowlist profile (Copilot mcp-config.json schema)
+cat > "$TMP/custom-copilot-allow.json" <<'JSON'
+{
+  "mcpServers": {
+    "cclsp": { "type": "local", "command": "/usr/local/bin/cclsp" },
+    "docker": { "type": "local", "command": "npx" }
+  }
+}
+JSON
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --mcp-profile "$TMP/custom-copilot-allow.json" --id copilot-custom-allow --task 'Test copilot custom allowlist' > "$TMP/copilot-custom-allow.out"
+grep -q 'Exit: 0' "$TMP/copilot-custom-allow.out"
+if grep -qx 'docker' "$COPILOT_MOCK_MCP_LOG" || grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected custom allowlist servers to remain enabled for Copilot' >&2; exit 1
+fi
+grep -qx 'slack' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'uptime-kuma' "$COPILOT_MOCK_MCP_LOG"
+
+# MCP profile for Copilot: Environment isolation and global DELEGATE_MCP_PROFILE inheritance
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" CODEX_DELEGATE_MCP_PROFILE="none" OPENCODE_DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent copilot --mode plan --id copilot-iso --task 'Test copilot env isolation' > "$TMP/copilot-iso.out"
+grep -q 'Exit: 0' "$TMP/copilot-iso.out"
+grep -q 'MCP profile: minimal' "$TMP/copilot-iso.out"
+if grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected CODEX/OPENCODE env profiles not to alter copilot profile' >&2; exit 1
+fi
+
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" DELEGATE_MCP_PROFILE="none" "$SCRIPT" --agent copilot --mode plan --id copilot-global --task 'Test copilot global profile' > "$TMP/copilot-global.out"
+grep -q 'Exit: 0' "$TMP/copilot-global.out"
+grep -q 'MCP profile: none' "$TMP/copilot-global.out"
+grep -qx 'cclsp' "$COPILOT_MOCK_MCP_LOG"
+
+# MCP profile for Copilot: Repo-local .mcp.json and .github/mcp.json at BASE_SHA are discovered and isolated
+git checkout -b copilot-repo-mcp-branch >/dev/null 2>&1
+cat > .mcp.json <<'JSON'
+{
+  "repo_claude_server": { "command": "/usr/local/bin/repo_claude_server" },
+  "git": { "command": "uvx mcp-server-git" }
+}
+JSON
+mkdir -p .github
+cat > .github/mcp.json <<'JSON'
+{
+  "mcpServers": {
+    "repo_gh_server": { "command": "/usr/local/bin/repo_gh_server" }
+  }
+}
+JSON
+git add .mcp.json .github/mcp.json
+git commit -m "test: commit repo mcp configs for copilot base sha test" >/dev/null 2>&1
+COPILOT_BASE_SHA=$(git rev-parse HEAD)
+git checkout - >/dev/null 2>&1
+git branch -D copilot-repo-mcp-branch >/dev/null 2>&1
+rm -rf .mcp.json .github
+
+: >"$COPILOT_MOCK_MCP_LOG"
+COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --base "$COPILOT_BASE_SHA" --id copilot-base-sha --task 'Discover repo MCP configs for copilot' > "$TMP/copilot-base-sha.out"
+grep -q 'Exit: 0' "$TMP/copilot-base-sha.out"
+grep -qx 'repo_claude_server' "$COPILOT_MOCK_MCP_LOG"
+grep -qx 'repo_gh_server' "$COPILOT_MOCK_MCP_LOG"
+if grep -qx 'git' "$COPILOT_MOCK_MCP_LOG"; then
+  echo 'Expected allowed minimal server git in .mcp.json to remain enabled' >&2; exit 1
+fi
 
 # A dirty checkout must be rejected rather than silently excluded from snapshot.
 echo local > local.txt
