@@ -589,7 +589,7 @@ COPILOT_PROFILE_PATH=''
 # shellcheck disable=SC2016
 resolve_copilot_mcp_profile() {
   local target_file="$LOG_DIR/copilot-mcp-overrides.txt"
-  local copilot_cfg="${COPILOT_MCP_CONFIG:-${COPILOT_DIR:-${COPILOT_HOME:-$HOME/.copilot}}/mcp-config.json}"
+  local copilot_cfg="${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json"
   local prof="${CLI_MCP_PROFILE:-${DELEGATE_MCP_PROFILE:-${COPILOT_DELEGATE_MCP_PROFILE:-minimal}}}"
 
   if [[ "$prof" != "minimal" && "$prof" != "none" && "$prof" != "full" ]]; then
@@ -706,10 +706,13 @@ for rel, allow_top in [
         blob = load_jsonc(os.path.join(root_dir, rel))
     collect_names(extract_server_map(blob, allow_top_level=allow_top))
 
+disable_builtins = False
 disabled_servers = []
 if prof == "none":
+    disable_builtins = True
     disabled_servers = list(discovered_servers)
 elif prof == "minimal":
+    disable_builtins = "github-mcp-server" not in allow_set
     disabled_servers = [s for s in discovered_servers if s not in allow_set]
 else:
     custom_data = load_jsonc(prof)
@@ -732,13 +735,21 @@ else:
             if len(custom_map) != len(non_meta):
                 sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
                 sys.exit(1)
+        for v in custom_map.values():
+            if ("enabled" in v and not isinstance(v["enabled"], bool)) or (
+                "disabled" in v and not isinstance(v["disabled"], bool)
+            ):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
         explicit_disabled = {
             k for k, v in custom_map.items()
             if v.get("enabled") is False or v.get("disabled") is True
         }
         if explicit_disabled:
+            disable_builtins = "github-mcp-server" in explicit_disabled
             disabled_servers = [s for s in discovered_servers if s in explicit_disabled]
         else:
+            disable_builtins = "github-mcp-server" not in custom_map
             disabled_servers = [s for s in discovered_servers if s not in custom_map]
     else:
         try:
@@ -749,16 +760,27 @@ else:
             sys.stderr.write(f"Invalid Copilot MCP profile {prof}: {exc}\n")
             sys.exit(1)
         toml_servers = toml_data.get("mcp_servers")
-        if not isinstance(toml_servers, dict):
+        if not isinstance(toml_servers, dict) or not all(
+            isinstance(k, str) and isinstance(v, dict) for k, v in toml_servers.items()
+        ):
             sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
             sys.exit(1)
+        for v in toml_servers.values():
+            if ("enabled" in v and not isinstance(v["enabled"], bool)) or (
+                "disabled" in v and not isinstance(v["disabled"], bool)
+            ):
+                sys.stderr.write(f"Unsupported Copilot MCP profile structure in {prof}\n")
+                sys.exit(1)
         toml_disabled = {
             k for k, v in toml_servers.items()
-            if isinstance(k, str) and isinstance(v, dict) and v.get("enabled") is False
+            if v.get("enabled") is False or v.get("disabled") is True
         }
+        disable_builtins = "github-mcp-server" in toml_disabled
         disabled_servers = [s for s in discovered_servers if s in toml_disabled]
 
 with open(target_file, "w", encoding="utf-8") as f:
+    if disable_builtins:
+        f.write("--disable-builtin-mcps\n")
     for s in disabled_servers:
         f.write(f"{s}\n")
 PY
@@ -766,7 +788,11 @@ PY
     COPILOT_MCP_ARGS=()
     while IFS= read -r s; do
       [[ -n "$s" ]] || continue
-      COPILOT_MCP_ARGS+=(--disable-mcp-server "$s")
+      if [[ "$s" == "--disable-builtin-mcps" ]]; then
+        COPILOT_MCP_ARGS+=(--disable-builtin-mcps)
+      else
+        COPILOT_MCP_ARGS+=(--disable-mcp-server "$s")
+      fi
     done < "$target_file"
     if [[ "$prof" == "minimal" || "$prof" == "none" ]]; then
       COPILOT_PROFILE_PATH="$target_file"
