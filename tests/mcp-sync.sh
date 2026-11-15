@@ -502,8 +502,21 @@ rm -f "${CODEX_DIR}/AGENTS.md"
 printf 'preexisting codex backup\n' >"${CODEX_DIR}/AGENTS.md.bak"
 printf 'old codex instructions\n' >"${CODEX_DIR}/AGENTS.md"
 
+mkdir -p "${COPILOT_DIR}/instructions" "${COPILOT_DIR}/skills"
+rm -f "${COPILOT_DIR}/instructions/global.instructions.md"
+printf 'old copilot instructions\n' >"${COPILOT_DIR}/instructions/global.instructions.md"
+ln -s "${HOME}/.agents/skills/removed-copilot-skill" "${COPILOT_DIR}/skills/stale-copilot-skill"
+ln -s "${HOME}/external-skill" "${COPILOT_DIR}/skills/user-copilot-skill"
+
+mkdir -p "${CLAUDE_DIR}/skills"
+rm -f "${CLAUDE_DIR}/CLAUDE.md"
+printf 'old claude instructions\n' >"${CLAUDE_DIR}/CLAUDE.md"
+ln -s "${HOME}/.agents/skills/removed-claude-skill" "${CLAUDE_DIR}/skills/stale-claude-skill"
+ln -s "${HOME}/external-skill" "${CLAUDE_DIR}/skills/user-claude-skill"
+
 # Managed dangling symlinks to verify pruning across all agent skill directories
 mkdir -p "${GEMINI_CONFIG_DIR}/skills"
+ln -s "${repo_dir}/dotfiles/agent-skills/removed-tracked-skill" "${HOME}/.agents/skills/removed-tracked-skill"
 ln -s "${HOME}/.agents/skills/removed-codex-skill" "${CODEX_DIR}/skills/stale-codex-skill"
 ln -s "${HOME}/.agents/skills/removed-gemini-skill" "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill"
 ln -s "${HOME}/.agents/skills/removed-opencode-skill" "${OPENCODE_DIR}/skills/stale-opencode-skill"
@@ -551,7 +564,23 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
+[[ "$(readlink "${HOME}/.agents/skills/engineering-standards")" == "${repo_dir}/dotfiles/agent-skills/engineering-standards" ]]
+[[ "$(readlink "${HOME}/.agents/skills/delegate-coding-agents")" == "${repo_dir}/dotfiles/agent-skills/delegate-coding-agents" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
+[[ "$(readlink "${COPILOT_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
+[[ "$(readlink "${COPILOT_DIR}/skills/delegate-coding-agents")" == "${HOME}/.agents/skills/delegate-coding-agents" ]]
+[[ "$(readlink "${CLAUDE_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
+[[ "$(readlink "${CLAUDE_DIR}/skills/delegate-coding-agents")" == "${HOME}/.agents/skills/delegate-coding-agents" ]]
+[[ -L "${COPILOT_DIR}/instructions/global.instructions.md" ]]
+[[ "$(readlink "${COPILOT_DIR}/instructions/global.instructions.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
+[[ -f "${COPILOT_DIR}/instructions/global.instructions.md.bak" ]]
+[[ "$(<"${COPILOT_DIR}/instructions/global.instructions.md.bak")" == 'old copilot instructions' ]]
+[[ -L "${CLAUDE_DIR}/CLAUDE.md" ]]
+[[ "$(readlink "${CLAUDE_DIR}/CLAUDE.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
+[[ -f "${CLAUDE_DIR}/CLAUDE.md.bak" ]]
+[[ "$(<"${CLAUDE_DIR}/CLAUDE.md.bak")" == 'old claude instructions' ]]
 [[ ! -e "${OPENCODE_DIR}/skills/shared-skill" && ! -L "${OPENCODE_DIR}/skills/shared-skill" ]]
+[[ ! -e "${OPENCODE_DIR}/skills/engineering-standards" && ! -L "${OPENCODE_DIR}/skills/engineering-standards" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/shared-dir-skill" && ! -L "${OPENCODE_DIR}/skills/shared-dir-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-skill" ]]
 [[ "$(readlink "${OPENCODE_DIR}/skills/gemini-dir-skill")" == "${GEMINI_CONFIG_DIR}/skills/gemini-dir-skill" ]]
@@ -559,6 +588,7 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/incomplete-shared-skill")" == "${GEMINI_CONFIG_DIR}/skills/incomplete-shared-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/thinking-model-router" && ! -L "${OPENCODE_DIR}/skills/thinking-model-router" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/shared-skill")" == "${HOME}/.agents/skills/shared-skill" ]]
+[[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 
 # Settings, title, and statusline symlinks
@@ -599,6 +629,10 @@ codex_skill_backups=("${GEMINI_DIR}/skill-backups/shared-skill.bak."*)
 [[ "$(readlink "${OPENCODE_DIR}/skills/user-custom-skill")" == "${HOME}/external-skill" ]]
 [[ -L "${CODEX_DIR}/skills/user-codex-skill" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/user-codex-skill")" == "${HOME}/external-skill" ]]
+[[ -L "${COPILOT_DIR}/skills/user-copilot-skill" ]]
+[[ "$(readlink "${COPILOT_DIR}/skills/user-copilot-skill")" == "${HOME}/external-skill" ]]
+[[ -L "${CLAUDE_DIR}/skills/user-claude-skill" ]]
+[[ "$(readlink "${CLAUDE_DIR}/skills/user-claude-skill")" == "${HOME}/external-skill" ]]
 [[ -L "${GEMINI_CONFIG_DIR}/skills/user-gemini-skill" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/user-gemini-skill")" == "${HOME}/external-skill" ]]
 [[ -L "${OPENCODE_DIR}/skills/user-dangling-skill" ]]
@@ -607,8 +641,11 @@ codex_skill_backups=("${GEMINI_DIR}/skill-backups/shared-skill.bak."*)
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/user-gemini-dangling-skill")" == "${HOME}/external-missing" ]]
 
 # Dangling/stale symlinks were pruned
+[[ ! -e "${HOME}/.agents/skills/removed-tracked-skill" && ! -L "${HOME}/.agents/skills/removed-tracked-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/stale-opencode-skill" && ! -L "${OPENCODE_DIR}/skills/stale-opencode-skill" ]]
 [[ ! -e "${CODEX_DIR}/skills/stale-codex-skill" && ! -L "${CODEX_DIR}/skills/stale-codex-skill" ]]
+[[ ! -e "${COPILOT_DIR}/skills/stale-copilot-skill" && ! -L "${COPILOT_DIR}/skills/stale-copilot-skill" ]]
+[[ ! -e "${CLAUDE_DIR}/skills/stale-claude-skill" && ! -L "${CLAUDE_DIR}/skills/stale-claude-skill" ]]
 [[ ! -e "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill" && ! -L "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/renamed-stale-skill" && ! -L "${OPENCODE_DIR}/skills/renamed-stale-skill" ]]
 
@@ -651,13 +688,19 @@ sync_skills_and_instructions
 [[ "$(readlink "${user_plugin}")" == "${HOME}/external-plugin.ts" ]]
 rm -f "${user_plugin}"
 
-# Verify sync_skills_and_instructions leaves OPENCODE_DIR absent when opencode is absent
+# Verify sync_skills_and_instructions leaves optional agent dirs absent when unavailable
 (
   export XDG_CONFIG_HOME="${test_tmp_dir}/clean-xdg"
   OPENCODE_DIR="${XDG_CONFIG_HOME}/opencode"
+  COPILOT_DIR="${test_tmp_dir}/clean-copilot"
+  CLAUDE_DIR="${test_tmp_dir}/clean-claude"
   opencode_available() { return 1; }
+  copilot_available() { return 1; }
+  claude_available() { return 1; }
   sync_skills_and_instructions
   [[ ! -e "${OPENCODE_DIR}" ]]
+  [[ ! -e "${COPILOT_DIR}" ]]
+  [[ ! -e "${CLAUDE_DIR}" ]]
 )
 
 install_codebase_memory_mcp() { echo codebase >>"$calls"; }
