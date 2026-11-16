@@ -23,10 +23,11 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository) ||
         (github.event_name == 'issue_comment' &&
          github.event.issue.pull_request &&
-         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+         startsWith(github.event.comment.body, '/')))
     concurrency:
-      # Isolate PR lifecycle runs from comment runs by comment ID so discussion comments cannot drop queued commands.
-      group: ${{ github.event_name == 'issue_comment' && format('{0}-pr-{1}-comment-{2}', github.workflow, github.event.issue.number, github.event.comment.id) || format('{0}-pr-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
+      # Serialize eligible PR-Agent lifecycle and slash-command runs per PR so stale opened jobs cannot overwrite /describe edits.
+      group: ${{ ((github.event_name == 'pull_request_target' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.sender.type != 'Bot' && github.actor != 'dependabot[bot]' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) && startsWith(github.event.comment.body, '/'))) && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number || github.event.issue.number) || format('{0}-skip-{1}', github.workflow, github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10

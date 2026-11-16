@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
-      # Scope cancellations to eligible runs so bot/non-command comments never cancel an active review.
-      group: ${{ ((github.event_name == 'pull_request_target' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.sender.type != 'Bot' && github.actor != 'dependabot[bot]' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) && contains(github.event.comment.body, '/review'))) && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number || github.event.issue.number) || format('{0}-skip-{1}', github.workflow, github.run_id) }}
+      # Scope cancellations to eligible runs using word-delimited /review checks so unrelated comments or /reviewer never cancel active reviews.
+      group: ${{ ((github.event_name == 'pull_request_target' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.sender.type != 'Bot' && github.actor != 'dependabot[bot]' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) && (contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), ' /review ') || contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('" /review\n"')) || contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('" /review\r"')) || contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('"\n/review "')) || contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('"\n/review\n"')) || contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('"\n/review\r"'))))) && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number || github.event.issue.number) || format('{0}-skip-{1}', github.workflow, github.run_id) }}
       cancel-in-progress: true
     if: |
       github.event.sender.type != 'Bot' &&
@@ -29,7 +29,12 @@ jobs:
         (github.event_name == 'issue_comment' &&
          github.event.issue.pull_request &&
          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
-         contains(github.event.comment.body, '/review')))
+         (contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), ' /review ') ||
+          contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('" /review\n"')) ||
+          contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('" /review\r"')) ||
+          contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('"\n/review "')) ||
+          contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('"\n/review\n"')) ||
+          contains(format('{0}{1}{0}', fromJSON('"\n"'), github.event.comment.body), fromJSON('"\n/review\r"')))))
     steps:
       - name: Checkout repository
         # The action fetches the PR diff through the API; never check out its untrusted head here.
