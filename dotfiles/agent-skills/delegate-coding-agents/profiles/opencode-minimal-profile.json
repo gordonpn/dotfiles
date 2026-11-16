@@ -10,9 +10,6 @@
     "caddy": {
       "enabled": false
     },
-    "chrome-devtools": {
-      "enabled": false
-    },
     "cloudflare": {
       "enabled": false
     },
@@ -40,9 +37,6 @@
     "loki": {
       "enabled": false
     },
-    "memory": {
-      "enabled": false
-    },
     "playwright": {
       "enabled": false
     },
@@ -55,13 +49,7 @@
     "prometheus": {
       "enabled": false
     },
-    "puppeteer": {
-      "enabled": false
-    },
     "redis": {
-      "enabled": false
-    },
-    "server-services-configs": {
       "enabled": false
     },
     "slack": {

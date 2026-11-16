@@ -139,9 +139,15 @@ ai_entry="$(jq -c '.mcpServers["ai-memory"]' "${TEMPLATE_DIR}/mcp_config.templat
 ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-bridge\",\"--no-session-id\",\"--server-url\",\"http://127.0.0.1:49374/mcp\"]}"
 [[ "$ai_entry" == "$ai_expected" ]]
 
-[[ "$(jq -r '.mcpServers["chrome-devtools"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
-[[ "$(jq -r '.mcpServers["memory"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
-[[ "$(jq -r '.mcpServers["server-services-configs"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("chrome-devtools")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("puppeteer")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("memory")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("server-services-configs")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers["caddy"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["vault"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["discord"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["exa"] | has("disabled")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers["filesystem"] | has("disabled")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 
 get_secret() { printf ''; }
 gh() { return 1; }
@@ -172,7 +178,10 @@ sync_mcp_config
 [[ "$(jq -r '.mcp["cclsp"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
 [[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
-[[ "$(jq -r '.mcp["memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["caddy"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["vault"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["discord"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp | has("memory")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 
 # Verify OpenCode parses JSONC (comments and trailing commas) without losing settings
 cat >"${OPENCODE_DIR}/opencode.json" <<'JSONC'
@@ -207,14 +216,19 @@ sync_mcp_config
 uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" --configs-only --require-minimal
 
 [[ "$(jq -r '.mcpServers["ai-memory"].command' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "${HOME}/.local/bin/ai-memory" ]]
-[[ "$(jq -r '.mcpServers["memory"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
-[[ "$(jq -r '.mcpServers["chrome-devtools"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
-[[ "$(jq -r '.mcpServers["server-services-configs"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["caddy"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["vault"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["discord"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers | has("memory")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("chrome-devtools")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("puppeteer")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("server-services-configs")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
+[[ ! -e "${HOME}/.gemini/memory.json" ]]
 
 grep -F '[mcp_servers."ai-memory"]' "${CODEX_DIR}/config.toml"
-grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
-grep -A 3 -F '[mcp_servers."chrome-devtools"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
-grep -A 3 -F '[mcp_servers."server-services-configs"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."caddy"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."vault"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."discord"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
 # Minimal profile: non-core servers are disabled by default in Codex
 grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
@@ -252,7 +266,9 @@ if grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -q
   echo 'Expected tailscale to be enabled in full profile' >&2
   exit 1
 fi
-grep -A 4 -F '[mcp_servers."memory"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."caddy"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."vault"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."discord"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
 # Codex MCP profile: Custom server allowlist via CODEX_MCP_SERVERS
 CODEX_MCP_SERVERS="cclsp,docker" sync_mcp_config
@@ -318,7 +334,9 @@ grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'ena
 OPENCODE_MCP_PROFILE=full sync_mcp_config
 [[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
 [[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
-[[ "$(jq -r '.mcp["memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["caddy"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["vault"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["discord"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 
 # OpenCode MCP profile: Custom server allowlist via OPENCODE_MCP_SERVERS
 OPENCODE_MCP_SERVERS="cclsp,docker" sync_mcp_config
@@ -385,11 +403,15 @@ sync_mcp_config
 [[ "$(jq -r '.mcpServers | has("cclsp")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["cclsp"] | has("disabled")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
-[[ "$(jq -r '.mcpServers | has("memory")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("caddy")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("vault")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("discord")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 COPILOT_MCP_PROFILE=full sync_mcp_config
 [[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
-[[ "$(jq -r '.mcpServers | has("memory")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("caddy")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("vault")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("discord")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 COPILOT_MCP_SERVERS="cclsp,docker" sync_mcp_config
 [[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
@@ -726,7 +748,6 @@ install_sonarqube_mcp_server() { echo sonarqube >>"$calls"; }
 sync_ssh_profiles() { :; }
 sync_docker_profiles() { :; }
 sync_k3s_cluster() { echo k3s >>"$calls"; }
-sync_memory_file() { :; }
 sync_mcp_config() { :; }
 sync_skills_and_instructions() { :; }
 opencode() { :; }

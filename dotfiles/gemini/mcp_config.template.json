@@ -19,24 +19,6 @@
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest"]
     },
-    "chrome-devtools": {
-      "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"],
-      "disabled": true
-    },
-    "puppeteer": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
-      "disabled": true
-    },
-    "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "disabled": true,
-      "env": {
-        "MEMORY_FILE_PATH": "${HOME}/.gemini/memory.json"
-      }
-    },
     "ai-memory": {
       "command": "${HOME}/.local/bin/ai-memory",
       "args": [
@@ -169,15 +151,6 @@
         "${HOME}"
       ]
     },
-    "server-services-configs": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "${HOME}/workspace/server-services-configs"
-      ],
-      "disabled": true
-    },
     "repomix": {
       "command": "repomix",
       "args": ["--mcp"]
@@ -185,6 +158,7 @@
     "caddy": {
       "command": "npx",
       "args": ["-y", "@yawlabs/caddy-mcp"],
+      "disabled": true,
       "env": {
         "CADDY_ADMIN_URL": "${CADDY_ADMIN_URL}"
       }
@@ -218,6 +192,7 @@
         "httpx",
         "${HOME}/workspace/dotfiles/bin/vault-mcp-server"
       ],
+      "disabled": true,
       "env": {
         "VAULT_ADDR": "${VAULT_ADDR}",
         "VAULT_TOKEN": "${VAULT_TOKEN}"
