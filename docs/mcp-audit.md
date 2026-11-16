@@ -2,7 +2,7 @@
 
 Audits all 37 MCP servers configured in [`dotfiles/gemini/mcp_config.template.json`](../dotfiles/gemini/mcp_config.template.json) to classify each into **Keep as MCP**, **CLI + skill**, or **Lazy-load / code-execute**, minimize turn-0 schema overhead for eager clients below 100 tools, preserve documentation and resource discovery workflows, and track follow-up migrations.
 
-Related tracking: [#70](https://github.com/gordonpn/dotfiles/issues/70), [#17](https://github.com/gordonpn/dotfiles/issues/17), [#19](https://github.com/gordonpn/dotfiles/issues/19), [#27](https://github.com/gordonpn/dotfiles/issues/27), [#39](https://github.com/gordonpn/dotfiles/issues/39), [#43](https://github.com/gordonpn/dotfiles/issues/43), [#57](https://github.com/gordonpn/dotfiles/issues/57), [#67](https://github.com/gordonpn/dotfiles/issues/67), [#86](https://github.com/gordonpn/dotfiles/issues/86), [#89](https://github.com/gordonpn/dotfiles/issues/89).
+Related tracking: [#70](https://github.com/gordonpn/dotfiles/issues/70), [#17](https://github.com/gordonpn/dotfiles/issues/17), [#19](https://github.com/gordonpn/dotfiles/issues/19), [#27](https://github.com/gordonpn/dotfiles/issues/27), [#39](https://github.com/gordonpn/dotfiles/issues/39), [#57](https://github.com/gordonpn/dotfiles/issues/57), [#67](https://github.com/gordonpn/dotfiles/issues/67), [#86](https://github.com/gordonpn/dotfiles/issues/86), [#89](https://github.com/gordonpn/dotfiles/issues/89).
 
 ---
 
@@ -10,7 +10,7 @@ Related tracking: [#70](https://github.com/gordonpn/dotfiles/issues/70), [#17](h
 
 - **Inventory source:** All `37` entries in `dotfiles/gemini/mcp_config.template.json` (`32` enabled by default, `5` disabled: `chrome-devtools`, `puppeteer`, `memory`, `server-services-configs`, `discord`), probed against the hydrated `~/.gemini/config/mcp_config.json` on `2026-11-15`.
 - **Live MCP probing:** Executed uniform direct JSON-RPC (`protocolVersion: "2025-03-26"`, supplying `roots/list` to workspace-aware servers) over stdio to record handshake latency (`init` through `tools/list`), `tool_count`, compact `tools` JSON byte size, `resources/list` count, `prompts/list` count, and reported server version.
-- **Schema token estimate:** Approximated as `round(schema_bytes / 4)` from compact serialized `tools` JSON payloads. Actual prompt overhead varies slightly by model tokenizer and client wrapper formatting.
+- **Schema token estimate:** Approximated as `round(schema_bytes / 4)` from compact serialized `tools` JSON payloads (summary table totals sum the per-row rounded token estimates, which can differ by `1` token from `round(total_bytes / 4)`). Actual prompt overhead varies slightly by model tokenizer and client wrapper formatting.
 - **Special runtime measurement notes:**
   - `server-services-configs` (`disabled: true`) exited with `eof rc=1` (`905 ms`) because `${HOME}/workspace/server-services-configs` no longer exists on disk after the repository was renamed to `homelab`. Its cached Antigravity schema baseline (`16` tools, `13,757` bytes, `~3,439` tokens in `~/.gemini/antigravity-cli/mcp/server-services-configs/`) is reported for reference.
   - `cclsp` returned `tools/list` in `78 ms`, while asynchronously preloading 7 matching LSP servers (`pyright-langserver`, `bash-language-server`, `lua-language-server`, `yaml-language-server`, `vscode-json-language-server`, `marksman`, `taplo`), all 7 of which logged initialization timeouts in stderr and stalled `mcp==1.1.2` `stdio_client` teardown for `45 s`.
@@ -66,7 +66,7 @@ All 37 servers from `dotfiles/gemini/mcp_config.template.json` appear in templat
 | `codebase-memory-mcp` | 17 | 4,327 | 0 | `rg` + `jq` (`Yes`, partial only) | Keep as MCP | `core` | AST index, call graph tracing, and architecture queries (`1,343 ms`, `2` prompts) |
 | `sequentialthinking` | 1 | 700 | 0 | Native reasoning + `thinking-model-router` skill (`Yes`) | CLI + skill | `remove` from eager `core` | Zero logged calls; duplicates native model reasoning and existing `cc-thinking-skills` router (`#100`) |
 | `github` | 44 | 30,255 | 3,242 | `gh` (`Yes`) | Lazy-load / code-execute | `agy-only` / `opt-in` | #1 used server (`3,242` calls, `4` resources, `81 ms`), but `~30.3k` tok; use `gh` CLI on eager clients |
-| `brave-search` | 2 | 363 | 105 | `curl` Brave Search REST API (`Yes`, manual) | Keep as MCP | `core` (headless fallback) / `agy-only` | `105` calls; cheap (`363` tok) web search fallback (`GEMINI.md` Step 3); npm package frozen (`#104`) |
+| `brave-search` | 2 | 363 | 105 | `curl` Brave Search REST API (`Yes`, manual) | Keep as MCP | `core` | `105` calls; cheap (`363` tok) web search fallback for interactive & headless `core` (`GEMINI.md` Step 3) when `BRAVE_API_KEY` is valid; npm package frozen (`#104`) |
 | `exa` | 3 | 1,660 | 0 | `curl` Exa REST API (`Yes`, manual) | Lazy-load / code-execute | `agy-only` / evaluate removal | `0` uses, `3` resources; overlaps `search_web`, `brave-search`, and `fetch` |
 | `sqlite` | 6 | 320 | 0 | `sqlite3` (`Yes`, `/usr/bin/sqlite3`) | CLI + skill | `remove` / replace with CLI | `0` uses; hardcodes `anime-recommendation/anime.db` and requires `mcp==1.1.2` pin (`#101`, `#102`) |
 | `cloudflare` | 89 | 7,837 | 14 | `wrangler` (`No` local) / Cloudflare API (`curl`) | Lazy-load / code-execute | `agy-only` / `opt-in` | `89` tools nears 128 cap by itself; keep on-demand on `agy` or `Code Mode`/bridge (`#39`, `#89`) |
@@ -130,7 +130,7 @@ All 37 entries use **stdio** client transport in `dotfiles/gemini/mcp_config.tem
 | `repomix` | Yes | `ok` | 212 / 215 | 17,862 | 0 / 0 | None | Local CLI + optional remote git clone |
 | `caddy` | Yes | `ok` | 1,390 / 1,396 | 24,783 | 0 / 0 | `CADDY_ADMIN_URL` (`SET`) | Homelab Tailscale `master.tailb65f8c.ts.net:2019` (connection refused) |
 | `context7` | Yes | `ok` | 926 / 928 | 5,227 | 0 / 0 | None | Context7 SaaS API |
-| `postgres` | Yes | `ok` | 489 / 493 | 131 | -1 / 0 | `POSTGRES_URL` (inline arg URI) | `localhost:5432` (connection refused) |
+| `postgres` | Yes | `ok` | 489 / 493 | 131 | `n/a` (connection refused) / 0 | `POSTGRES_URL` (inline arg URI) | `localhost:5432` (connection refused) |
 | `redis` | Yes | `ok` | 871 / 874 | 9,370 | 0 / 0 | `REDIS_URL` (`SET`) | `localhost:6379` (connection refused) |
 | `vault` | Yes | `ok` | 346 / 348 | 5,540 | 0 / 0 | `VAULT_ADDR` (`SET`), `VAULT_TOKEN` (`EMPTY`) | Homelab Tailscale `master.tailb65f8c.ts.net:8200` (connection refused) |
 | `slack` | Yes | `ok` | 540 / 540 | 3,116 | 0 / 0 | `SLACK_BOT_TOKEN` / `_TEAM_ID` (`SET`) | Slack Web API |
@@ -151,7 +151,7 @@ Every server classified as `CLI + skill` maps to a specific CLI, concrete gaps v
 | **`repomix`** | `repomix` (`~/.local/bin/repomix`, `Yes`) | Outputs to disk/stdout instead of returning managed MCP `outputId` handles for `grep_repomix_output` / `read_repomix_output`; agents inspect generated output with native file/search tools. | `repomix` (`#101`) | Low risk: local read-only packing; remote repo flags (`--remote`) inherit shell network access and must respect untrusted-content rules. |
 | **`git`** | `git` + `gh` (`Yes`, `/opt/homebrew/bin/{git,gh}`) | No single unified `repo_path` guard parameter; CLI offers strictly richer operations (`rebase`, `worktree`, `--cached`, `bisect`). | `git-workflow` (already installed via ECC) | Moderate improvement in eager clients (saves 14 tools / `~1.9k` tok); `git` runs with user SSH/credential-helper scope in shell either way. |
 | **`sequentialthinking`** | Native model thinking + `thinking-model-router` (`Yes`) | No external stateful `thoughtNumber` counter tool; native reasoning + `~/.agents/skills/thinking-model-router` handles structured reasoning models directly. | None (existing `thinking-model-router`) | None: pure in-context reasoning, zero external I/O. |
-| **`filesystem`** | Built-in harness file tools + `rg`/`fd`/`find` (`Yes`) | Built-in CLI/harness tools do not constrain paths solely via an MCP `--allowed-directories` argument; sandboxing/worktrees enforce boundary containment instead. | None (built-in tools + existing rules) | Important: MCP server scoped access to `${HOME}`; built-in shell commands rely on harness sandboxing (`--sandbox`) for directory isolation. |
+| **`filesystem`** | Built-in harness file tools + `rg`/`fd`/`find` (`Yes`) | Built-in CLI/harness tools do not constrain paths via an MCP `--allowed-directories` argument; a Git worktree isolates only the checkout directory and does not restrict shell filesystem access. | None (built-in tools + existing rules) | Important: `filesystem` MCP scoped access to `${HOME}`; removing it loses that root allowlist unless the harness runs inside a real OS/filesystem sandbox (`codex --sandbox`). |
 | **`sqlite`** | `sqlite3` (`Yes`, `/usr/bin/sqlite3`) | Lacks business-insight `append_insight` / `memo://insights` MCP resource; pure SQL queries and schema inspection (`.schema`, `.tables`) are cleaner in `sqlite3 -readonly`. | `local-db-cli` (`#101`) | Better boundary: removes hardcoded `${SQLITE_DB_PATH}` coupling to `anime.db` and passes explicit `-readonly` when inspecting untrusted DBs. |
 | **`postgres`** | `psql` / `pgcli` (`No` installed locally; install via Homebrew if needed) | Single-tool MCP `query` lacks `\dt`, explain formatting, and role switching; CLI adds interactive meta-commands and explicit transaction flags. | `local-db-cli` (`#101`) | **Critical improvement:** currently `bin/mcp-sync` writes raw `POSTGRES_URL` into CLI args in plaintext configs (`0600`). Migrating to CLI + `~/.pgpass` / `.env` removes URI embedding in MCP definitions. |
 | **`redis`** | `redis-cli` (`No` installed locally; or `kubectl`/`docker exec`) | Lacks pre-packaged composite `redis_health` / `redis_advisor` text report; `redis-cli --scan`, `INFO`, `TTL`, `SLOWLOG GET` require multi-step commands. | `local-db-cli` (`#101`) | Moderate: keep `REDIS_URL` / passwords out of shell history (`REDISCLI_AUTH` env or `.env` rather than `-a` flag). |
@@ -171,7 +171,7 @@ Each client harness supports a distinct mechanism for loading heavy or infrequen
 | **Antigravity CLI (`agy`)** | **Native disk lazy-loading:** renders tool schemas as directory files (`~/.gemini/antigravity-cli/mcp/<server>/*.json`) and invokes via `call_mcp_tool` (`0` eager prompt tokens on turn 0). | Already holds all `32` enabled servers cleanly; `list_resources` / `read_resource` work on demand. | Primary mechanism works today; no gateway proxy needed (`#30`, `#41` closed). |
 | **Codex CLI (`codex`)** | None enabled by default (`code_mode_tool_search` is experimental / `under development`, `tool_search` removed). | `-c mcp_servers.<name>.enabled=true` per session, or `mcp-sync --codex-servers "..."` / `--codex-profile full`. | `#89` tracks re-verifying `code_mode_tool_search` once non-experimental (currently still initializes enabled servers eagerly). |
 | **OpenCode (`opencode`)** | None enabled by default (`OPENCODE_EXPERIMENTAL_CODE_MODE=1` enables `tools.$codemode.search` while still starting enabled servers eagerly). | `mcp-sync --opencode-servers "..."`, `--opencode-profile full`, or `delegate.sh --mcp-profile`. | `#89` tracks stable Code Mode; `#39` tracks MCP-to-CLI bridges (`mcporter`/`mcpc`/`mcp2cli`) for delegated workers. |
-| **GitHub Copilot CLI (`copilot`)** | None (CLI ignores `disabled` flags, so `bin/mcp-sync` writes only enabled `core` servers to `~/.copilot/mcp-config.json`). | `mcp-sync --copilot-servers "..."` / `--copilot-profile full`; `delegate.sh` restricts built-ins via `--available-tools`. | `#39` (MCP-to-CLI bridge) or `#43` (MCPProxy) would expose heavy servers like `github`/`cloudflare`/`tailscale` without 128-tool cap errors. |
+| **GitHub Copilot CLI (`copilot`)** | None (CLI ignores `disabled` flags, so `bin/mcp-sync` writes only enabled `core` servers to `~/.copilot/mcp-config.json`). | `mcp-sync --copilot-servers "..."` / `--copilot-profile full`; `delegate.sh` restricts built-ins via `--available-tools`. | `#39` (MCP-to-CLI bridges / `MCPProxy`) would expose heavy servers like `github`/`cloudflare`/`tailscale` without 128-tool cap errors. |
 | **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | None (`OPENCODE_CONFIG` points to isolated minimal profile). | `DELEGATE_MCP_SERVERS` / `DELEGATE_MCP_PROFILE`. | `#86` tracks formal DeepSeek harness compatibility verification. |
 
 ### Lazy-Load Candidate Mapping
@@ -179,7 +179,7 @@ Each client harness supports a distinct mechanism for loading heavy or infrequen
 - **`github`, `kubernetes`, `prometheus`, `loki`, `ssh`, `docker`, `uptime-kuma`, `healthchecks`, `cloudflare`, `tailscale`, `slack`, `postman`, `sonarqube`, `caddy`, `vault`, `exa`, `discord` (`disabled: true`):**
   - **Antigravity CLI (`agy`):** Keep registered and lazy-loaded natively (`disabled: false`, except `discord` kept `disabled: true` unless needed).
   - **Eager clients (Codex / OpenCode / Copilot):** Set disabled by default; invoke native CLI alternatives where installed (`gh`, `kubectl`/`helm`, `ssh`) or enable per session (`-c mcp_servers.<name>.enabled=true`, `--*-servers`).
-  - **Code-execution / bridge candidates (`#39`, `#43`, `#89`):** `cloudflare` (`89` tools), `tailscale` (`98` tools), `github` (`44` tools), and `postman` (`42` tools) benefit most from dynamic tool search or code execution because loading any two of them eagerly approaches or exceeds the `128`-tool limit.
+  - **Code-execution / bridge candidates (`#39`, `#89`):** `cloudflare` (`89` tools), `tailscale` (`98` tools), `github` (`44` tools), and `postman` (`42` tools) benefit most from dynamic tool search or code execution because loading any two of them eagerly approaches or exceeds the `128`-tool limit.
 
 ---
 
@@ -189,7 +189,7 @@ Per the explicit requirement in [#70](https://github.com/gordonpn/dotfiles/issue
 
 1. **Library / Framework / API Docs:** `context7` (`core`, `2` tools, `~1.3k` tok, `23` uses) stays enabled across **every** client (`GEMINI.md` Step 1).
 2. **Arbitrary Web Docs, RFCs, & Markdown Specs:** `fetch` (`core`, `1` tool, `~362` tok, `15` uses) stays enabled across **every** client (`481 ms` warm startup, clean HTML-to-Markdown pagination).
-3. **Web Search Fallback (Headless / Non-Native Clients):** `brave-search` (`~363` tok, `105` uses) added to recommended eager `core` (or `opt-in`) guarantees web lookup even inside Codex, OpenCode, or DeepSeek workers where `search_web` is absent (`GEMINI.md` Step 3). `exa` (`~1.7k` tok, `0` uses) remains lazy-loaded on `agy`.
+3. **Web Search Fallback (Headless / Non-Native Clients):** `brave-search` (`~363` tok, `105` uses) added to recommended `core` provides web lookup inside Codex, OpenCode, or DeepSeek workers where `search_web` is absent (`GEMINI.md` Step 3) **only when `BRAVE_API_KEY` is set and valid** (`bin/mcp-sync` writes an empty string if unset, so fallback is not guaranteed without a valid key). `exa` (`~1.7k` tok, `0` uses) remains lazy-loaded on `agy`.
 4. **IaC Registry & Schema Lookup:** `terraform` (`9` tools, `~2.5k` tok, `2` MCP resources, `8` uses) stays **Keep as MCP** (`agy-only` / `opt-in`) because `tofu`/`terraform` CLI cannot query arbitrary uninitialized provider/module docs from the public Registry (`TFE_TOKEN` is unnecessary for Registry tools).
 5. **Internal Repo Knowledge, ADRs & Cross-Session Wiki:** `ai-memory` (`~16.9k` tok) + `codebase-memory-mcp` (`~4.3k` tok) stay `core` for interactive sessions (with `codebase-memory-mcp` retained in headless `delegate.sh`).
 6. **Live Infrastructure & API Schemas:** `github` (`4` resources), `kubernetes` (`5` resources + `explain_resource`), `postman` (`1` Instructions resource), `prometheus`/`loki` (label taxonomy tools), and `tailscale` (`4` resources) stay on-demand via `agy` lazy-loading (`0` turn-0 tokens).
@@ -207,7 +207,7 @@ Per `dotfiles/agent-skills/engineering-standards/references/ai-agents.md`, movin
 2. **SSH & Docker host allowlisting:**
    - `ssh` and `docker` MCP servers restrict targets through `~/.gemini/ssh-profiles.json` and `~/.gemini/docker-profiles.json`. Direct `ssh` shell usage bypasses MCP job wrappers; `ssh` MCP remains useful for structured multi-host triage while preserving explicit operator rules against destructive commands.
 3. **Host filesystem boundary:**
-   - `filesystem` MCP enforces an explicit root (`${HOME}`). Built-in file/shell tools rely on harness worktree sandboxing (`codex --sandbox`, `delegate.sh` git worktrees) rather than an MCP root allowlist.
+   - `filesystem` MCP enforces an explicit root (`${HOME}`). A Git worktree (`delegate.sh`) isolates only the repository checkout directory and does not sandbox arbitrary shell paths; removing the `filesystem` MCP server eliminates its `--allowed-directories` root boundary unless an OS/tool sandbox (such as `codex --sandbox`) is enforced.
 4. **Prompt injection via untrusted retrieval (`ai-agents.md`):**
    - `fetch`, `brave-search`, `exa`, `context7`, `github` (issues/PRs), `slack`, and `loki` retrieve untrusted external content. Keeping structured MCP schemas reduces shell-escaping injection risks compared to interpolating untrusted strings into `curl`/shell pipelines; regardless of transport, treat retrieved output as untrusted data.
 
@@ -226,8 +226,7 @@ Per `dotfiles/agent-skills/engineering-standards/references/ai-agents.md`, movin
 ### Existing Related Open Issues
 
 - [#27](https://github.com/gordonpn/dotfiles/issues/27) Project-specific MCP profiles
-- [#39](https://github.com/gordonpn/dotfiles/issues/39) Evaluate MCP-to-CLI bridges (`MCPorter`, `mcpc`, `mcp2cli`)
-- [#43](https://github.com/gordonpn/dotfiles/issues/43) Evaluate MCPProxy gateway
+- [#39](https://github.com/gordonpn/dotfiles/issues/39) Evaluate MCP-to-CLI bridges (`MCPorter`, `mcpc`, `mcp2cli`, and `MCPProxy`)
 - [#67](https://github.com/gordonpn/dotfiles/issues/67) Audit and improve `bin/mcp-sync`
 - [#86](https://github.com/gordonpn/dotfiles/issues/86) Verify DeepSeek harness MCP compatibility and minimal profile
 - [#89](https://github.com/gordonpn/dotfiles/issues/89) Re-verify Codex `code_mode_tool_search` and OpenCode Code Mode once stabilized
