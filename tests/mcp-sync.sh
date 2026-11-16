@@ -655,10 +655,11 @@ sync_skills_and_instructions
 backup_count_after=$(find "${GEMINI_DIR}/skill-backups" -mindepth 1 | wc -l)
 [[ "${backup_count_before}" -eq "${backup_count_after}" ]]
 
-# Verify OpenCode startup emits zero duplicate skill warnings when available
+# Verify OpenCode startup emits zero duplicate skill warnings with OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1
 if command -v opencode >/dev/null 2>&1; then
-  opencode_output="$(opencode debug skill --print-logs --log-level WARN 2>&1)"
+  opencode_output="$(OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode debug skill --print-logs --log-level WARN 2>&1)"
   [[ ! "${opencode_output}" == *'message="duplicate skill name"'* ]]
+  [[ "${opencode_output}" == *'"name": "engineering-standards"'* ]]
 fi
 
 # Symlinks whose targets share the retired plugin suffix outside REPO_DIR are preserved as user-owned links.

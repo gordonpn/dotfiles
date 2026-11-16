@@ -53,6 +53,8 @@ export EZA_CONFIG_DIR="$HOME/.config/eza"
 export BAT_STYLE="plain"
 export KUBE_EDITOR='nvim'
 export FUNCNEST=1000000
+# Prevent OpenCode from double-loading ~/.claude/skills alongside ~/.agents/skills.
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS="${OPENCODE_DISABLE_CLAUDE_CODE_SKILLS:-1}"
 
 # Docker BuildKit & CLI
 export COMPOSE_DOCKER_CLI_BUILD=1
