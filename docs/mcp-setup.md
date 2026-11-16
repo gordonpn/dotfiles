@@ -39,7 +39,6 @@ dotfiles/ (Public Repository)
 │   ├── mcp_config.json              # Fully hydrated MCP server registry (0600)
 │   └── skills/                      # Symlinks to shared custom skills
 ├── docker-profiles.json             # Local daemon + remote SSH Docker profiles
-├── memory.json                      # Persistent knowledge graph store
 └── ssh-profiles.json                # Host profiles derived from ~/.ssh/config
 
 ~/.codex/ (Codex State)
@@ -109,12 +108,11 @@ just setup-codebase-memory
 3. **Generates SSH Profiles:** Parses [~/.ssh/config](file:///Users/gordonpn/.ssh/config) to generate `~/.gemini/ssh-profiles.json` for all configured hosts.
 4. **Generates Docker Profiles:** Populates `~/.gemini/docker-profiles.json` with `local` as default, plus remote server targets for remote container and Swarm management.
 5. **Synchronizes K3s Cluster:** Checks reachability of `master` over SSH, pulls `/etc/rancher/k3s/k3s.yaml`, updates endpoint to `https://master:6443`, and safely merges context `k3s-master` into `~/.kube/config` via `kubectl config view --flatten` (skipped with `--configs-only`).
-6. **Initializes Memory Store:** Ensures `~/.gemini/memory.json` exists for `@modelcontextprotocol/server-memory`.
-7. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 37 servers, lazy-loaded on demand by Antigravity CLI), `~/.codex/config.toml`, `~/.config/opencode/opencode.json` (lean minimal profile by default with 9 core coding servers enabled; 28 heavy, homelab, and database servers defined as disabled), and `${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json` (lean minimal profile with only the 9 enabled servers rendered, omitting disabled managed servers because Copilot CLI ignores per-server `disabled` flags). Profiles can be configured via `--codex-profile`/`CODEX_MCP_PROFILE`, `--opencode-profile`/`OPENCODE_MCP_PROFILE`, and `--copilot-profile`/`COPILOT_MCP_PROFILE`. Delegated GitHub Copilot Student runs through `delegate.sh --agent copilot` still restrict tools via `--available-tools`.
-8. **Synchronizes Skills & Instructions:** Links all tracked skills under `dotfiles/agent-skills/` (including `delegate-coding-agents` and `engineering-standards`) and the Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` across installed harnesses (`~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`, `${COPILOT_HOME:-$HOME/.copilot}/instructions/global.instructions.md`, and `~/.claude/CLAUDE.md`), and mirrors shared skills into Antigravity, Codex, OpenCode (skipping redundant links in `~/.config/opencode/skills` for skills present in `~/.agents/skills` to eliminate duplicate OpenCode discovery warnings), GitHub Copilot (`${COPILOT_HOME:-$HOME/.copilot}/skills`), and Claude Code (`~/.claude/skills`). The tracked sources are `dotfiles/agent-skills/*/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
+6. **Hydrates MCP Configs:** Renders `dotfiles/gemini/mcp_config.template.json` atomically with `0600` permissions into `~/.gemini/config/mcp_config.json` (all 33 servers, lazy-loaded on demand by Antigravity CLI; `caddy`, `vault`, and `discord` disabled by default), `~/.codex/config.toml`, `~/.config/opencode/opencode.json` (lean minimal profile by default with 9 core coding servers enabled; 24 heavy, homelab, disabled, and database servers defined as disabled), and `${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json` (lean minimal profile with only the 9 enabled servers rendered, omitting disabled managed servers because Copilot CLI ignores per-server `disabled` flags). Profiles can be configured via `--codex-profile`/`CODEX_MCP_PROFILE`, `--opencode-profile`/`OPENCODE_MCP_PROFILE`, and `--copilot-profile`/`COPILOT_MCP_PROFILE`. Delegated GitHub Copilot Student runs through `delegate.sh --agent copilot` still restrict tools via `--available-tools`.
+7. **Synchronizes Skills & Instructions:** Links all tracked skills under `dotfiles/agent-skills/` (including `delegate-coding-agents` and `engineering-standards`) and the Antigravity auto-delegation rule into their home-directory locations, symlinks `GEMINI.md` across installed harnesses (`~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`, `${COPILOT_HOME:-$HOME/.copilot}/instructions/global.instructions.md`, and `~/.claude/CLAUDE.md`), and mirrors shared skills into Antigravity, Codex, OpenCode (skipping redundant links in `~/.config/opencode/skills` for skills present in `~/.agents/skills` to eliminate duplicate OpenCode discovery warnings), GitHub Copilot (`${COPILOT_HOME:-$HOME/.copilot}/skills`), and Claude Code (`~/.claude/skills`). The tracked sources are `dotfiles/agent-skills/*/` and `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`.
    Antigravity CLI delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`: Codex CLI runs first, falling back on classified provider, quota, rate-limit, or model-availability failures to OpenCode free models (`opencode/deepseek-v4.1-flash-free` high, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`), then to GitHub Copilot Student (`--model auto`). Codex as orchestrator delegates sequentially across OpenCode free models and GitHub Copilot Student (`--model auto`). OpenCode free models run anonymously without requiring an account or login. Authentication and provider-initialization errors (such as `ProviderInitError` or HTTP 403) are hard stops across all candidates with actionable credential/configuration guidance (`codex login`, `copilot login`, or OpenCode provider configuration). Automatic delegation requires `agents.delegationAllowed=true`.
-9. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
-10. **Synchronizes Agent Preferences & Status Tools:** Symlinks `dotfiles/gemini/antigravity-cli/settings.json` and `dotfiles/gemini/settings.json` to their respective home directory locations (`~/.gemini/antigravity-cli/settings.json` and `~/.gemini/settings.json`), symlinks `dotfiles/gemini/antigravity-cli/title.sh` to `~/.gemini/antigravity-cli/title.sh`, and links `bin/agy-statusline` to `~/.local/bin/agy-statusline`.
+8. **Shell Startup Integration:** `.zshrc_new` runs `_check_mcp_sync` on shell startup to compare source timestamps against target configs, backgrounding `mcp-sync --configs-only` with a 5-minute cooldown on errors.
+9. **Synchronizes Agent Preferences & Status Tools:** Symlinks `dotfiles/gemini/antigravity-cli/settings.json` and `dotfiles/gemini/settings.json` to their respective home directory locations (`~/.gemini/antigravity-cli/settings.json` and `~/.gemini/settings.json`), symlinks `dotfiles/gemini/antigravity-cli/title.sh` to `~/.gemini/antigravity-cli/title.sh`, and links `bin/agy-statusline` to `~/.local/bin/agy-statusline`.
 
 ---
 
@@ -122,7 +120,7 @@ just setup-codebase-memory
 
 Codex CLI and OpenCode eagerly spawn all enabled MCP servers and advertise their full tool schemas to the model on turn 0. Enabling all 33 servers exposed **593 tools** (~643 KiB of JSON schemas, ~160k tokens), which exceeded the 128-tool limit on OpenAI and Copilot chat completion endpoints, triggered aggressive auto-compaction loops on 64k models, and generated cold-start stderr errors from offline homelab services.
 
-To optimize interactive and CLI workflows, `bin/mcp-sync` configures both Codex (`~/.codex/config.toml`) and OpenCode (`~/.config/opencode/opencode.json`) with a lean **minimal profile** by default while leaving Antigravity CLI (which lazy-loads tools from disk) with all 37 servers.
+To optimize interactive and CLI workflows, `bin/mcp-sync` configures both Codex (`~/.codex/config.toml`) and OpenCode (`~/.config/opencode/opencode.json`) with a lean **minimal profile** by default while leaving Antigravity CLI (which lazy-loads tools from disk) with all 33 template servers.
 
 ### Default Minimal Profile
 
@@ -140,7 +138,7 @@ Only 9 core coding and memory servers are enabled by default in `~/.codex/config
 | **`semgrep`** | 7 | Security, AST search, and rule scanning |
 | **`sequentialthinking`**| 1 | Multi-step reasoning scratchpad |
 
-All other 28 servers remain fully defined in `~/.codex/config.toml` and `~/.config/opencode/opencode.json` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false` / `"enabled": false`. Existing top-level keys and custom unmanaged `mcp` entries in `~/.config/opencode/opencode.json` are preserved across syncs.
+All other 24 servers remain fully defined in `~/.codex/config.toml` and `~/.config/opencode/opencode.json` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false` / `"enabled": false`. Existing top-level keys and custom unmanaged `mcp` entries in `~/.config/opencode/opencode.json` are preserved across syncs.
 
 ### Measured Performance Reduction (Codex CLI)
 
@@ -226,9 +224,6 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 | **`fetch`** | stdio | `uvx mcp-server-fetch` | HTTP web requests and HTML-to-markdown conversion |
 | **`git`** | stdio | `uvx mcp-server-git` | Structured status, diff, log, branch, and commit operations on local repos |
 | **`playwright`** | stdio | `npx -y @playwright/mcp@latest` | Accessibility-tree browser automation and interaction |
-| **`chrome-devtools`** (disabled) | stdio | `npx -y chrome-devtools-mcp@latest` | Performance traces, network inspection, and console access (consolidated to Playwright) |
-| **`puppeteer`** (disabled) | stdio | `npx -y @modelcontextprotocol/server-puppeteer` | Headless browser execution and interaction |
-| **`memory`** (disabled) | stdio | `npx -y @modelcontextprotocol/server-memory` | Legacy JSON knowledge graph store (superseded by ai-memory) |
 | **`ai-memory`** | stdio | `~/.local/bin/ai-memory mcp-bridge --no-session-id --server-url http://127.0.0.1:49374/mcp` | Unified cross-agent memory, session tracking, handoffs, and durable wiki knowledge base |
 | **`codebase-memory-mcp`** | stdio | Pinned native binary | Local code indexing, structural search, call graphs, and architecture queries |
 | **`sequentialthinking`** | stdio | `npx -y @modelcontextprotocol/server-sequential-thinking` | Structured multi-step reasoning scratchpad |
@@ -247,15 +242,14 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 | **`uptime-kuma`** | stdio | `npx -y @davidfuchs/mcp-uptime-kuma` | Monitor healthchecks, status pages, and heartbeats |
 | **`healthchecks`**| stdio | `npx -y healthchecks-mcp` | Dead man's switch and scheduled cron task inspection |
 | **`filesystem`** | stdio | `npx -y @modelcontextprotocol/server-filesystem` | Scoped filesystem access for the user home directory |
-| **`server-services-configs`** (disabled) | stdio | `@modelcontextprotocol/server-filesystem` | Scoped filesystem access (redundant with filesystem on $HOME) |
 | **`repomix`** | stdio | `repomix --mcp` | AI-optimized repository packing, remote git cloning, and output analysis |
-| **`caddy`** | stdio | `@yawlabs/caddy-mcp` | Caddy reverse proxy admin API for dynamic route inspection |
+| **`caddy`** (disabled) | stdio | `@yawlabs/caddy-mcp` | Caddy reverse proxy admin API for dynamic route inspection |
 | **`context7`** | stdio | `@upstash/context7-mcp` | Real-time library documentation and code reference search |
 | **`postgres`** | stdio | `@modelcontextprotocol/server-postgres` | PostgreSQL schema introspection and read queries |
 | **`redis`** | stdio | `@yawlabs/redis-mcp` | Redis key inspection, TTLs, and metrics via SCAN |
-| **`vault`** | stdio | `uv run --with "mcp<2" --with "httpx"` | HashiCorp Vault KV v2 secret reads/writes and TOTP management |
+| **`vault`** (disabled) | stdio | `uv run --with "mcp<2" --with "httpx"` | HashiCorp Vault KV v2 secret reads/writes and TOTP management |
 | **`slack`** | stdio | `@modelcontextprotocol/server-slack` | Slack workspace channels, threads, and bot communication |
-| **`discord`** | stdio | `@pasympa/discord-mcp` | Discord guild channels, messages, and role queries |
+| **`discord`** (disabled) | stdio | `@pasympa/discord-mcp` | Discord guild channels, messages, and role queries |
 | **`semgrep`** | stdio | `semgrep mcp` | Local AST static analysis, SAST security scans, and custom rule matching |
 | **`postman`** | stdio | `@postman/postman-mcp-server` | Postman workspaces, collections, environments, and mock server management |
 | **`sonarqube`** | stdio | Standalone JAR (`java -jar`) | SonarQube Cloud and Server code quality metrics, quality gates, and hotspots |
@@ -338,7 +332,7 @@ for supported components and usage.
 
 ### Deprecated Upstream, Retained Here
 
-`puppeteer`, `brave-search`, `postgres`, and `slack` come from `modelcontextprotocol/servers`, whose npm packages are marked "package no longer supported" and frozen at 2025 releases. They still work; expect no fixes. Maintained alternatives if one breaks: `@playwright/mcp` (already registered) for `puppeteer`, `@brave/brave-search-mcp-server`, `crystaldba/postgres-mcp`, and `korotovsky/slack-mcp-server`.
+`brave-search`, `postgres`, and `slack` come from `modelcontextprotocol/servers`, whose npm packages are marked "package no longer supported" and frozen at 2025 releases. They still work; expect no fixes. Maintained alternatives if one breaks: `@brave/brave-search-mcp-server`, `crystaldba/postgres-mcp`, and `korotovsky/slack-mcp-server`.
 
 ---
 

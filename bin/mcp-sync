@@ -829,9 +829,15 @@ if not isinstance(existing_mcp, dict):
     existing_mcp = {}
 
 managed_names = set(data.get('mcpServers', {}).keys())
+retired_opencode_names = {
+    'chrome-devtools',
+    'puppeteer',
+    'memory',
+    'server-services-configs',
+}
 opencode_mcp = {
     k: v for k, v in existing_mcp.items()
-    if k not in managed_names
+    if k not in managed_names and k not in retired_opencode_names
 }
 
 opencode_enabled_count = 0
@@ -1208,14 +1214,6 @@ sync_skills_and_instructions() {
   echo "Synchronized shared skills and AGENTS.md instructions across agents"
 }
 
-sync_memory_file() {
-  local target_file="${GEMINI_DIR}/memory.json"
-  if [[ ! -f "${target_file}" ]]; then
-    echo '{"entities": [], "relations": []}' > "${target_file}"
-    echo "Initialized knowledge graph store in ${target_file}"
-  fi
-}
-
 main() {
   local configs_only=0
   local codebase_memory_only=0
@@ -1391,7 +1389,6 @@ main() {
   if (( ! configs_only )); then
     sync_k3s_cluster
   fi
-  sync_memory_file
   sync_mcp_config
   sync_skills_and_instructions
   echo "==> Done. MCP configuration and agent parity ready."
