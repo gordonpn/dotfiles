@@ -14,7 +14,7 @@ This document records non-obvious engineering and implementation decisions made 
 - Decision: Add only non-duplicative baseline rules (untrusted content authorization boundaries, existing machine-readable contract validation, and on-demand domain triggers) to `dotfiles/gemini/GEMINI.md`, package the 8 domain standards profiles under `dotfiles/agent-skills/engineering-standards/` (`SKILL.md` plus `references/*.md`), update `bin/mcp-sync` to iterate over all tracked skills in `dotfiles/agent-skills/*`, and extend instruction and skill symlinks to GitHub Copilot (`${COPILOT_DIR}/instructions/global.instructions.md`, `${COPILOT_DIR}/skills`) and Claude Code (`~/.claude/CLAUDE.md`, `~/.claude/skills`) alongside Antigravity, Codex, and OpenCode.
 - Rationale: Keep always-loaded instructions small while allowing every terminal AI CLI to load domain standards only when triggered by changed files or interfaces, and keep skill discovery aligned with Copilot CLI's `COPILOT_HOME` behavior (where overriding `COPILOT_HOME` disables `~/.agents/skills` scanning).
 - Rejected alternatives: Appending all 8 domain profile files directly into `dotfiles/gemini/GEMINI.md` (unnecessary always-on context bloat), keeping `delegate-coding-agents` hardcoded in `bin/mcp-sync`, or duplicating skills into `~/.config/opencode/skills` when OpenCode natively scans `~/.agents/skills`.
-- Source: PR pending (branch `feat/incorporate-terminal-agent-standards`).
+- Source: [#97 feat(agents): add engineering-standards skill and sync skills across agent CLIs](https://github.com/gordonpn/dotfiles/pull/97).
 
 ## 2026-11-12: Standardize GitHub issue conventions, discovery tracking, and decisions logs
 

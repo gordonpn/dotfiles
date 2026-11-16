@@ -291,6 +291,8 @@ export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 
 # Suppress docker's promotional hints on every command
 export DOCKER_CLI_HINTS=false
+# Prevent OpenCode from double-loading ~/.claude/skills alongside ~/.agents/skills.
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS="${OPENCODE_DISABLE_CLAUDE_CODE_SKILLS:-1}"
 
 # Command Aliases
 alias ls='eza -lah --group-directories-first --icons=always'
