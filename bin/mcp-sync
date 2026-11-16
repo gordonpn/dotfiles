@@ -829,9 +829,15 @@ if not isinstance(existing_mcp, dict):
     existing_mcp = {}
 
 managed_names = set(data.get('mcpServers', {}).keys())
+retired_opencode_names = {
+    'chrome-devtools',
+    'puppeteer',
+    'memory',
+    'server-services-configs',
+}
 opencode_mcp = {
     k: v for k, v in existing_mcp.items()
-    if k not in managed_names
+    if k not in managed_names and k not in retired_opencode_names
 }
 
 opencode_enabled_count = 0

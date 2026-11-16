@@ -164,13 +164,33 @@ cat >"${OPENCODE_DIR}/opencode.json" <<'JSON'
       "type": "local",
       "command": ["echo", "custom"],
       "enabled": true
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+      "enabled": false
+    },
+    "puppeteer": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-puppeteer"],
+      "enabled": false
+    },
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": false
+    },
+    "server-services-configs": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+      "enabled": false
     }
   }
 }
 JSON
 sync_mcp_config
 
-# Verify OpenCode preserved top-level settings and custom unmanaged MCP entry
+# Verify OpenCode preserved custom entries and pruned retired servers from existing configs
 [[ "$(jq -r '.model' "${OPENCODE_DIR}/opencode.json")" == "opencode/deepseek-v4.1-flash-free" ]]
 [[ "$(jq -r '.theme' "${OPENCODE_DIR}/opencode.json")" == "flexoki" ]]
 [[ "$(jq -r '.mcp["custom-local"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
@@ -182,6 +202,9 @@ sync_mcp_config
 [[ "$(jq -r '.mcp["vault"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["discord"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp | has("memory")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp | has("chrome-devtools")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp | has("puppeteer")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp | has("server-services-configs")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 
 # Verify OpenCode parses JSONC (comments and trailing commas) without losing settings
 cat >"${OPENCODE_DIR}/opencode.json" <<'JSONC'
