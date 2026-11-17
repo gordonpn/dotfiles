@@ -12,7 +12,21 @@ prSections:
     filters: >-
       is:open user:gordonpn
       updated:>={{ nowModify "-7d" }}
-      sort:updated-asc
+      sort:updated-desc
+  - title: "snaptally"
+    filters: "is:open repo:gordonpn/snaptally sort:updated-asc"
+  - title: "merge-verdict"
+    filters: "is:open repo:gordonpn/merge-verdict sort:updated-asc"
+  - title: "digest-engine"
+    filters: "is:open repo:gordonpn/digest-engine sort:updated-asc"
+  - title: "gym-calculator"
+    filters: "is:open repo:gordonpn/gym-calculator sort:updated-asc"
+  - title: "shunt-shim"
+    filters: "is:open repo:gordonpn/shunt-shim sort:updated-asc"
+  - title: "dotfiles"
+    filters: "is:open repo:gordonpn/dotfiles sort:updated-asc"
+  - title: "watchgraph"
+    filters: "is:open repo:gordonpn/watchgraph sort:updated-asc"
 
 issuesSections:
   - title: "Created"
