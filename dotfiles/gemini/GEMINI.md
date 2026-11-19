@@ -155,10 +155,10 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
     **Effort:** XS | S | M | L | XL
 
     ## Objective
-    [User narrative 'As a... I want... So that...' or concise statement of intent]
+    [User narrative 'As a... I want... So that...' or concise statement of intent and why it matters]
 
     ## Context & Scope
-    [Background, technical constraints, concrete areas to touch, related issues]
+    [Why this is needed, background, technical constraints, concrete areas to touch, related issues]
 
     ## Acceptance Criteria
     - [ ] Given [context], when [action], then [verifiable outcome]
@@ -173,7 +173,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
     **Effort:** XS | S | M | L | XL
 
     ## Problem Summary
-    [Succinct failure or regression description]
+    [Succinct failure or regression description, plus why it matters and user/system impact]
 
     ## Technical Constraints
     [Relevant technical constraints, or state that none apply]
@@ -207,6 +207,7 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Review by Dimension:** Review a change as separate focused passes (architecture and layering, missing test cases, missed capability in an installed dependency, API documentation, style) rather than one generic review pass, then merge and deduplicate the findings by file and line. Cap the fix rounds and report what is still unresolved instead of looping indefinitely.
 - **Automated Review Gate (OCR):** Always execute Open Code Review via the `ocr` CLI before pushing code to a remote repository or opening a pull request. If an external LLM provider is configured in OCR, run `ocr review --audience agent`. In delegated or offline agent workflows, run deterministic inspection via `ocr delegate preview --format json` and `ocr delegate rule --format json` to resolve review rules and evaluate findings against them. Address all critical, high, and medium severity findings before delivering changes.
 - **Pull Request Delivery:** Push the dedicated task branch and open a pull request ready for review targeting the default branch, linking a root issue when one exists. Never push directly to the default branch or bypass the pull request lifecycle. If the user explicitly forbids pushing or opening a PR, leave commits on the task branch and report that the PR remains unopened; never substitute a commit on the default branch.
+- **Explain Why in Issues and PRs:** Every GitHub issue and pull request description (including meaningful updates) must clearly explain *why* the work or change is needed: the underlying problem, user or operational impact, constraint, or trade-off motivating it, rather than merely summarizing *what* files or symbols changed. Reference supporting evidence, failure traces, or decision records (`docs/decisions.md`, ADRs) so reviewers can evaluate intent without reconstructing context from the diff alone.
 - **User-Only PR Merging:** Never call `merge_pull_request` or execute `gh pr merge`. Only the user merges pull requests. Agents prepare changes, push branches, open pull requests ready for review, and address review feedback, leaving merge execution strictly to the human maintainer.
 - **No Stacked PRs with GitHub:** Never create stacked pull requests or chain PR branches (where a branch is cut from another unmerged PR branch or targets a non-default branch). Every PR must target the repository default branch (`main` or `master`) directly from an isolated branch based on the latest default branch. Merge each PR into the default branch before branching downstream work from the updated default branch.
 - **Distinct PR Branches & Merge Isolation:** Each PR must originate from its own distinct, dedicated branch based on the default target branch. Never share or daisy-chain branches across concurrent PRs: when a PR merges and its remote branch is deleted, no other active or pending PR should be affected, broken, or invalidated.
