@@ -4,10 +4,10 @@ This document records non-obvious engineering and implementation decisions made 
 
 ## 2026-11-19: Drop delegate.sh opt-in and dirty-tree gates and prefer external delegation over invoke_subagent
 
-- Decision: Remove the blocking `agents.delegationAllowed=true` check (`--automatic` remains accepted as a compatibility no-op) and blocking clean-working-tree check from `delegate.sh`, warn and record `dirty_base=1` in `manifest.txt` and `DELEGATION_RESULT` when uncommitted base edits exist, and instruct Antigravity (`agy`) in `dotfiles/gemini/GEMINI.md`, `auto-delegation.md`, and `delegate-coding-agents/SKILL.md` to prefer `delegate.sh` over native `invoke_subagent`.
+- Decision: Remove the blocking `agents.delegationAllowed=true` check (`--automatic` remains accepted as a compatibility no-op) and blocking clean-working-tree check from `delegate.sh`, warn on stderr, record `dirty_base=1` in `manifest.txt`, and print a `Base snapshot note` in `DELEGATION_RESULT` when uncommitted or untracked base edits exist, and instruct Antigravity (`agy`) in `dotfiles/gemini/GEMINI.md`, `auto-delegation.md`, and `delegate-coding-agents/SKILL.md` to prefer `delegate.sh` over native `invoke_subagent` (with confidentiality enforced by orchestrator policy rather than a per-repo script opt-in gate).
 - Rationale: Unblock automatic delegation across personal repositories (including worktrees or checkouts with unrelated uncommitted files like `NEXT.md`) and offload eligible work onto Codex, free OpenCode models, and Copilot Student rather than defaulting to `invoke_subagent` on Antigravity quota, while keeping snapshot semantics transparent whenever local edits are excluded from committed `BASE_SHA`.
 - Rejected alternatives: Requiring an opt-in git config per repo (`agents.delegationAllowed=true`) or failing whenever local files are dirty (blocked routine delegation on personal repos), auto-stashing/copying dirty working trees into the worker worktree (risks leaking `.env`/untracked artifacts or breaking cherry-picks), or defaulting Antigravity to `invoke_subagent` (consumes Antigravity quota instead of Codex/OpenCode/Copilot).
-- Source: Branch `feat/prefer-delegate-drop-gates`.
+- Source: [PR #117](https://github.com/gordonpn/dotfiles/pull/117) (`feat/prefer-delegate-drop-gates`).
 
 ## 2026-11-15: Adopt three-tier MCP architecture and lock server dispositions
 

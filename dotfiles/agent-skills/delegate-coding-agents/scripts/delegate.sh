@@ -239,11 +239,6 @@ fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
 BASE_SHA=$(git -C "$ROOT" rev-parse --verify "${BASE}^{commit}") || die "Invalid base revision: $BASE"
-DIRTY_BASE=0
-if [[ -n $(git -C "$ROOT" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
-  DIRTY_BASE=1
-  printf 'WARNING: Base working tree has uncommitted or untracked changes; worktree snapshots %s only.\n' "$BASE_SHA" >&2
-fi
 SAFE_ID=$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g;s/^[.-]+//;s/[.-]+$//')
 [[ -n $SAFE_ID ]] || SAFE_ID=task
 SAFE_ID=${SAFE_ID:0:48}
@@ -826,6 +821,12 @@ resolve_active_profile_path() {
   esac
 }
 
+BASE_SHA=$(git -C "$ROOT" rev-parse --verify "${BASE}^{commit}") || die "Invalid base revision: $BASE"
+DIRTY_BASE=0
+if [[ -n $(git -C "$ROOT" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
+  DIRTY_BASE=1
+  printf 'WARNING: Base working tree has uncommitted or untracked changes; worktree snapshots %s only.\n' "$BASE_SHA" >&2
+fi
 BRANCH='(detached)'
 if [[ $MODE == build ]]; then
   BRANCH="delegate/${AGENT}/${RUN_ID}"

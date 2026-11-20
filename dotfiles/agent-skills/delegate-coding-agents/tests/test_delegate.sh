@@ -427,8 +427,12 @@ fi
 grep -q 'No usable OpenCode fallback models' "$TMP/empty-fallback.out"
 
 # Automatic delegation runs without requiring repository opt-in in git config.
-"$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --id no-opt-in-needed --task 'Allowed without opt-in' >"$TMP/no-opt-in.out"
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+"$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --id no-opt-in-needed --task 'Allowed without opt-in' >"$TMP/no-opt-in.out" 2>&1
 grep -q 'Exit: 0' "$TMP/no-opt-in.out"
+if grep -q 'agents.delegationAllowed true' "$TMP/no-opt-in.out"; then
+  echo 'Unexpected opt-in gate error' >&2; exit 1
+fi
 
 # Orchestrator route tests
 "$SCRIPT" --agent opencode --mode plan --orchestrator agy --automatic --task 'Plan a change' > "$TMP/agy-to-opencode.out"
@@ -1132,12 +1136,17 @@ COPILOT_DELEGATE_MCP_PROFILE="$TMP/nonexistent-copilot-profile.json" CODEX_CONFI
 grep -q 'Exit: 0' "$TMP/codex-ignores-copilot-prof.out"
 
 # A dirty checkout runs from committed BASE_SHA with an explicit non-blocking warning and note.
+expected_base_sha=$(git rev-parse HEAD)
 echo local > local.txt
 "$SCRIPT" --agent opencode --mode build --id dirty-base-allowed --task 'Run from HEAD despite dirty tree' >"$TMP/dirty.out" 2>"$TMP/dirty.err"
 grep -q 'Exit: 0' "$TMP/dirty.out"
-grep -q 'dirty base working tree' "$TMP/dirty.out"
+grep -q 'Base snapshot note: dirty base working tree' "$TMP/dirty.out"
 grep -q 'uncommitted or untracked changes' "$TMP/dirty.err"
 dirty_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty.out")
+dirty_worktree=$(sed -n 's/^  Worktree: //p' "$TMP/dirty.out")
 grep -q 'dirty_base=1' "$dirty_log_dir/manifest.txt"
+[[ $(git -C "$dirty_worktree" rev-parse HEAD) == "$expected_base_sha" ]]
+[[ ! -e "$dirty_worktree/local.txt" ]]
+rm -f local.txt
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'
