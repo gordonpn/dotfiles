@@ -821,9 +821,9 @@ resolve_active_profile_path() {
   esac
 }
 
-BASE_SHA=$(git -C "$ROOT" rev-parse --verify "${BASE}^{commit}") || die "Invalid base revision: $BASE"
+BASE_STATUS=$(git -C "$ROOT" status --porcelain --untracked-files=normal) || die 'Failed inspecting base working tree status'
 DIRTY_BASE=0
-if [[ -n $(git -C "$ROOT" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
+if [[ -n $BASE_STATUS ]]; then
   DIRTY_BASE=1
   printf 'WARNING: Base working tree has uncommitted or untracked changes; worktree snapshots %s only.\n' "$BASE_SHA" >&2
 fi
