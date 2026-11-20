@@ -51,24 +51,17 @@ Each worker in the delegation chain has specific authentication requirements:
 - **Behavior when unauthenticated:** Fails with authentication errors (`not authenticated` or `authentication required`), prompting immediate halt without further fallback.
 - **MCP isolation & fallback behavior:** `delegate.sh` keeps user `${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json` and authentication state intact while disabling built-in MCP servers (`--disable-builtin-mcps` unless `github-mcp-server` is allowed) and non-allowed user and repo-local (`.mcp.json`, `.github/mcp.json`) MCP servers via ephemeral `--disable-mcp-server <name>` flags (`minimal` by default; override via `--mcp-profile` or `COPILOT_DELEGATE_MCP_PROFILE` / `COPILOT_DELEGATE_MCP_SERVERS`). Built-in CLI tool filtering (`--available-tools` and `--deny-tool=shell`) remains enforced even when MCP or deferred tool search is unavailable. On classified quota/rate-limit/model unavailability: for Copilot-first requests (`--agent copilot` without `--model`), `delegate.sh` appends OpenCode candidate free models after Copilot and falls back to OpenCode for either orchestrator; when Copilot is the final candidate in the chain (or pinned via `--model`), `--orchestrator agy` falls back directly to Antigravity while `--orchestrator codex` halts after reporting the Copilot failure.
 
-Automatic delegation requires explicit opt-in in each eligible repository:
-
-```bash
-git config --local agents.delegationAllowed true
-```
-
 Restart active Codex and agy sessions to load the updated skill and rule.
 Configure narrow build/test command permissions separately; never blindly
 enable global shell-approval bypass.
 
 ## Notes
 
-- Parent agy delegates sequentially across Codex, OpenCode, and GitHub Copilot Student (`--model auto`).
+- Parent agy prefers `delegate.sh` over native `invoke_subagent` and delegates sequentially across Codex, OpenCode, and GitHub Copilot Student (`--model auto`).
 - Parent Codex delegates sequentially across OpenCode and GitHub Copilot Student (`--model auto`).
 - OpenCode free models operate anonymously with zero credentials; account login is not required for the free-tier delegation path.
-- Automatic repo opt-in avoids accidentally sending confidential employer sources to an external hosted model.
-- If no repo opt-in exists, the agent should complete tasks itself or explain that delegation is blocked.
-- Both delegations operate on a clean committed checkout; current uncommitted edits cannot be safely inherited.
-- To run a delegate manually without the opt-in gate, omit `--automatic`, but still ensure the repository is appropriate for external inference.
+- Keep confidential or employer-restricted code away from external hosted models unless explicitly authorized.
+- Worktrees snapshot the committed `--base` revision (`HEAD` by default); when the base checkout has uncommitted or untracked changes, `delegate.sh` warns and records that local edits are excluded rather than aborting.
+- `--automatic` is accepted for backwards compatibility as a no-op; no per-repo `agents.delegationAllowed` config is required.
 - One-shot OpenCode, Codex, and Copilot Student delegations apply a minimal MCP profile (`minimal` by default) to disable unrelated cloud, database, monitoring, and chat servers without mutating user configurations (via `OPENCODE_CONFIG` for OpenCode, ephemeral `-c` overrides for Codex, and ephemeral `--disable-builtin-mcps` / `--disable-mcp-server` flags for Copilot).
 - Plans stay in an isolated detached worktree, builds on new `delegate/...` branches; review and integrate only verified changes.
