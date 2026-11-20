@@ -426,12 +426,9 @@ if OPENCODE_DELEGATE_MODELS=',  , ' "$SCRIPT" --agent copilot --mode plan --id e
 fi
 grep -q 'No usable OpenCode fallback models' "$TMP/empty-fallback.out"
 
-# Automatic delegation must be explicitly opted in for this repository.
-if "$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --task 'Nope' >"$TMP/not-opted-in.out" 2>&1; then
- echo 'Expected automatic delegation opt-in gate' >&2; exit 1
-fi
-grep -q 'agents.delegationAllowed true' "$TMP/not-opted-in.out"
-git config --local agents.delegationAllowed true
+# Automatic delegation runs without requiring repository opt-in in git config.
+"$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --id no-opt-in-needed --task 'Allowed without opt-in' >"$TMP/no-opt-in.out"
+grep -q 'Exit: 0' "$TMP/no-opt-in.out"
 
 # Orchestrator route tests
 "$SCRIPT" --agent opencode --mode plan --orchestrator agy --automatic --task 'Plan a change' > "$TMP/agy-to-opencode.out"
@@ -1134,11 +1131,13 @@ grep -q -- '--disable-mcp-server --disable-builtin-mcps' "$COPILOT_MOCK_CALL_LOG
 COPILOT_DELEGATE_MCP_PROFILE="$TMP/nonexistent-copilot-profile.json" CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --model custom-codex --mode plan --id codex-ignores-copilot-prof --task 'Ignore unused Copilot profile' > "$TMP/codex-ignores-copilot-prof.out"
 grep -q 'Exit: 0' "$TMP/codex-ignores-copilot-prof.out"
 
-# A dirty checkout must be rejected rather than silently excluded from snapshot.
+# A dirty checkout runs from committed BASE_SHA with an explicit non-blocking warning and note.
 echo local > local.txt
-if "$SCRIPT" --agent opencode --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then
- echo 'Expected dirty-tree rejection' >&2; exit 1
-fi
-grep -q 'uncommitted or untracked' "$TMP/dirty.out"
+"$SCRIPT" --agent opencode --mode build --id dirty-base-allowed --task 'Run from HEAD despite dirty tree' >"$TMP/dirty.out" 2>"$TMP/dirty.err"
+grep -q 'Exit: 0' "$TMP/dirty.out"
+grep -q 'dirty base working tree' "$TMP/dirty.out"
+grep -q 'uncommitted or untracked changes' "$TMP/dirty.err"
+dirty_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty.out")
+grep -q 'dirty_base=1' "$dirty_log_dir/manifest.txt"
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'

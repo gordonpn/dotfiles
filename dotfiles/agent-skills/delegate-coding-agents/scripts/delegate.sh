@@ -14,7 +14,7 @@ Options:
   --model MODEL        Override selected delegate model
   --base REF           Git revision to snapshot (default: HEAD)
   --orchestrator NAME  codex|agy (default: codex)
-  --automatic          Enforce per-repository opt-in for auto delegation
+  --automatic          Mark run as automatic delegation (accepted for compatibility)
   --mcp-profile PROF   MCP profile for delegated agents (minimal|none|full|PATH, default: minimal)
   --help               Display this help
 
@@ -238,11 +238,12 @@ elif [[ $AGENT == copilot ]]; then
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
-if (( AUTOMATIC )); then
-  [[ $(git -C "$ROOT" config --local --get agents.delegationAllowed 2>/dev/null || true) == true ]] || die 'Automatic external-model delegation is disabled in this repo. Explicitly opt in with: git config --local agents.delegationAllowed true'
-fi
-[[ -z $(git -C "$ROOT" status --porcelain --untracked-files=normal) ]] || die 'Working tree has uncommitted or untracked files. Commit/stash safely before delegating; snapshot is from a Git revision.'
 BASE_SHA=$(git -C "$ROOT" rev-parse --verify "${BASE}^{commit}") || die "Invalid base revision: $BASE"
+DIRTY_BASE=0
+if [[ -n $(git -C "$ROOT" status --porcelain --untracked-files=normal 2>/dev/null || true) ]]; then
+  DIRTY_BASE=1
+  printf 'WARNING: Base working tree has uncommitted or untracked changes; worktree snapshots %s only.\n' "$BASE_SHA" >&2
+fi
 SAFE_ID=$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g;s/^[.-]+//;s/[.-]+$//')
 [[ -n $SAFE_ID ]] || SAFE_ID=task
 SAFE_ID=${SAFE_ID:0:48}
@@ -837,6 +838,7 @@ run_id=$RUN_ID
 agent=$AGENT
 orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
+dirty_base=$DIRTY_BASE
 mode=$MODE
 requested_model=${MODEL:-'(default)'}
 mcp_profile=$(resolve_active_profile "$AGENT")
@@ -1041,6 +1043,9 @@ printf '  Worktree: %s\n' "$WORKTREE"
 printf '  Branch: %s\n' "$BRANCH"
 printf '  Logs: %s\n' "$LOG_DIR"
 printf '  Exit: %s\n' "$EXIT_CODE"
+if (( DIRTY_BASE )); then
+  printf '  Base snapshot note: dirty base working tree; uncommitted/untracked changes excluded from %s\n' "$BASE_SHA"
+fi
 printf '  Git changes:\n'
 if [[ -s $LOG_DIR/git-status.txt ]]; then sed 's/^/    /' "$LOG_DIR/git-status.txt"; else printf '    (none)\n'; fi
 printf '\n--- Delegate report ---\n'
