@@ -2,6 +2,13 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-19: Drop delegate.sh opt-in and dirty-tree gates and prefer external delegation over invoke_subagent
+
+- Decision: Remove the blocking `agents.delegationAllowed=true` check (`--automatic` remains accepted as a compatibility no-op) and blocking clean-working-tree check from `delegate.sh`, warn and record `dirty_base=1` in `manifest.txt` and `DELEGATION_RESULT` when uncommitted base edits exist, and instruct Antigravity (`agy`) in `dotfiles/gemini/GEMINI.md`, `auto-delegation.md`, and `delegate-coding-agents/SKILL.md` to prefer `delegate.sh` over native `invoke_subagent`.
+- Rationale: Unblock automatic delegation across personal repositories (including worktrees or checkouts with unrelated uncommitted files like `NEXT.md`) and offload eligible work onto Codex, free OpenCode models, and Copilot Student rather than defaulting to `invoke_subagent` on Antigravity quota, while keeping snapshot semantics transparent whenever local edits are excluded from committed `BASE_SHA`.
+- Rejected alternatives: Requiring an opt-in git config per repo (`agents.delegationAllowed=true`) or failing whenever local files are dirty (blocked routine delegation on personal repos), auto-stashing/copying dirty working trees into the worker worktree (risks leaking `.env`/untracked artifacts or breaking cherry-picks), or defaulting Antigravity to `invoke_subagent` (consumes Antigravity quota instead of Codex/OpenCode/Copilot).
+- Source: Branch `feat/prefer-delegate-drop-gates`.
+
 ## 2026-11-15: Adopt three-tier MCP architecture and lock server dispositions
 
 - Decision: Formalize a three-tier MCP distribution policy in [`docs/mcp-audit.md`](mcp-audit.md): (1) eager clients (`codex`, `opencode`, `copilot`, and `delegate.sh`) receive only a lean `core` (`< 100` tools) keeping `context7`, `fetch`, `cclsp`, `codebase-memory-mcp`, `brave-search`, and interactive `ai-memory`; (2) CLI-covered integrations (`semgrep`, `repomix`, `git`, `sequentialthinking`, `sqlite`, `postgres`, `redis`) move out of eager profiles onto native CLIs and Agent Skills; and (3) retain `filesystem` (preserving `${HOME}` root scoping on `agy`) and `exa` (lazy semantic search fallback on `agy` alongside `brave-search`), while disabling `discord`, `caddy`, and `vault` (`caddy` and `vault` unreachable over Tailscale; `discord` unused) and deleting broken/superseded legacy entries (`server-services-configs`, `chrome-devtools`, `puppeteer`, `memory`).
