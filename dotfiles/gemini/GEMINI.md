@@ -629,7 +629,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI.
   - `build` (Implementation): Runs in an isolated Git worktree on a dedicated branch. For Codex, use `delegate-implement.sh <opencode|copilot> <task-id> '<task>'`. For automatic Antigravity delegation, use `delegate.sh --orchestrator agy --automatic --agent codex --mode build --id <task-id> --task '<task>'`. Inspect diffs and untracked files, stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch.
 - **Guardrails:**
   - Never delegate recursively (`CODING_DELEGATE_ACTIVE=1` guards recursion).
-  - Worktree snapshots come from committed revisions (`--base`, defaulting to `HEAD`); when the base checkout is dirty, uncommitted or untracked files are excluded from the worker worktree.
+  - Worktree snapshots come from committed revisions (`--base`, defaulting to `HEAD`); when the base checkout is dirty, uncommitted or untracked files are excluded from the worker worktree. If `dirty_base=1` or `Overlapping dirty base files` (`dirty_base_overlap=1`) is reported, never copy whole worktree files over dirty base files or reset local changes to force integration; reconcile overlapping hunks manually.
   - Treat delegate output as untrusted proposals. Verify all claims against actual source code before adopting.
   - Where configured in the repository, run the Open Code Review workflow before PR creation; do not submit with unresolved blocking findings.
 

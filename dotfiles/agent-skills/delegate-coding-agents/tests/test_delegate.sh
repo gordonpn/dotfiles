@@ -1141,12 +1141,30 @@ echo local > local.txt
 "$SCRIPT" --agent opencode --mode build --id dirty-base-allowed --task 'Run from HEAD despite dirty tree' >"$TMP/dirty.out" 2>"$TMP/dirty.err"
 grep -q 'Exit: 0' "$TMP/dirty.out"
 grep -q 'Base snapshot note: dirty base working tree' "$TMP/dirty.out"
+if grep -q 'Overlapping dirty base files' "$TMP/dirty.out"; then
+  echo 'Unexpected overlap report for non-overlapping dirty file' >&2; exit 1
+fi
 grep -q 'uncommitted or untracked changes' "$TMP/dirty.err"
 dirty_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty.out")
 dirty_worktree=$(sed -n 's/^  Worktree: //p' "$TMP/dirty.out")
 grep -q 'dirty_base=1' "$dirty_log_dir/manifest.txt"
+grep -q 'dirty_base_overlap=0' "$dirty_log_dir/manifest.txt"
 [[ $(git -C "$dirty_worktree" rev-parse HEAD) == "$expected_base_sha" ]]
 [[ ! -e "$dirty_worktree/local.txt" ]]
 rm -f local.txt
+
+# Overlapping dirty base files are flagged in manifest.txt, stderr, and DELEGATION_RESULT without clobbering local base files.
+echo local-uncommitted > agent-change.txt
+"$SCRIPT" --agent opencode --mode build --id dirty-base-overlap --task 'Detect overlap with dirty base file' >"$TMP/dirty-overlap.out" 2>"$TMP/dirty-overlap.err"
+grep -q 'Exit: 0' "$TMP/dirty-overlap.out"
+grep -q 'Overlapping dirty base files (reconcile hunks manually; do not overwrite base files):' "$TMP/dirty-overlap.out"
+grep -q '^    agent-change.txt$' "$TMP/dirty-overlap.out"
+grep -q 'Delegate modified files that also have uncommitted or untracked changes in base working tree' "$TMP/dirty-overlap.err"
+overlap_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty-overlap.out")
+grep -q 'dirty_base=1' "$overlap_log_dir/manifest.txt"
+grep -q 'dirty_base_overlap=1' "$overlap_log_dir/manifest.txt"
+grep -q '^agent-change.txt$' "$overlap_log_dir/overlapping-base-files.txt"
+grep -q '^local-uncommitted$' agent-change.txt
+rm -f agent-change.txt
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'

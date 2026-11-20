@@ -821,10 +821,22 @@ resolve_active_profile_path() {
   esac
 }
 
+list_dirty_paths() {
+  local repo_dir="$1"
+  {
+    git -C "$repo_dir" diff --name-only "$BASE_SHA"
+    git -C "$repo_dir" diff --name-only
+    git -C "$repo_dir" diff --name-only --cached
+    git -C "$repo_dir" ls-files --others --exclude-standard
+  } | LC_ALL=C sort -u
+}
+
 BASE_STATUS=$(git -C "$ROOT" status --porcelain --untracked-files=normal) || die 'Failed inspecting base working tree status'
 DIRTY_BASE=0
+: >"$LOG_DIR/base-dirty-files.txt"
 if [[ -n $BASE_STATUS ]]; then
   DIRTY_BASE=1
+  list_dirty_paths "$ROOT" >"$LOG_DIR/base-dirty-files.txt"
   printf 'WARNING: Base working tree has uncommitted or untracked changes; worktree snapshots %s only.\n' "$BASE_SHA" >&2
 fi
 BRANCH='(detached)'
@@ -1018,6 +1030,23 @@ git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
 git -C "$WORKTREE" diff --check >"$LOG_DIR/diff-check.txt" 2>&1 || EXIT_CODE=1
 git -C "$WORKTREE" diff --stat "$BASE_SHA" >"$LOG_DIR/diff-stat.txt"
 git -C "$WORKTREE" ls-files --others --exclude-standard >"$LOG_DIR/untracked-files.txt"
+list_dirty_paths "$WORKTREE" >"$LOG_DIR/worktree-changed-files.txt"
+{
+  cat "$LOG_DIR/base-dirty-files.txt"
+  list_dirty_paths "$ROOT"
+} | LC_ALL=C sort -u >"$LOG_DIR/base-dirty-files.tmp"
+mv "$LOG_DIR/base-dirty-files.tmp" "$LOG_DIR/base-dirty-files.txt"
+DIRTY_BASE_OVERLAP=0
+OVERLAPPING_BASE_FILES="$LOG_DIR/overlapping-base-files.txt"
+: >"$OVERLAPPING_BASE_FILES"
+if [[ -s $LOG_DIR/base-dirty-files.txt && -s $LOG_DIR/worktree-changed-files.txt ]]; then
+  LC_ALL=C comm -12 "$LOG_DIR/base-dirty-files.txt" "$LOG_DIR/worktree-changed-files.txt" >"$OVERLAPPING_BASE_FILES"
+  if [[ -s $OVERLAPPING_BASE_FILES ]]; then
+    DIRTY_BASE_OVERLAP=1
+    printf 'WARNING: Delegate modified files that also have uncommitted or untracked changes in base working tree; reconcile hunks manually and do not overwrite base files directly.\n' >&2
+  fi
+fi
+printf 'dirty_base_overlap=%s\n' "$DIRTY_BASE_OVERLAP" >>"$LOG_DIR/manifest.txt"
 FINAL_HEAD=$(git -C "$WORKTREE" rev-parse HEAD)
 if [[ "$FINAL_HEAD" != "$BASE_SHA" ]]; then
   printf 'WARNING: Delegate changed HEAD (commit/reset/rebase). Review Git history before integration.\n' >&2
@@ -1046,6 +1075,10 @@ printf '  Logs: %s\n' "$LOG_DIR"
 printf '  Exit: %s\n' "$EXIT_CODE"
 if (( DIRTY_BASE )); then
   printf '  Base snapshot note: dirty base working tree; uncommitted/untracked changes excluded from %s\n' "$BASE_SHA"
+fi
+if (( DIRTY_BASE_OVERLAP )); then
+  printf '  Overlapping dirty base files (reconcile hunks manually; do not overwrite base files):\n'
+  sed 's/^/    /' "$OVERLAPPING_BASE_FILES"
 fi
 printf '  Git changes:\n'
 if [[ -s $LOG_DIR/git-status.txt ]]; then sed 's/^/    /' "$LOG_DIR/git-status.txt"; else printf '    (none)\n'; fi

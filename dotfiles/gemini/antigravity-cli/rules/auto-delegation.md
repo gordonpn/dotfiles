@@ -38,5 +38,5 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
   ```
 - Give the worker explicit scope, acceptance criteria, verification commands, and prohibited file areas.
 - After the run completes, inspect `DELEGATION_RESULT`, reports, diffs, and untracked files. Independently verify the proposed changes against repository invariants and tests.
-- Review the worktree changes. Stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch; never blindly apply unreviewed diffs.
+- Review the worktree changes. Stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch; never blindly apply unreviewed diffs. When `dirty_base=1` or `Overlapping dirty base files` is reported, never copy whole files from the worktree over dirty base files or reset/checkout the base working tree to force a cherry-pick; reconcile overlapping hunks manually first.
 - Preserve the configured Alibaba Open Code Review gate. Never auto-push or create a PR unless asked.
