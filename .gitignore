@@ -5,3 +5,5 @@ dotfiles/.vim/
 dotfiles/.vimrc.swp
 repomix-output.xml
 /.agents/
+__pycache__/
+*.py[cod]
