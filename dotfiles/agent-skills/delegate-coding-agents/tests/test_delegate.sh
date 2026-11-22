@@ -48,7 +48,11 @@ if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
   echo 'AI_APICallError: Quota exceeded for all models' >&2
   exit 1
 fi
-if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.txt; fi
+if [[ ${OPENCODE_MOCK_RENAME_FILE:-} == 1 && $mode == build && -f rename-src.txt ]]; then
+  git mv rename-src.txt rename-dst.txt
+elif [[ $mode == build ]]; then
+  printf 'implemented by opencode\n' > agent-change.txt
+fi
 printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
 
@@ -1166,5 +1170,19 @@ grep -q 'dirty_base_overlap=1' "$overlap_log_dir/manifest.txt"
 grep -q '^agent-change.txt$' "$overlap_log_dir/overlapping-base-files.txt"
 grep -q '^local-uncommitted$' agent-change.txt
 rm -f agent-change.txt
+
+# Renames by a worker must include source paths when checking dirty-base overlap.
+printf 'line1\nline2\nline3\n' > rename-src.txt
+git add rename-src.txt
+git commit -m 'Add rename fixture' >/dev/null
+printf 'local edit\n' >> rename-src.txt
+OPENCODE_MOCK_RENAME_FILE=1 "$SCRIPT" --agent opencode --mode build --id dirty-base-rename-overlap --task 'Detect overlap when worker renames dirty base file' >"$TMP/dirty-rename.out" 2>"$TMP/dirty-rename.err"
+grep -q 'Exit: 0' "$TMP/dirty-rename.out"
+grep -q 'Overlapping dirty base files' "$TMP/dirty-rename.out"
+grep -q '^    rename-src.txt$' "$TMP/dirty-rename.out"
+rename_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty-rename.out")
+grep -q 'dirty_base_overlap=1' "$rename_log_dir/manifest.txt"
+grep -q '^rename-src.txt$' "$rename_log_dir/overlapping-base-files.txt"
+git checkout -- rename-src.txt
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'

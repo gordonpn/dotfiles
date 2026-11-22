@@ -824,9 +824,9 @@ resolve_active_profile_path() {
 list_dirty_paths() {
   local repo_dir="$1"
   {
-    git -C "$repo_dir" diff --name-only "$BASE_SHA"
-    git -C "$repo_dir" diff --name-only
-    git -C "$repo_dir" diff --name-only --cached
+    git -C "$repo_dir" diff --no-renames --name-only "$BASE_SHA"
+    git -C "$repo_dir" diff --no-renames --name-only
+    git -C "$repo_dir" diff --no-renames --name-only --cached
     git -C "$repo_dir" ls-files --others --exclude-standard
   } | LC_ALL=C sort -u
 }
