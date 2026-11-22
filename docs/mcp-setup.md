@@ -17,8 +17,10 @@ The architecture separates version-controlled templates from machine-local confi
 ```
 dotfiles/ (Public Repository)
 ├── bin/
-│   ├── mcp-sync                     # Hydration and synchronization utility
+│   ├── mcp-sync                     # Bash bootstrap & installer entrypoint
 │   └── vault-mcp-server             # FastMCP runner for HashiCorp Vault KV & TOTP
+├── scripts/
+│   └── mcp_sync.py                  # Stdlib Python engine for config, profile, and skill sync
 ├── dotfiles/
 │   ├── cclsp.json                   # LSP server extension mappings
 │   └── gemini/
