@@ -66,22 +66,25 @@ gh-dash notifications include New Comments, Review Requests, CI Activity,
 My PR Activity, and Mentions, refreshing every five minutes. My PR Activity
 also includes issues you opened because it uses `reason:author`.
 
-Antigravity CLI acts as the main terminal coding harness and delegates
-eligible work sequentially through `agy-cli -> codex -> opencode -> github copilot student`.
-Codex CLI runs non-interactively in an isolated Git worktree; on classified
-provider, quota, rate-limit, or model-availability failures, it falls back to
-OpenCode zero-cost models (`opencode/deepseek-v4.1-flash-free` with high
+Antigravity CLI acts as the main terminal coding harness using Codex-first
+routing: read-only questions, debugging, planning, architecture discussions,
+reviews, and follow-ups with session continuity default to the installed Codex
+plugin (`codex-runner.mjs`), while implementation builds default to
+`delegate.sh` in an isolated Git worktree. On classified Codex provider, quota,
+rate-limit, or model-availability failures, `delegate.sh` automatically falls
+back to OpenCode zero-cost models (`opencode/deepseek-v4.1-flash-free` with high
 variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and
 `opencode/nemotron-3.5-lightning-free`), then to first-party GitHub Copilot
 CLI with `--model auto` under the Student plan. Codex as orchestrator delegates
 sequentially across OpenCode and GitHub Copilot Student.
 Authentication and provider-initialization errors are hard stops across all
-candidates directing the user to log in (`codex login`, `copilot login`, or
-check OpenCode credentials; supported OpenCode free models operate anonymously
-without an account or login). Antigravity prefers `delegate.sh` over native
-`invoke_subagent` by default and runs from committed `HEAD` even when uncommitted
-local edits exist (emitting a warning). Keep confidential code away from
-external inference unless explicitly authorized.
+candidates directing the user to log in (`codex login`, `/codex:setup`,
+`copilot login`, or check OpenCode credentials; supported OpenCode free models
+operate anonymously without an account or login). Antigravity acts as
+orchestrator and verifies and integrates results, running `delegate.sh` builds
+from committed `HEAD` even when uncommitted local edits exist (emitting a
+warning). Keep confidential code away from external inference unless explicitly
+authorized.
 Delegated GitHub Copilot Student workers isolate MCP exposure via `--mcp-profile` or `COPILOT_DELEGATE_MCP_PROFILE` without mutating interactive configuration; see [MCP setup](docs/mcp-setup.md) and [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
 Domain-specific engineering standards profiles (HTTP APIs, events, observability, identity/security, supply chain, frontend accessibility, data architecture, and AI agents) live in [the shared engineering-standards skill](dotfiles/agent-skills/engineering-standards/SKILL.md) and synchronize on demand across Antigravity CLI, Codex CLI, OpenCode, and GitHub Copilot CLI via `bin/mcp-sync`.
