@@ -1,5 +1,6 @@
 test:
     bash tests/mcp-sync.sh
+    bash tests/update-skills.sh
     bash tests/deepseek-analyze.sh
     bash tests/deepseek-review-prompt.sh
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
@@ -22,6 +23,8 @@ lint:
         "tests/deepseek-analyze.sh"
         "tests/deepseek-review-prompt.sh"
         "scripts/deepseek-analyze.sh"
+        "scripts/update-skills.sh"
+        "tests/update-skills.sh"
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh"
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-analyze.sh"
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-implement.sh"
@@ -40,6 +43,9 @@ lint:
 
 setup-codebase-memory:
     bash bin/mcp-sync --codebase-memory-only
+
+update-skills:
+    bash scripts/update-skills.sh
 
 setup-ecc:
     if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "ecc")' >/dev/null; then codex plugin marketplace add affaan-m/ECC --ref v2.2.3; fi
