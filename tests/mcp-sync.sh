@@ -143,9 +143,13 @@ ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-brid
 [[ "$(jq -r '.mcpServers | has("puppeteer")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("memory")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("server-services-configs")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("sqlite")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("postgres")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers["caddy"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["vault"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["discord"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["postman"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["sonarqube"].disabled' "${TEMPLATE_DIR}/mcp_config.template.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["exa"] | has("disabled")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers["filesystem"] | has("disabled")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 
@@ -184,6 +188,16 @@ cat >"${OPENCODE_DIR}/opencode.json" <<'JSON'
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem"],
       "enabled": false
+    },
+    "sqlite": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-sqlite"],
+      "enabled": false
+    },
+    "postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres"],
+      "enabled": false
     }
   }
 }
@@ -195,16 +209,25 @@ sync_mcp_config
 [[ "$(jq -r '.theme' "${OPENCODE_DIR}/opencode.json")" == "flexoki" ]]
 [[ "$(jq -r '.mcp["custom-local"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
 [[ "$(jq -r '.mcp["ai-memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["brave-search"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
 [[ "$(jq -r '.mcp["cclsp"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["git"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["repomix"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["semgrep"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["sequentialthinking"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["docker"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["tailscale"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["caddy"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["vault"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["discord"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["postman"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["sonarqube"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp | has("memory")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp | has("chrome-devtools")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp | has("puppeteer")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp | has("server-services-configs")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp | has("sqlite")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp | has("postgres")' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 
 # Verify OpenCode parses JSONC (comments and trailing commas) without losing settings
 cat >"${OPENCODE_DIR}/opencode.json" <<'JSONC'
@@ -242,30 +265,40 @@ uv run --no-project --with mcp==1.1.2 python "${repo_dir}/tests/verify_mcp.py" -
 [[ "$(jq -r '.mcpServers["caddy"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["vault"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers["discord"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["postman"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
+[[ "$(jq -r '.mcpServers["sonarqube"].disabled' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "true" ]]
 [[ "$(jq -r '.mcpServers | has("memory")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("chrome-devtools")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("puppeteer")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("server-services-configs")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("sqlite")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("postgres")' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "false" ]]
 [[ ! -e "${HOME}/.gemini/memory.json" ]]
 
 grep -F '[mcp_servers."ai-memory"]' "${CODEX_DIR}/config.toml"
 grep -A 4 -F '[mcp_servers."caddy"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."vault"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."discord"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."postman"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."sonarqube"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
 # Minimal profile: non-core servers are disabled by default in Codex
 grep -A 4 -F '[mcp_servers."tailscale"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."docker"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."cloudflare"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."uptime-kuma"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."git"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."repomix"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."semgrep"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."sequentialthinking"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
 # Minimal profile: core servers are enabled in Codex (no enabled = false)
 if grep -A 4 -F '[mcp_servers."cclsp"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected cclsp to be enabled in minimal profile' >&2
   exit 1
 fi
-if grep -A 4 -F '[mcp_servers."git"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
-  echo 'Expected git to be enabled in minimal profile' >&2
+if grep -A 4 -F '[mcp_servers."brave-search"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
+  echo 'Expected brave-search to be enabled in minimal profile' >&2
   exit 1
 fi
 if grep -A 4 -F '[mcp_servers."codebase-memory-mcp"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
@@ -292,6 +325,8 @@ fi
 grep -A 4 -F '[mcp_servers."caddy"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."vault"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 grep -A 4 -F '[mcp_servers."discord"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."postman"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
+grep -A 4 -F '[mcp_servers."sonarqube"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'
 
 # Codex MCP profile: Custom server allowlist via CODEX_MCP_SERVERS
 CODEX_MCP_SERVERS="cclsp,docker" sync_mcp_config
@@ -360,6 +395,8 @@ OPENCODE_MCP_PROFILE=full sync_mcp_config
 [[ "$(jq -r '.mcp["caddy"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["vault"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["discord"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["postman"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
+[[ "$(jq -r '.mcp["sonarqube"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 
 # OpenCode MCP profile: Custom server allowlist via OPENCODE_MCP_SERVERS
 OPENCODE_MCP_SERVERS="cclsp,docker" sync_mcp_config
@@ -435,6 +472,8 @@ COPILOT_MCP_PROFILE=full sync_mcp_config
 [[ "$(jq -r '.mcpServers | has("caddy")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("vault")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("discord")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("postman")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
+[[ "$(jq -r '.mcpServers | has("sonarqube")' "${COPILOT_DIR}/mcp-config.json")" == "false" ]]
 
 COPILOT_MCP_SERVERS="cclsp,docker" sync_mcp_config
 [[ "$(jq -r '.mcpServers | has("docker")' "${COPILOT_DIR}/mcp-config.json")" == "true" ]]
@@ -605,9 +644,18 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 [[ "$(readlink "${HOME}/.agents/skills/engineering-standards")" == "${repo_dir}/dotfiles/agent-skills/engineering-standards" ]]
 [[ "$(readlink "${HOME}/.agents/skills/delegate-coding-agents")" == "${repo_dir}/dotfiles/agent-skills/delegate-coding-agents" ]]
+[[ "$(readlink "${HOME}/.agents/skills/semgrep")" == "${repo_dir}/dotfiles/agent-skills/semgrep" ]]
+[[ "$(readlink "${HOME}/.agents/skills/repomix")" == "${repo_dir}/dotfiles/agent-skills/repomix" ]]
+[[ "$(readlink "${HOME}/.agents/skills/local-db-cli")" == "${repo_dir}/dotfiles/agent-skills/local-db-cli" ]]
 [[ "$(readlink "${CODEX_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/semgrep")" == "${HOME}/.agents/skills/semgrep" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/repomix")" == "${HOME}/.agents/skills/repomix" ]]
+[[ "$(readlink "${CODEX_DIR}/skills/local-db-cli")" == "${HOME}/.agents/skills/local-db-cli" ]]
 [[ "$(readlink "${COPILOT_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
 [[ "$(readlink "${COPILOT_DIR}/skills/delegate-coding-agents")" == "${HOME}/.agents/skills/delegate-coding-agents" ]]
+[[ "$(readlink "${COPILOT_DIR}/skills/semgrep")" == "${HOME}/.agents/skills/semgrep" ]]
+[[ "$(readlink "${COPILOT_DIR}/skills/repomix")" == "${HOME}/.agents/skills/repomix" ]]
+[[ "$(readlink "${COPILOT_DIR}/skills/local-db-cli")" == "${HOME}/.agents/skills/local-db-cli" ]]
 [[ -L "${COPILOT_DIR}/instructions/global.instructions.md" ]]
 [[ "$(readlink "${COPILOT_DIR}/instructions/global.instructions.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
 [[ -f "${COPILOT_DIR}/instructions/global.instructions.md.bak" ]]

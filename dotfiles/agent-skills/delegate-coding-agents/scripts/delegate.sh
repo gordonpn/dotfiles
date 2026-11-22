@@ -20,7 +20,7 @@ Options:
 
 Environment:
   DELEGATE_MCP_PROFILE           Default MCP profile if --mcp-profile omitted (default: minimal)
-  DELEGATE_MCP_SERVERS           Allowed servers for minimal profile (default: cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking)
+  DELEGATE_MCP_SERVERS           Allowed servers for minimal profile (default: brave-search,cclsp,codebase-memory-mcp,context7,fetch)
   CODEX_DELEGATE_MODEL           Default: auto (omit -m, let Codex decide)
   CODEX_DELEGATE_MCP_PROFILE     Codex MCP profile override if DELEGATE_MCP_PROFILE omitted
   CODEX_DELEGATE_MCP_SERVERS     Codex allowed servers override if DELEGATE_MCP_SERVERS omitted
@@ -279,7 +279,7 @@ resolve_opencode_mcp_profile() {
     return 0
   fi
 
-  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-brave-search,cclsp,codebase-memory-mcp,context7,fetch}}"
   if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$content_file" "$base_profile" "$cfg_dir" "$ROOT" "$BASE_SHA" "${OPENCODE_CONFIG:-}" "${OPENCODE_CONFIG_CONTENT:-}" <<'PY'
 import json
 import os
@@ -546,7 +546,7 @@ resolve_codex_mcp_profile() {
     servers="$defined_servers"
     CODEX_PROFILE_PATH="$target_file"
   else
-    local allowed_csv="${DELEGATE_MCP_SERVERS:-${CODEX_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+    local allowed_csv="${DELEGATE_MCP_SERVERS:-${CODEX_DELEGATE_MCP_SERVERS:-brave-search,cclsp,codebase-memory-mcp,context7,fetch}}"
     if [[ -n "$defined_servers" ]]; then
       servers=$(awk -v allowed="$allowed_csv" '
         BEGIN {
@@ -600,7 +600,7 @@ resolve_copilot_mcp_profile() {
     return 0
   fi
 
-  local allowed_csv="${DELEGATE_MCP_SERVERS:-${COPILOT_DELEGATE_MCP_SERVERS:-cclsp,codebase-memory-mcp,context7,fetch,git,repomix,semgrep,sequentialthinking}}"
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${COPILOT_DELEGATE_MCP_SERVERS:-brave-search,cclsp,codebase-memory-mcp,context7,fetch}}"
   if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$copilot_cfg" "$ROOT" "$BASE_SHA" <<'PY'
 import json
 import os

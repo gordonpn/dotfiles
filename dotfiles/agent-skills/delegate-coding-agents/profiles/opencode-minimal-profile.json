@@ -4,9 +4,6 @@
     "ai-memory": {
       "enabled": false
     },
-    "brave-search": {
-      "enabled": false
-    },
     "caddy": {
       "enabled": false
     },
@@ -25,6 +22,9 @@
     "filesystem": {
       "enabled": false
     },
+    "git": {
+      "enabled": false
+    },
     "github": {
       "enabled": false
     },
@@ -40,9 +40,6 @@
     "playwright": {
       "enabled": false
     },
-    "postgres": {
-      "enabled": false
-    },
     "postman": {
       "enabled": false
     },
@@ -52,13 +49,19 @@
     "redis": {
       "enabled": false
     },
+    "repomix": {
+      "enabled": false
+    },
+    "semgrep": {
+      "enabled": false
+    },
+    "sequentialthinking": {
+      "enabled": false
+    },
     "slack": {
       "enabled": false
     },
     "sonarqube": {
-      "enabled": false
-    },
-    "sqlite": {
       "enabled": false
     },
     "ssh": {

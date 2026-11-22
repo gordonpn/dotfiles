@@ -2,11 +2,18 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-22: Convert Tier-1 MCP servers to CLI skills, optimize minimal core profile, and disable postman and sonarqube
+
+- Decision: Add tracked CLI-backed Agent Skills under `dotfiles/agent-skills/` for `semgrep`, `repomix`, and `local-db-cli` (`sqlite3`, `psql`, `redis-cli`), remove `sqlite` and `postgres` from `dotfiles/gemini/mcp_config.template.json` (and prune them from existing OpenCode configs via `RETIRED_OPENCODE_SERVERS`), mark `postman` and `sonarqube` `"disabled": true` by default, install `wrangler` CLI globally via `pnpm` to pair with the Cloudflare skills, and update `DEFAULT_CORE_SERVERS` in `scripts/mcp_sync.py` (plus `tests/verify_mcp.py`, `delegate.sh`, and `opencode-minimal-profile.json`) to the 6 core servers (`ai-memory`, `brave-search`, `cclsp`, `codebase-memory-mcp`, `context7`, `fetch`).
+- Rationale: Cuts eager minimal profile turn-0 schema tokens by 54.3% (`~54.1k` to `~24.7k` interactively and `~7.9k` in headless `delegate.sh` runs) by moving `semgrep` (`~22.6k` tokens), `repomix` (`~4.5k` tokens), `git` (`~1.9k` tokens), and `sequentialthinking` (`~700` tokens) onto installed local CLIs and skills while restoring `brave-search` (`~363` tokens) to `core`, eliminates plaintext `POSTGRES_URL` credential embedding and single-DB `SQLITE_DB_PATH` coupling in MCP config files, and disables unused `postman` (`163.5 KB` schema) and `sonarqube` (`3.9s` JVM cold start).
+- Rejected alternatives: Keeping `semgrep`, `repomix`, `git`, and `sequentialthinking` in `DEFAULT_CORE_SERVERS`, retaining `postgres` and `sqlite` MCP servers with inline config arguments, or leaving `postman` and `sonarqube` enabled by default despite zero active usage.
+
 ## 2026-11-22: Extract embedded Python and config/skill sync from bin/mcp-sync into scripts/mcp_sync.py
 
 - Decision: Move the embedded Python blocks, JSON/JSONC/TOML hydration and rendering, SSH/Docker/K3s profile generation, and skill/instruction symlink orchestration out of `bin/mcp-sync` into a typed zero-dependency Python 3.11+ stdlib module (`scripts/mcp_sync.py`) verified by `ruff`, `mypy --strict`, and `tests/test_mcp_sync_py.py`, while keeping `bin/mcp-sync` as a thin Bash entrypoint preserving CLI flags, binary installers, and shell test compatibility.
 - Rationale: Eliminates embedded-language Python blocks inside Bash, removes macOS Bash 3.2 associative-array string workarounds, avoids quote-injection hazards by hydrating template placeholders after `json.loads`, and maintains sub-100ms cold-start overhead on shell startup hooks without requiring third-party runtime packages.
 - Rejected alternatives: Rewriting all small shell wrappers (`agy-statusline`, `title.sh`, `cbcopy`, `update-skills.sh`) into Python (adds interpreter startup latency and subprocess boilerplate for simple pipelines), or introducing `uv` / third-party TOML writers into the shell startup path.
+- Source: [PR #127](https://github.com/gordonpn/dotfiles/pull/127) (`refactor/mcp-sync-python`).
 
 ## 2026-11-22: Hybrid Codex-first routing using Codex plugin for read-only continuity and delegate.sh for worktree builds
 
