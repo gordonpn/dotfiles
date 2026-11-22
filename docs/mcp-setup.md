@@ -121,22 +121,22 @@ just update-skills
 
 Codex CLI and OpenCode eagerly spawn all enabled MCP servers and advertise their full tool schemas to the model on turn 0. Enabling all 33 servers exposed **593 tools** (~643 KiB of JSON schemas, ~160k tokens), which exceeded the 128-tool limit on OpenAI and Copilot chat completion endpoints, triggered aggressive auto-compaction loops on 64k models, and generated cold-start stderr errors from offline homelab services.
 
-To optimize interactive and CLI workflows, `bin/mcp-sync` configures both Codex (`~/.codex/config.toml`) and OpenCode (`~/.config/opencode/opencode.json`) with a lean **minimal profile** by default while leaving Antigravity CLI (which lazy-loads tools from disk) with all 33 template servers.
+To optimize interactive and CLI workflows, `bin/mcp-sync` configures both Codex (`~/.codex/config.toml`) and OpenCode (`~/.config/opencode/opencode.json`) with a lean **minimal profile** by default while leaving Antigravity CLI (which lazy-loads tools from disk) with all 31 template servers.
 
 ### Default Minimal Profile
 
-Only 6 core coding, search, and memory servers are enabled by default in `~/.codex/config.toml`, `~/.config/opencode/opencode.json`, and `${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json` (`58` tools, `~24.7k` tokens interactively; `5` servers / `34` tools / `~7.9k` tokens in `delegate.sh` excluding `ai-memory`), while CLI-covered integrations (`semgrep`, `repomix`, `git`, `sequentialthinking`, `sqlite`, `postgres`, `redis`) use local CLIs and tracked Agent Skills:
+Only 6 core coding, search, and memory servers are enabled by default in `~/.codex/config.toml`, `~/.config/opencode/opencode.json`, and `${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json` (`58` tools, `~24.7k` tokens interactively; `5` servers / `34` tools / `~7.9k` tokens in `delegate.sh` excluding `ai-memory`), while CLI-covered integrations (`semgrep`, `repomix`, `git`, `sequentialthinking`, retired `sqlite`/`postgres`, and opt-in `redis`) use local CLIs and tracked Agent Skills:
 
 | Server Name | Tools | Role |
 | :--- | :---: | :--- |
 | **`ai-memory`** | 24 | Unified cross-agent memory, session tracking, handoffs, and durable knowledge base |
-| **`brave-search`** | 2 | Web search fallback for non-native/headless clients when `BRAVE_API_KEY` is configured |
+| **`brave-search`** | 2 | Enabled unconditionally in the minimal profile as web search fallback for Codex, OpenCode, and interactive Copilot (requires `BRAVE_API_KEY` at runtime; delegated `delegate.sh --agent copilot` runs restrict tools to built-in CLI tools via `--available-tools`) |
 | **`cclsp`** | 12 | Multi-language LSP router for local language servers |
 | **`codebase-memory-mcp`** | 17 | Codebase indexing, call graphs, architecture queries, and ADR management |
 | **`context7`** | 2 | Real-time library documentation and code reference search |
 | **`fetch`** | 1 | Web requests and HTML-to-markdown conversion |
 
-All other 25 template servers remain fully defined in `~/.codex/config.toml` and `~/.config/opencode/opencode.json` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false` / `"enabled": false`. Existing top-level keys and custom unmanaged `mcp` entries in `~/.config/opencode/opencode.json` are preserved across syncs, while retired entries (`sqlite`, `postgres`, `memory`, `chrome-devtools`, `puppeteer`, `server-services-configs`) are pruned.
+All other 25 template servers remain fully defined in `~/.codex/config.toml` and `~/.config/opencode/opencode.json` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false` / `"enabled": false`. Existing top-level keys and custom unmanaged `mcp` entries in `~/.config/opencode/opencode.json` and `~/.copilot/mcp-config.json` are preserved across syncs, while retired entries (`sqlite`, `postgres`, `memory`, `chrome-devtools`, `puppeteer`, `server-services-configs`) are intentionally pruned by name across both OpenCode and Copilot configs.
 
 ### Measured Performance Reduction (Codex CLI)
 
@@ -192,11 +192,11 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
 
 | Client / Harness | Version | Provider / Model | Startup Processes | Tool Loading | Deferred Search | Default Profile & Visible MCP Tools | Fallback / Override |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Antigravity CLI (`agy`)** | Primary | Gemini / configured default | 0 eager MCP processes (spawned on demand) | Lazy-loaded on demand from disk | Native | Full (`37` servers, `0` turn-0 schema overhead) | N/A |
-| **Codex CLI (`codex`)** | `0.167.2` | OpenAI / `gpt-6.1-terra` | 9 managed servers (`+ node_repl`; 8 in `delegate.sh`) | Eager at startup (`~/.codex/config.toml`) | `tool_search` `removed`; `code_mode_tool_search` `under development` (`false`) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--codex-servers` |
-| **OpenCode (`opencode`)** | `1.19.3` | OpenCode / `opencode/deepseek-v4.1-flash-free` | 9 managed servers (8 in `delegate.sh`) | Eager at startup (`~/.config/opencode/opencode.json`) | Disabled by default (`OPENCODE_EXPERIMENTAL_CODE_MODE=1` enables `tools.$codemode.search` while still starting enabled servers eagerly) | `minimal` (`9` servers, `84` tools; `8` servers in `delegate.sh`) | `--opencode-profile`, `--opencode-servers`, `delegate.sh --mcp-profile` |
-| **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | via OpenCode `1.19.3` | `opencode/deepseek-v4.1-flash-free` (`high` variant) | 8 managed servers (`OPENCODE_CONFIG` override) | Eager via `delegate.sh --agent opencode` | Unavailable by default | `minimal` (`8` servers, excluding `ai-memory`) | `DELEGATE_MCP_PROFILE`, `OPENCODE_DELEGATE_MCP_PROFILE`, `DELEGATE_MCP_SERVERS` |
-| **GitHub Copilot Student (`copilot`)** | Delegated | Copilot Student (`--model auto`) | Isolated via `--disable-builtin-mcps` / `--disable-mcp-server` (`8` allowed in `delegate.sh`; `9` interactively in `mcp-config.json`) | Eager when enabled (`mcp-config.json` / `.mcp.json` / `.github/mcp.json`); restricted by `--available-tools` | N/A (built-in CLI tools only via `--available-tools`) | `minimal` (`--mcp-profile`, `COPILOT_DELEGATE_MCP_PROFILE`) + `--available-tools` (`view,grep,glob` / `edit,view,grep,glob`; `--deny-tool=shell`) | Uses built-in CLI tools if MCP/deferred search unavailable; `--agent copilot` (unpinned) falls back to OpenCode free models, otherwise hands back to `agy` or halts under `codex` (auth errors always halt) |
+| **Antigravity CLI (`agy`)** | Primary | Gemini / configured default | 0 eager MCP processes (spawned on demand) | Lazy-loaded on demand from disk | Native | Full (`31` template servers, `0` turn-0 schema overhead) | N/A |
+| **Codex CLI (`codex`)** | `0.167.2` | OpenAI / `gpt-6.1-terra` | 6 managed servers (`+ node_repl`; 5 in `delegate.sh`) | Eager at startup (`~/.codex/config.toml`) | `tool_search` `removed`; `code_mode_tool_search` `under development` (`false`) | `minimal` (`6` servers, `58` tools; `5` servers in `delegate.sh`) | `-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--codex-servers` |
+| **OpenCode (`opencode`)** | `1.19.3` | OpenCode / `opencode/deepseek-v4.1-flash-free` | 6 managed servers (5 in `delegate.sh`) | Eager at startup (`~/.config/opencode/opencode.json`) | Disabled by default (`OPENCODE_EXPERIMENTAL_CODE_MODE=1` enables `tools.$codemode.search` while still starting enabled servers eagerly) | `minimal` (`6` servers, `58` tools; `5` servers in `delegate.sh`) | `--opencode-profile`, `--opencode-servers`, `delegate.sh --mcp-profile` |
+| **DeepSeek Harness (`scripts/deepseek-analyze.sh`)** | via OpenCode `1.19.3` | `opencode/deepseek-v4.1-flash-free` (`high` variant) | 5 managed servers (`OPENCODE_CONFIG` override) | Eager via `delegate.sh --agent opencode` | Unavailable by default | `minimal` (`5` servers, excluding `ai-memory`) | `DELEGATE_MCP_PROFILE`, `OPENCODE_DELEGATE_MCP_PROFILE`, `DELEGATE_MCP_SERVERS` |
+| **GitHub Copilot Student (`copilot`)** | Delegated | Copilot Student (`--model auto`) | Isolated via `--disable-builtin-mcps` / `--disable-mcp-server` (`5` allowed in `delegate.sh`; `6` interactively in `mcp-config.json`) | Eager when enabled (`mcp-config.json` / `.mcp.json` / `.github/mcp.json`); restricted by `--available-tools` in `delegate.sh` | N/A (built-in CLI tools only via `--available-tools` in `delegate.sh`; no MCP web search in delegated runs) | `minimal` (`--mcp-profile`, `COPILOT_DELEGATE_MCP_PROFILE`) + `--available-tools` (`view,grep,glob` / `edit,view,grep,glob`; `--deny-tool=shell`) | Uses built-in CLI tools if MCP/deferred search unavailable; `--agent copilot` (unpinned) falls back to OpenCode free models, otherwise hands back to `agy` or halts under `codex` (auth errors always halt) |
 
 ### Deferred Tool Search & Code Mode Verification
 
@@ -210,7 +210,7 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
    - Under default V1 configuration, per-server `codemode` settings are stripped with `"Omitted native setting that cannot be represented in V1"`, and enabled MCP tools load eagerly (`9.0s-11.8s` turn time).
    - Setting `OPENCODE_EXPERIMENTAL_CODE_MODE=1` activates the `execute` tool and `tools.$codemode.search(...)` (`29.37s` measured with `sequentialthinking` and default servers), while still connecting enabled MCP servers eagerly at startup.
 3. **Sync & Fallback Policy:**
-   - Keep `code_mode_tool_search` and `OPENCODE_EXPERIMENTAL_CODE_MODE` disabled in default synced configs. Both Codex and OpenCode fall back to the static `minimal` profile (`9` servers locally; `8` servers in `delegate.sh`), using per-session CLI overrides (`-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--opencode-profile`, `--codex-servers`, `--opencode-servers`) when additional servers are required.
+   - Keep `code_mode_tool_search` and `OPENCODE_EXPERIMENTAL_CODE_MODE` disabled in default synced configs. Both Codex and OpenCode fall back to the static `minimal` profile (`6` servers locally; `5` servers in `delegate.sh`), using per-session CLI overrides (`-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--opencode-profile`, `--codex-servers`, `--opencode-servers`) when additional servers are required.
 
 ---
 
@@ -228,7 +228,7 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 | **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
 | **`exa`** | stdio | `npx -y exa-mcp-server` | Neural web search and webpage content extraction via Exa AI |
-| **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages (`wrangler` CLI + skills available for CLI workflows) |
+| **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages |
 | **`prometheus`** | stdio | `npx -y prometheus-mcp@latest stdio` | Metrics discovery and PromQL instant/range queries |
 | **`loki`** | stdio | `loki-mcp-server` | Grafana Loki log search, labels/series discovery, and LogQL queries |
 | **`docker`** | stdio | `npx -y @hypnosis/docker-mcp-server` | Local daemon & remote Swarm containers, logs, and Compose |
@@ -340,8 +340,8 @@ The K3s API server certificate on `master` generates TLS Subject Alternative Nam
 ### 2. Docker MCP Multi-Host Support
 `@hypnosis/docker-mcp-server` allows the agent to omit the profile argument during local development (`mode: "local"`), or pass `profile: "master"` to execute Docker and Docker Compose commands against remote servers over SSH.
 
-### 3. Cloudflare Wrangler OAuth & CLI
-Rather than requiring API tokens that expire or have restricted scopes, the Cloudflare server and global `wrangler` CLI (`~/.local/share/pnpm/wrangler`) bind directly to the local Wrangler OAuth session initiated via `wrangler login`.
+### 3. Cloudflare Wrangler OAuth
+Rather than requiring API tokens that expire or have restricted scopes, the Cloudflare server binds directly to the local Wrangler OAuth session initiated via `npx wrangler login`.
 
 ### 5. HashiCorp Vault FastMCP SDK Pinning
 FastMCP in `mcp` SDK v2.x restructured internal classes (`FastMCP` -> `MCPServer`). Running `bin/vault-mcp-server` with `uv run --with "mcp<2" --with "httpx"` ensures clean FastMCP compatibility and avoids virtual environment pollution.

@@ -1031,11 +1031,12 @@ rm -rf .mcp.json .github
 : >"$COPILOT_MOCK_MCP_LOG"
 COPILOT_HOME="$TMP/user-config/copilot" "$SCRIPT" --agent copilot --mode plan --base "$COPILOT_BASE_SHA" --id copilot-base-sha --task 'Discover repo MCP configs for copilot' > "$TMP/copilot-base-sha.out"
 grep -q 'Exit: 0' "$TMP/copilot-base-sha.out"
+# COPILOT_MOCK_MCP_LOG records server names passed to --disable-mcp-server (disallowed servers)
 grep -qx 'repo_claude_server' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'repo_gh_server' "$COPILOT_MOCK_MCP_LOG"
 grep -qx 'git' "$COPILOT_MOCK_MCP_LOG"
 if grep -qx 'fetch' "$COPILOT_MOCK_MCP_LOG"; then
-  echo 'Expected allowed minimal server fetch in .mcp.json to remain enabled' >&2; exit 1
+  echo 'Expected allowed minimal server fetch in .mcp.json not to be passed to --disable-mcp-server' >&2; exit 1
 fi
 
 # MCP profile for Copilot: Malformed or unsupported custom profile fails closed

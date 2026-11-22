@@ -20,7 +20,7 @@ semgrep scan --json --metrics=off --pattern '$X == $X' --lang python path/to/tar
 semgrep scan --json --metrics=off --config path/to/rule.yaml path/to/target
 
 # Validate custom Semgrep YAML rule syntax and schema
-semgrep validate --config path/to/rule.yaml
+semgrep validate path/to/rule.yaml
 
 # Inspect the parsed Abstract Syntax Tree (AST) for a source file
 semgrep --dump-ast --lang python path/to/file.py
@@ -41,7 +41,7 @@ semgrep ci --json --metrics=off --supply-chain --dry-run
 | `semgrep_scan_supply_chain` | `semgrep ci --json --metrics=off --supply-chain --dry-run` | `--supply-chain` is a `semgrep ci` flag; `--dry-run` keeps output local without uploading findings |
 | `get_abstract_syntax_tree` | `semgrep --dump-ast --lang <lang> <file>` | Outputs the language-normalized AST directly to stdout |
 | `get_supported_languages` | `semgrep show supported-languages` | Lists all language identifiers accepted by `--lang` |
-| `semgrep_rule_schema` | `semgrep validate --config <rule.yaml>` | CLI validates rule structure directly instead of dumping the full JSON Schema |
+| `semgrep_rule_schema` | `semgrep validate <rule.yaml>` | CLI validates rule structure directly instead of dumping the full JSON Schema |
 | `semgrep_findings` | Cloud API gap: `GET https://semgrep.dev/api/v1/deployments/<slug>/findings` (`Authorization: Bearer $SEMGREP_APP_TOKEN`) | `semgrep_findings` is a read-only AppSec Platform REST query; do not substitute `semgrep ci`, which triggers a new scan |
 
 ## Credential and data-boundary rules

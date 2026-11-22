@@ -9,7 +9,7 @@ Use native database CLIs (`sqlite3`, `psql`/`pgcli`, `redis-cli`) instead of sta
 
 ## 1. SQLite (`sqlite3`)
 
-`/usr/bin/sqlite3` is pre-installed on macOS and standard Linux distributions. Always pass `-readonly` when inspecting or diagnosing databases so queries cannot mutate state or create stray database files.
+`/usr/bin/sqlite3` ships with macOS. On Linux, install the `sqlite3` package with the distribution package manager (for example, `sudo apt install sqlite3`) before using these commands. Always pass `-readonly` when inspecting or diagnosing databases so queries cannot mutate state or create stray database files.
 
 ```bash
 # List tables and views in read-only mode
@@ -28,7 +28,7 @@ For multi-line queries, place the SQL in a dedicated `.sql` file and execute `sq
 
 ## 2. PostgreSQL (`psql` / `pgcli`)
 
-Use `psql` (`/opt/homebrew/bin/psql` via Homebrew `libpq` on macOS, or `docker exec` / `kubectl exec` against a running Postgres container/pod when `psql` is not installed on the host). Enforce read-only sessions via `PGOPTIONS='-c default_transaction_read_only=on'` (because a single `-c` string runs inside one implicit transaction where `SET default_transaction_read_only = on;` would only affect subsequent transactions) or wrap `.sql` file queries in `BEGIN READ ONLY; ...; COMMIT;`.
+Use `psql` (installed on macOS via keg-only Homebrew `libpq` at `"$(brew --prefix libpq)/bin/psql"` or linked to `/opt/homebrew/bin/psql` via `brew link --force libpq`, or via `docker exec` / `kubectl exec` against a running Postgres container/pod when `psql` is not installed on the host). Enforce read-only sessions via `PGOPTIONS='-c default_transaction_read_only=on'` (because a single `-c` string runs inside one implicit transaction where `SET default_transaction_read_only = on;` would only affect subsequent transactions) or wrap `.sql` file queries in `BEGIN READ ONLY; ...; COMMIT;`.
 
 ```bash
 # Inspect tables and schema using environment variables or ~/.pgpass (never inline password URIs)

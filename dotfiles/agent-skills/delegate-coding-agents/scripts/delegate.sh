@@ -3,6 +3,7 @@ set -euo pipefail
 unset CDPATH
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly DEFAULT_MINIMAL_MCP_SERVERS='brave-search,cclsp,codebase-memory-mcp,context7,fetch'
 
 usage() {
   cat <<'HELP'
@@ -279,7 +280,7 @@ resolve_opencode_mcp_profile() {
     return 0
   fi
 
-  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-brave-search,cclsp,codebase-memory-mcp,context7,fetch}}"
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${OPENCODE_DELEGATE_MCP_SERVERS:-$DEFAULT_MINIMAL_MCP_SERVERS}}"
   if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$content_file" "$base_profile" "$cfg_dir" "$ROOT" "$BASE_SHA" "${OPENCODE_CONFIG:-}" "${OPENCODE_CONFIG_CONTENT:-}" <<'PY'
 import json
 import os
@@ -546,7 +547,7 @@ resolve_codex_mcp_profile() {
     servers="$defined_servers"
     CODEX_PROFILE_PATH="$target_file"
   else
-    local allowed_csv="${DELEGATE_MCP_SERVERS:-${CODEX_DELEGATE_MCP_SERVERS:-brave-search,cclsp,codebase-memory-mcp,context7,fetch}}"
+    local allowed_csv="${DELEGATE_MCP_SERVERS:-${CODEX_DELEGATE_MCP_SERVERS:-$DEFAULT_MINIMAL_MCP_SERVERS}}"
     if [[ -n "$defined_servers" ]]; then
       servers=$(awk -v allowed="$allowed_csv" '
         BEGIN {
@@ -600,7 +601,9 @@ resolve_copilot_mcp_profile() {
     return 0
   fi
 
-  local allowed_csv="${DELEGATE_MCP_SERVERS:-${COPILOT_DELEGATE_MCP_SERVERS:-brave-search,cclsp,codebase-memory-mcp,context7,fetch}}"
+  # Delegated Copilot runs restrict model-callable tools via --available-tools;
+  # this allowlist controls which discovered MCP server processes are not disabled on startup.
+  local allowed_csv="${DELEGATE_MCP_SERVERS:-${COPILOT_DELEGATE_MCP_SERVERS:-$DEFAULT_MINIMAL_MCP_SERVERS}}"
   if command -v python3 >/dev/null 2>&1 && python3 - "$prof" "$allowed_csv" "$target_file" "$copilot_cfg" "$ROOT" "$BASE_SHA" <<'PY'
 import json
 import os

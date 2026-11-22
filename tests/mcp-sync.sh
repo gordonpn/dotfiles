@@ -297,6 +297,7 @@ if grep -A 4 -F '[mcp_servers."cclsp"]' "${CODEX_DIR}/config.toml" | grep -qx 'e
   echo 'Expected cclsp to be enabled in minimal profile' >&2
   exit 1
 fi
+grep -F '[mcp_servers."brave-search"]' "${CODEX_DIR}/config.toml"
 if grep -A 4 -F '[mcp_servers."brave-search"]' "${CODEX_DIR}/config.toml" | grep -qx 'enabled = false'; then
   echo 'Expected brave-search to be enabled in minimal profile' >&2
   exit 1
