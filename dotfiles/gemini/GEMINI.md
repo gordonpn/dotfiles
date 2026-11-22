@@ -208,6 +208,17 @@ Biased toward caution over speed. For a trivial edit with an obvious answer, use
 - **Automated Review Gate (OCR):** Always execute Open Code Review via the `ocr` CLI before pushing code to a remote repository or opening a pull request. If an external LLM provider is configured in OCR, run `ocr review --audience agent`. In delegated or offline agent workflows, run deterministic inspection via `ocr delegate preview --format json` and `ocr delegate rule --format json` to resolve review rules and evaluate findings against them. Address all critical, high, and medium severity findings before delivering changes.
 - **Pull Request Delivery:** Push the dedicated task branch and open a pull request ready for review targeting the default branch, linking a root issue when one exists. Never push directly to the default branch or bypass the pull request lifecycle. If the user explicitly forbids pushing or opening a PR, leave commits on the task branch and report that the PR remains unopened; never substitute a commit on the default branch.
 - **Explain Why in Issues and PRs:** Every GitHub issue and pull request description (including meaningful updates) must clearly explain *why* the work or change is needed: the underlying problem, user or operational impact, constraint, or trade-off motivating it, rather than merely summarizing *what* files or symbols changed. Reference supporting evidence, failure traces, or decision records (`docs/decisions.md`, ADRs) so reviewers can evaluate intent without reconstructing context from the diff alone.
+- **PR Body Convention & Lean Template:** Unless a repository provides its own pull request template, structure every opened PR description with explicit `## Why`, `## Summary`, and `## Verification` sections:
+  ```markdown
+  ## Why
+  [Problem, user or operational impact, constraints, or trade-offs motivating the change; link supporting evidence or docs/decisions.md]
+
+  ## Summary
+  - [Focused summary of what changed and link to the root issue, e.g. Closes #<id> or Refs #<id> when applicable]
+
+  ## Verification
+  - [Exact checks run and observed outcomes, or explicit statement of any checks not run]
+  ```
 - **User-Only PR Merging:** Never call `merge_pull_request` or execute `gh pr merge`. Only the user merges pull requests. Agents prepare changes, push branches, open pull requests ready for review, and address review feedback, leaving merge execution strictly to the human maintainer.
 - **No Stacked PRs with GitHub:** Never create stacked pull requests or chain PR branches (where a branch is cut from another unmerged PR branch or targets a non-default branch). Every PR must target the repository default branch (`main` or `master`) directly from an isolated branch based on the latest default branch. Merge each PR into the default branch before branching downstream work from the updated default branch.
 - **Distinct PR Branches & Merge Isolation:** Each PR must originate from its own distinct, dedicated branch based on the default target branch. Never share or daisy-chain branches across concurrent PRs: when a PR merges and its remote branch is deleted, no other active or pending PR should be affected, broken, or invalidated.
