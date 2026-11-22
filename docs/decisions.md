@@ -2,6 +2,12 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-22: Hybrid Codex-first routing using Codex plugin for read-only continuity and delegate.sh for worktree builds
+
+- Decision: Update Antigravity CLI routing in `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`, `dotfiles/gemini/GEMINI.md`, `README.md`, and `docs/mcp-setup.md` so substantive requests route Codex-first via the installed Antigravity Codex plugin (`codex-runner.mjs` in read-only mode with `--resume-last`) for questions, debugging, planning, architecture discussions, reviews, and technical research, while retaining `delegate.sh` (`--mode build`) for implementation writes inside isolated Git worktrees, keeping automatic fallback through OpenCode free models and GitHub Copilot Student on Codex quota/rate-limit/availability failures without blocking for confirmation.
+- Rationale: The Codex plugin preserves session continuity (`--resume-last`) and handles read-only analysis and reviews cleanly without provisioning throwaway worktrees, whereas `delegate.sh` protects the base checkout with isolated `delegate/...` worktrees, dirty-base overlap detection, and automatic zero-cost fallback when Codex hits limits.
+- Rejected alternatives: Replacing `delegate.sh` entirely for workspace edits (loses isolated worktrees, dirty-base overlap protection, and multi-provider OpenCode/Copilot fallback), or pausing to ask before every fallback (adds interactive round-trips during automated runs).
+
 ## 2026-11-19: Drop delegate.sh opt-in and dirty-tree gates and prefer external delegation over invoke_subagent
 
 - Decision: Remove the blocking `agents.delegationAllowed=true` check (`--automatic` remains accepted as a compatibility no-op) and blocking clean-working-tree check from `delegate.sh`, warn on stderr, record `dirty_base=1` and `dirty_base_overlap=0|1` in `manifest.txt`, print a `Base snapshot note` and any `Overlapping dirty base files` in `DELEGATION_RESULT` when uncommitted or untracked base edits exist, require manual hunk reconciliation rather than whole-file overwrites or resets when integrating overlapping dirty files, and instruct Antigravity (`agy`) in `dotfiles/gemini/GEMINI.md`, `auto-delegation.md`, and `delegate-coding-agents/SKILL.md` to prefer `delegate.sh` over native `invoke_subagent` (with confidentiality enforced by orchestrator policy rather than a per-repo script opt-in gate).

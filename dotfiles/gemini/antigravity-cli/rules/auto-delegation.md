@@ -1,42 +1,45 @@
 ---
 trigger: always_on
-description: Automatically delegate engineering subtasks to Codex, OpenCode, and GitHub Copilot Student under Antigravity CLI supervision.
+description: Codex-first routing for Antigravity CLI using the installed Codex plugin for read-only/continuity work and delegate.sh worktree isolation for builds.
 ---
 
-# Delegation-First routing when Antigravity is the orchestrator
+# Codex-first routing
 
-When tasked with repository exploration, architecture analysis, refactoring, test writing, or feature implementation, Antigravity operates in a delegation-first posture preferring `delegate.sh` over native `invoke_subagent`. The runner delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`:
+Use the installed Codex plugin (`$HOME/.gemini/config/plugins/codex/scripts/codex-runner.mjs`) as the default worker for substantive user requests, paired with `delegate.sh` for isolated-worktree implementation builds.
 
-1. **Codex CLI:** Primary delegate worker running non-interactively in an isolated Git worktree (`--sandbox read-only` in plan mode, `--sandbox workspace-write` in build mode).
-2. **OpenCode Free Models:** Automatic fallback after classified provider, quota, rate-limit, or model-availability failures on Codex, cycling through `opencode/deepseek-v4.1-flash-free` (high variant), `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free`.
-3. **GitHub Copilot Student:** Automatic fallback after OpenCode zero-cost models are exhausted, using first-party Copilot CLI with `--model auto`. If all external candidates in the chain fail with classified provider/quota errors, continue with native `invoke_subagent` or directly with Antigravity.
-4. **Authentication Hard Stops:** Credential, permission, or provider initialization failures (such as `ProviderInitError` or HTTP 403) stop fallback immediately across all workers with instructions to run `codex login`, `copilot login`, or check OpenCode credentials. (Supported OpenCode free models operate anonymously and require no account or login.)
+## Routing Rules
 
-## Delegation-First Rules
+- Automatically delegate coding, debugging, planning, architecture discussions, refactoring, reviews, and technical research to Codex without requiring the user to mention Codex or use slash commands.
+- Use the Codex plugin in read-only mode (`task`, `review`, `adversarial-review`, or `codex-rescue`) for questions, debugging, planning, architecture discussions, reviews, and technical research.
+- Keep `delegate.sh` (`--orchestrator agy --agent codex --mode build`) as the default for implementation and refactoring that modifies files so workspace writes execute inside an isolated Git worktree (`--sandbox workspace-write`). Use Codex plugin `task --write` only when direct active-workspace edits are explicitly requested or outside a Git repository.
+- Include the user's original request, relevant conversation context, project constraints, and previous decisions in every delegation prompt.
+- Preserve continuity across follow-up conversations using `--resume-last` on the Codex plugin where supported.
+- Use Antigravity primarily for orchestration, cross-cutting verification, reviewing and cherry-picking worktree commits, and presenting results.
+- Defer to user intent if the user explicitly asks Antigravity to execute directly or use native `invoke_subagent`. Never send confidential or employer-restricted code to external inference without explicit permission.
 
-1. **Default to Delegation Chain:** Whenever an engineering task requires codebase exploration, design analysis, test drafting, or code modification, prefer `delegate.sh` (`--agent codex`) over native `invoke_subagent` before writing code directly.
-2. **Phase Routing:**
-   - Use `--mode plan` for initial repository exploration, architecture analysis, trade-off evaluation, and test plan creation.
-   - Use `--mode build` for generating tests, boilerplate, mechanical refactors, documentation, and separable implementation slices.
-3. **Orchestrator Scope:** Antigravity owns cross-cutting architectural validation, final review, test verification, cherry-picking approved worktree commits, and PR delivery. Do not duplicate worker exploration or draft work when delegation is available.
-4. **Confidentiality & Base Snapshot:** Never send confidential or employer-restricted code to external inference without explicit permission. `delegate.sh` snapshots the committed `--base` revision (`HEAD` by default); if the local checkout has uncommitted or untracked changes, `delegate.sh` warns and still proceeds from that committed snapshot.
-5. **Defer to User Intent:** When the user explicitly requests direct execution, native `invoke_subagent`, or a different workflow, respect their choice without calling `delegate.sh`.
+## Automatic Fallback
+
+If Codex is unavailable or fails with classified provider, quota, rate-limit, or model-availability errors, fall back automatically without blocking for confirmation through `delegate.sh`:
+
+1. **OpenCode Free Models:** Cycle through `opencode/deepseek-v4.1-flash-free` (high variant), `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free`.
+2. **GitHub Copilot Student:** Fall back to first-party Copilot CLI with `--model auto`.
+3. **Antigravity / `invoke_subagent`:** If all external workers fail with classified provider/quota errors, continue with native `invoke_subagent` or Antigravity directly and note the fallback in the response.
+4. **Authentication Hard Stops:** Credential, permission, or provider initialization failures (`ProviderInitError`, HTTP 403, missing login) stop fallback immediately with actionable setup guidance (`codex login`, `/codex:setup`, `copilot login`, or OpenCode credentials).
 
 ## Execution
 
-- Invoke the installed `delegate-coding-agents` skill via `scripts/delegate.sh`:
+- **Codex plugin (read-only analysis, planning, debugging, review, continuity):**
   ```bash
-  # Plan mode (investigation and architecture):
-  "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
-    --orchestrator agy --agent codex --mode plan --automatic \
-    --id explore-feature --task 'Investigate module structure and propose tests.'
-
-  # Build mode (mechanical refactors and tests):
-  "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
-    --orchestrator agy --agent codex --mode build --automatic \
-    --id implement-tests --task 'Implement unit tests for the validator.'
+  RUNNER="$HOME/.gemini/config/plugins/codex/scripts/codex-runner.mjs"
+  node "$RUNNER" task --resume-last "<context, constraints, decisions, and request>"
+  node "$RUNNER" review "--base master"
+  node "$RUNNER" adversarial-review "<design focus>"
   ```
-- Give the worker explicit scope, acceptance criteria, verification commands, and prohibited file areas.
-- After the run completes, inspect `DELEGATION_RESULT`, reports, diffs, and untracked files. Independently verify the proposed changes against repository invariants and tests.
-- Review the worktree changes. Stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch; never blindly apply unreviewed diffs. When `dirty_base=1` or `Overlapping dirty base files` is reported, never copy whole files from the worktree over dirty base files or reset/checkout the base working tree to force a cherry-pick; reconcile overlapping hunks manually first.
-- Preserve the configured Alibaba Open Code Review gate. Never auto-push or create a PR unless asked.
+- **`delegate.sh` (isolated worktree build and automatic fallback chain):**
+  ```bash
+  "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
+    --orchestrator agy --agent codex --mode build \
+    --id implement-slice --task '<context, constraints, decisions, and acceptance criteria>'
+  ```
+- Inspect `DELEGATION_RESULT`, reports, diffs, and untracked files before integrating worktree changes. When `dirty_base=1` or `Overlapping dirty base files` is reported, reconcile overlapping hunks manually instead of overwriting base files or resetting local edits.
+- Preserve the configured Alibaba Open Code Review gate before PR submission. Never auto-push or create a PR unless asked.
