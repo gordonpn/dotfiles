@@ -78,8 +78,10 @@ sequentially across OpenCode and GitHub Copilot Student.
 Authentication and provider-initialization errors are hard stops across all
 candidates directing the user to log in (`codex login`, `copilot login`, or
 check OpenCode credentials; supported OpenCode free models operate anonymously
-without an account or login). Automatic delegation requires the repository-local
-opt-in `agents.delegationAllowed=true`.
+without an account or login). Antigravity prefers `delegate.sh` over native
+`invoke_subagent` by default and runs from committed `HEAD` even when uncommitted
+local edits exist (emitting a warning). Keep confidential code away from
+external inference unless explicitly authorized.
 Delegated GitHub Copilot Student workers isolate MCP exposure via `--mcp-profile` or `COPILOT_DELEGATE_MCP_PROFILE` without mutating interactive configuration; see [MCP setup](docs/mcp-setup.md) and [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
 Domain-specific engineering standards profiles (HTTP APIs, events, observability, identity/security, supply chain, frontend accessibility, data architecture, and AI agents) live in [the shared engineering-standards skill](dotfiles/agent-skills/engineering-standards/SKILL.md) and synchronize on demand across Antigravity CLI, Codex CLI, OpenCode, GitHub Copilot CLI, and Claude Code via `bin/mcp-sync`.

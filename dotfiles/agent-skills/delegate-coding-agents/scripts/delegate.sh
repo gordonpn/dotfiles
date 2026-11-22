@@ -14,7 +14,7 @@ Options:
   --model MODEL        Override selected delegate model
   --base REF           Git revision to snapshot (default: HEAD)
   --orchestrator NAME  codex|agy (default: codex)
-  --automatic          Enforce per-repository opt-in for auto delegation
+  --automatic          Mark run as automatic delegation (accepted for compatibility)
   --mcp-profile PROF   MCP profile for delegated agents (minimal|none|full|PATH, default: minimal)
   --help               Display this help
 
@@ -238,10 +238,6 @@ elif [[ $AGENT == copilot ]]; then
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
-if (( AUTOMATIC )); then
-  [[ $(git -C "$ROOT" config --local --get agents.delegationAllowed 2>/dev/null || true) == true ]] || die 'Automatic external-model delegation is disabled in this repo. Explicitly opt in with: git config --local agents.delegationAllowed true'
-fi
-[[ -z $(git -C "$ROOT" status --porcelain --untracked-files=normal) ]] || die 'Working tree has uncommitted or untracked files. Commit/stash safely before delegating; snapshot is from a Git revision.'
 BASE_SHA=$(git -C "$ROOT" rev-parse --verify "${BASE}^{commit}") || die "Invalid base revision: $BASE"
 SAFE_ID=$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g;s/^[.-]+//;s/[.-]+$//')
 [[ -n $SAFE_ID ]] || SAFE_ID=task
@@ -825,6 +821,24 @@ resolve_active_profile_path() {
   esac
 }
 
+list_dirty_paths() {
+  local repo_dir="$1"
+  {
+    git -C "$repo_dir" diff --no-renames --name-only "$BASE_SHA"
+    git -C "$repo_dir" diff --no-renames --name-only
+    git -C "$repo_dir" diff --no-renames --name-only --cached
+    git -C "$repo_dir" ls-files --others --exclude-standard
+  } | LC_ALL=C sort -u
+}
+
+BASE_STATUS=$(git -C "$ROOT" status --porcelain --untracked-files=normal) || die 'Failed inspecting base working tree status'
+DIRTY_BASE=0
+: >"$LOG_DIR/base-dirty-files.txt"
+if [[ -n $BASE_STATUS ]]; then
+  DIRTY_BASE=1
+  list_dirty_paths "$ROOT" >"$LOG_DIR/base-dirty-files.txt"
+  printf 'WARNING: Base working tree has uncommitted or untracked changes; worktree snapshots %s only.\n' "$BASE_SHA" >&2
+fi
 BRANCH='(detached)'
 if [[ $MODE == build ]]; then
   BRANCH="delegate/${AGENT}/${RUN_ID}"
@@ -837,6 +851,7 @@ run_id=$RUN_ID
 agent=$AGENT
 orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
+dirty_base=$DIRTY_BASE
 mode=$MODE
 requested_model=${MODEL:-'(default)'}
 mcp_profile=$(resolve_active_profile "$AGENT")
@@ -1015,6 +1030,23 @@ git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
 git -C "$WORKTREE" diff --check >"$LOG_DIR/diff-check.txt" 2>&1 || EXIT_CODE=1
 git -C "$WORKTREE" diff --stat "$BASE_SHA" >"$LOG_DIR/diff-stat.txt"
 git -C "$WORKTREE" ls-files --others --exclude-standard >"$LOG_DIR/untracked-files.txt"
+list_dirty_paths "$WORKTREE" >"$LOG_DIR/worktree-changed-files.txt"
+{
+  cat "$LOG_DIR/base-dirty-files.txt"
+  list_dirty_paths "$ROOT"
+} | LC_ALL=C sort -u >"$LOG_DIR/base-dirty-files.tmp"
+mv "$LOG_DIR/base-dirty-files.tmp" "$LOG_DIR/base-dirty-files.txt"
+DIRTY_BASE_OVERLAP=0
+OVERLAPPING_BASE_FILES="$LOG_DIR/overlapping-base-files.txt"
+: >"$OVERLAPPING_BASE_FILES"
+if [[ -s $LOG_DIR/base-dirty-files.txt && -s $LOG_DIR/worktree-changed-files.txt ]]; then
+  LC_ALL=C comm -12 "$LOG_DIR/base-dirty-files.txt" "$LOG_DIR/worktree-changed-files.txt" >"$OVERLAPPING_BASE_FILES"
+  if [[ -s $OVERLAPPING_BASE_FILES ]]; then
+    DIRTY_BASE_OVERLAP=1
+    printf 'WARNING: Delegate modified files that also have uncommitted or untracked changes in base working tree; reconcile hunks manually and do not overwrite base files directly.\n' >&2
+  fi
+fi
+printf 'dirty_base_overlap=%s\n' "$DIRTY_BASE_OVERLAP" >>"$LOG_DIR/manifest.txt"
 FINAL_HEAD=$(git -C "$WORKTREE" rev-parse HEAD)
 if [[ "$FINAL_HEAD" != "$BASE_SHA" ]]; then
   printf 'WARNING: Delegate changed HEAD (commit/reset/rebase). Review Git history before integration.\n' >&2
@@ -1041,6 +1073,13 @@ printf '  Worktree: %s\n' "$WORKTREE"
 printf '  Branch: %s\n' "$BRANCH"
 printf '  Logs: %s\n' "$LOG_DIR"
 printf '  Exit: %s\n' "$EXIT_CODE"
+if (( DIRTY_BASE )); then
+  printf '  Base snapshot note: dirty base working tree; uncommitted/untracked changes excluded from %s\n' "$BASE_SHA"
+fi
+if (( DIRTY_BASE_OVERLAP )); then
+  printf '  Overlapping dirty base files (reconcile hunks manually; do not overwrite base files):\n'
+  sed 's/^/    /' "$OVERLAPPING_BASE_FILES"
+fi
 printf '  Git changes:\n'
 if [[ -s $LOG_DIR/git-status.txt ]]; then sed 's/^/    /' "$LOG_DIR/git-status.txt"; else printf '    (none)\n'; fi
 printf '\n--- Delegate report ---\n'

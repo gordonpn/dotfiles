@@ -48,7 +48,11 @@ if [[ ${OPENCODE_MOCK_FAIL_ALL:-} == 1 ]]; then
   echo 'AI_APICallError: Quota exceeded for all models' >&2
   exit 1
 fi
-if [[ $mode == build ]]; then printf 'implemented by opencode\n' > agent-change.txt; fi
+if [[ ${OPENCODE_MOCK_RENAME_FILE:-} == 1 && $mode == build && -f rename-src.txt ]]; then
+  git mv rename-src.txt rename-dst.txt
+elif [[ $mode == build ]]; then
+  printf 'implemented by opencode\n' > agent-change.txt
+fi
 printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
 
@@ -426,12 +430,13 @@ if OPENCODE_DELEGATE_MODELS=',  , ' "$SCRIPT" --agent copilot --mode plan --id e
 fi
 grep -q 'No usable OpenCode fallback models' "$TMP/empty-fallback.out"
 
-# Automatic delegation must be explicitly opted in for this repository.
-if "$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --task 'Nope' >"$TMP/not-opted-in.out" 2>&1; then
- echo 'Expected automatic delegation opt-in gate' >&2; exit 1
+# Automatic delegation runs without requiring repository opt-in in git config.
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+"$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --id no-opt-in-needed --task 'Allowed without opt-in' >"$TMP/no-opt-in.out" 2>&1
+grep -q 'Exit: 0' "$TMP/no-opt-in.out"
+if grep -q 'agents.delegationAllowed true' "$TMP/no-opt-in.out"; then
+  echo 'Unexpected opt-in gate error' >&2; exit 1
 fi
-grep -q 'agents.delegationAllowed true' "$TMP/not-opted-in.out"
-git config --local agents.delegationAllowed true
 
 # Orchestrator route tests
 "$SCRIPT" --agent opencode --mode plan --orchestrator agy --automatic --task 'Plan a change' > "$TMP/agy-to-opencode.out"
@@ -1134,11 +1139,50 @@ grep -q -- '--disable-mcp-server --disable-builtin-mcps' "$COPILOT_MOCK_CALL_LOG
 COPILOT_DELEGATE_MCP_PROFILE="$TMP/nonexistent-copilot-profile.json" CODEX_CONFIG="$TMP/user-config/codex/config.toml" "$SCRIPT" --orchestrator agy --agent codex --model custom-codex --mode plan --id codex-ignores-copilot-prof --task 'Ignore unused Copilot profile' > "$TMP/codex-ignores-copilot-prof.out"
 grep -q 'Exit: 0' "$TMP/codex-ignores-copilot-prof.out"
 
-# A dirty checkout must be rejected rather than silently excluded from snapshot.
+# A dirty checkout runs from committed BASE_SHA with an explicit non-blocking warning and note.
+expected_base_sha=$(git rev-parse HEAD)
 echo local > local.txt
-if "$SCRIPT" --agent opencode --mode build --task 'Nope' >"$TMP/dirty.out" 2>&1; then
- echo 'Expected dirty-tree rejection' >&2; exit 1
+"$SCRIPT" --agent opencode --mode build --id dirty-base-allowed --task 'Run from HEAD despite dirty tree' >"$TMP/dirty.out" 2>"$TMP/dirty.err"
+grep -q 'Exit: 0' "$TMP/dirty.out"
+grep -q 'Base snapshot note: dirty base working tree' "$TMP/dirty.out"
+if grep -q 'Overlapping dirty base files' "$TMP/dirty.out"; then
+  echo 'Unexpected overlap report for non-overlapping dirty file' >&2; exit 1
 fi
-grep -q 'uncommitted or untracked' "$TMP/dirty.out"
+grep -q 'uncommitted or untracked changes' "$TMP/dirty.err"
+dirty_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty.out")
+dirty_worktree=$(sed -n 's/^  Worktree: //p' "$TMP/dirty.out")
+grep -q 'dirty_base=1' "$dirty_log_dir/manifest.txt"
+grep -q 'dirty_base_overlap=0' "$dirty_log_dir/manifest.txt"
+[[ $(git -C "$dirty_worktree" rev-parse HEAD) == "$expected_base_sha" ]]
+[[ ! -e "$dirty_worktree/local.txt" ]]
+rm -f local.txt
+
+# Overlapping dirty base files are flagged in manifest.txt, stderr, and DELEGATION_RESULT without clobbering local base files.
+echo local-uncommitted > agent-change.txt
+"$SCRIPT" --agent opencode --mode build --id dirty-base-overlap --task 'Detect overlap with dirty base file' >"$TMP/dirty-overlap.out" 2>"$TMP/dirty-overlap.err"
+grep -q 'Exit: 0' "$TMP/dirty-overlap.out"
+grep -q 'Overlapping dirty base files (reconcile hunks manually; do not overwrite base files):' "$TMP/dirty-overlap.out"
+grep -q '^    agent-change.txt$' "$TMP/dirty-overlap.out"
+grep -q 'Delegate modified files that also have uncommitted or untracked changes in base working tree' "$TMP/dirty-overlap.err"
+overlap_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty-overlap.out")
+grep -q 'dirty_base=1' "$overlap_log_dir/manifest.txt"
+grep -q 'dirty_base_overlap=1' "$overlap_log_dir/manifest.txt"
+grep -q '^agent-change.txt$' "$overlap_log_dir/overlapping-base-files.txt"
+grep -q '^local-uncommitted$' agent-change.txt
+rm -f agent-change.txt
+
+# Renames by a worker must include source paths when checking dirty-base overlap.
+printf 'line1\nline2\nline3\n' > rename-src.txt
+git add rename-src.txt
+git commit -m 'Add rename fixture' >/dev/null
+printf 'local edit\n' >> rename-src.txt
+OPENCODE_MOCK_RENAME_FILE=1 "$SCRIPT" --agent opencode --mode build --id dirty-base-rename-overlap --task 'Detect overlap when worker renames dirty base file' >"$TMP/dirty-rename.out" 2>"$TMP/dirty-rename.err"
+grep -q 'Exit: 0' "$TMP/dirty-rename.out"
+grep -q 'Overlapping dirty base files' "$TMP/dirty-rename.out"
+grep -q '^    rename-src.txt$' "$TMP/dirty-rename.out"
+rename_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/dirty-rename.out")
+grep -q 'dirty_base_overlap=1' "$rename_log_dir/manifest.txt"
+grep -q '^rename-src.txt$' "$rename_log_dir/overlapping-base-files.txt"
+git checkout -- rename-src.txt
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'

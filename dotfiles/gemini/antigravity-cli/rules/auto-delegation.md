@@ -5,22 +5,22 @@ description: Automatically delegate engineering subtasks to Codex, OpenCode, and
 
 # Delegation-First routing when Antigravity is the orchestrator
 
-When tasked with repository exploration, architecture analysis, refactoring, test writing, or feature implementation, Antigravity operates in a delegation-first posture in repositories where delegation is permitted (`agents.delegationAllowed=true`). The runner delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`:
+When tasked with repository exploration, architecture analysis, refactoring, test writing, or feature implementation, Antigravity operates in a delegation-first posture preferring `delegate.sh` over native `invoke_subagent`. The runner delegates sequentially through `agy-cli -> codex -> opencode -> github copilot student`:
 
 1. **Codex CLI:** Primary delegate worker running non-interactively in an isolated Git worktree (`--sandbox read-only` in plan mode, `--sandbox workspace-write` in build mode).
 2. **OpenCode Free Models:** Automatic fallback after classified provider, quota, rate-limit, or model-availability failures on Codex, cycling through `opencode/deepseek-v4.1-flash-free` (high variant), `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and `opencode/nemotron-3.5-lightning-free`.
-3. **GitHub Copilot Student:** Automatic fallback after OpenCode zero-cost models are exhausted, using first-party Copilot CLI with `--model auto`.
+3. **GitHub Copilot Student:** Automatic fallback after OpenCode zero-cost models are exhausted, using first-party Copilot CLI with `--model auto`. If all external candidates in the chain fail with classified provider/quota errors, continue with native `invoke_subagent` or directly with Antigravity.
 4. **Authentication Hard Stops:** Credential, permission, or provider initialization failures (such as `ProviderInitError` or HTTP 403) stop fallback immediately across all workers with instructions to run `codex login`, `copilot login`, or check OpenCode credentials. (Supported OpenCode free models operate anonymously and require no account or login.)
 
 ## Delegation-First Rules
 
-1. **Default to Delegation Chain:** Whenever an engineering task requires codebase exploration, design analysis, test drafting, or code modification, delegate the subtask using `--agent codex` before attempting to write code directly.
+1. **Default to Delegation Chain:** Whenever an engineering task requires codebase exploration, design analysis, test drafting, or code modification, prefer `delegate.sh` (`--agent codex`) over native `invoke_subagent` before writing code directly.
 2. **Phase Routing:**
    - Use `--mode plan` for initial repository exploration, architecture analysis, trade-off evaluation, and test plan creation.
    - Use `--mode build` for generating tests, boilerplate, mechanical refactors, documentation, and separable implementation slices.
 3. **Orchestrator Scope:** Antigravity owns cross-cutting architectural validation, final review, test verification, cherry-picking approved worktree commits, and PR delivery. Do not duplicate worker exploration or draft work when delegation is available.
-4. **Eligibility Gate:** Delegate only when the repository has local Git configuration `agents.delegationAllowed=true` and a clean working tree (`git status --porcelain` empty). If the working tree is dirty or delegation is disabled, execute directly. Never bypass the opt-in gate for confidential or employer code.
-5. **Defer to User Intent:** When the user explicitly requests direct execution, asks Antigravity not to delegate, or specifies a different workflow, respect their choice and execute directly without delegating.
+4. **Confidentiality & Base Snapshot:** Never send confidential or employer-restricted code to external inference without explicit permission. `delegate.sh` snapshots the committed `--base` revision (`HEAD` by default); if the local checkout has uncommitted or untracked changes, `delegate.sh` warns and still proceeds from that committed snapshot.
+5. **Defer to User Intent:** When the user explicitly requests direct execution, native `invoke_subagent`, or a different workflow, respect their choice without calling `delegate.sh`.
 
 ## Execution
 
@@ -38,5 +38,5 @@ When tasked with repository exploration, architecture analysis, refactoring, tes
   ```
 - Give the worker explicit scope, acceptance criteria, verification commands, and prohibited file areas.
 - After the run completes, inspect `DELEGATION_RESULT`, reports, diffs, and untracked files. Independently verify the proposed changes against repository invariants and tests.
-- Review the worktree changes. Stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch; never blindly apply unreviewed diffs.
+- Review the worktree changes. Stage only approved files in the `delegate/...` worktree, commit them there, and cherry-pick that commit into the orchestrator branch; never blindly apply unreviewed diffs. When `dirty_base=1` or `Overlapping dirty base files` is reported, never copy whole files from the worktree over dirty base files or reset/checkout the base working tree to force a cherry-pick; reconcile overlapping hunks manually first.
 - Preserve the configured Alibaba Open Code Review gate. Never auto-push or create a PR unless asked.
