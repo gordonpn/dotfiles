@@ -2,6 +2,12 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-22: Extract embedded Python and config/skill sync from bin/mcp-sync into scripts/mcp_sync.py
+
+- Decision: Move the embedded Python blocks, JSON/JSONC/TOML hydration and rendering, SSH/Docker/K3s profile generation, and skill/instruction symlink orchestration out of `bin/mcp-sync` into a typed zero-dependency Python 3.11+ stdlib module (`scripts/mcp_sync.py`) verified by `ruff`, `mypy --strict`, and `tests/test_mcp_sync_py.py`, while keeping `bin/mcp-sync` as a thin Bash entrypoint preserving CLI flags, binary installers, and shell test compatibility.
+- Rationale: Eliminates embedded-language Python blocks inside Bash, removes macOS Bash 3.2 associative-array string workarounds, avoids quote-injection hazards by hydrating template placeholders after `json.loads`, and maintains sub-100ms cold-start overhead on shell startup hooks without requiring third-party runtime packages.
+- Rejected alternatives: Rewriting all small shell wrappers (`agy-statusline`, `title.sh`, `cbcopy`, `update-skills.sh`) into Python (adds interpreter startup latency and subprocess boilerplate for simple pipelines), or introducing `uv` / third-party TOML writers into the shell startup path.
+
 ## 2026-11-22: Hybrid Codex-first routing using Codex plugin for read-only continuity and delegate.sh for worktree builds
 
 - Decision: Update Antigravity CLI routing in `dotfiles/gemini/antigravity-cli/rules/auto-delegation.md`, `dotfiles/gemini/GEMINI.md`, `dotfiles/agent-skills/delegate-coding-agents/SKILL.md`, `README.md`, and `docs/mcp-setup.md` so substantive requests route Codex-first via the user-installed Antigravity Codex plugin (`$HOME/.gemini/config/plugins/codex/scripts/codex-runner.mjs` in read-only mode with `--resume-last`, gated on runner presence) for questions, debugging, planning, architecture discussions, reviews, and technical research, while retaining `delegate.sh` (`--mode build`) for implementation writes inside isolated Git worktrees, keeping automatic fallback through `--agent opencode` (skipping redundant Codex retry on plugin quota failures) and GitHub Copilot Student without blocking for confirmation, and requiring uncommitted diffs to be passed explicitly during fallback `plan` reviews on dirty checkouts.

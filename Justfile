@@ -1,5 +1,6 @@
 test:
     bash tests/mcp-sync.sh
+    python3 -m unittest discover -s tests -p "test_*.py" -v
     bash tests/update-skills.sh
     bash tests/deepseek-analyze.sh
     bash tests/deepseek-review-prompt.sh
@@ -37,8 +38,8 @@ lint:
     if command -v actionlint >/dev/null 2>&1; then
         actionlint
     fi
-    uvx ruff check --target-version py311 tests/verify_mcp.py
-    uvx --with mcp==1.1.2 mypy --strict tests/verify_mcp.py
+    uvx ruff check --target-version py311 tests/verify_mcp.py scripts/mcp_sync.py tests/test_mcp_sync_py.py
+    uvx --with mcp==1.1.2 mypy --strict tests/verify_mcp.py scripts/mcp_sync.py tests/test_mcp_sync_py.py
     git diff --check
 
 setup-codebase-memory:

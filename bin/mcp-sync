@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+MCP_SYNC_PY="${REPO_DIR}/scripts/mcp_sync.py"
 TEMPLATE_DIR="${REPO_DIR}/dotfiles/gemini"
 GEMINI_DIR="${HOME}/.gemini"
 GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
@@ -350,122 +351,19 @@ install_thinking_skills() {
 }
 
 sync_ssh_profiles() {
-  local ssh_config="${HOME}/.ssh/config"
-  local target_file="${GEMINI_DIR}/ssh-profiles.json"
-
-  if [[ ! -f "${ssh_config}" ]]; then
-    echo "Notice: ${ssh_config} not found, skipping SSH profiles generation."
-    return 0
-  fi
-
-  python3 -c "
-import json, re, os
-
-ssh_config = os.path.expanduser('~/.ssh/config')
-profiles = {}
-
-current_host = None
-host_data = {}
-
-with open(ssh_config, 'r') as f:
-    for line in f:
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        parts = line.split(None, 1)
-        if len(parts) < 2:
-            continue
-        key, val = parts[0].lower(), parts[1].strip()
-
-        if key == 'host':
-            if current_host and 'hostname' in host_data:
-                profiles[current_host] = {
-                    'host': host_data['hostname'],
-                    'username': host_data.get('user', os.environ.get('USER', 'root')),
-                    'port': int(host_data.get('port', 22)),
-                    'privateKeyPath': host_data.get('identityfile', '~/.ssh/id_ed25519')
-                }
-            if '*' in val or val == 'github.com':
-                current_host = None
-                host_data = {}
-            else:
-                current_host = val
-                host_data = {}
-        elif current_host:
-            host_data[key] = val
-
-if current_host and 'hostname' in host_data:
-    profiles[current_host] = {
-        'host': host_data['hostname'],
-        'username': host_data.get('user', os.environ.get('USER', 'root')),
-        'port': int(host_data.get('port', 22)),
-        'privateKeyPath': host_data.get('identityfile', '~/.ssh/id_ed25519')
-    }
-
-output = {'profiles': profiles}
-with open('${target_file}', 'w') as out:
-    json.dump(output, out, indent=2)
-print(f'Generated {len(profiles)} SSH profiles in ${target_file}')
-"
+  python3 "${MCP_SYNC_PY}" sync-ssh-profiles \
+    --ssh-config "${HOME}/.ssh/config" \
+    --target "${GEMINI_DIR}/ssh-profiles.json"
 }
 
 sync_docker_profiles() {
-  local ssh_profiles="${GEMINI_DIR}/ssh-profiles.json"
-  local target_file="${GEMINI_DIR}/docker-profiles.json"
-
-  python3 -c "
-import json, os
-
-ssh_file = os.path.expanduser('${ssh_profiles}')
-docker_profiles = {
-    'default': 'local',
-    'profiles': {
-        'local': {'mode': 'local'}
-    }
-}
-
-if os.path.exists(ssh_file):
-    with open(ssh_file, 'r') as f:
-        data = json.load(f)
-    for name, p in data.get('profiles', {}).items():
-        if any(keyword in name for keyword in ['master', 'pi', 'vps', 'racknerd', 'server']):
-            docker_profiles['profiles'][name] = p
-
-with open('${target_file}', 'w') as out:
-    json.dump(docker_profiles, out, indent=2)
-print(f'Generated Docker profiles (default: local, {len(docker_profiles[\"profiles\"]) - 1} remote) in ${target_file}')
-"
+  python3 "${MCP_SYNC_PY}" sync-docker-profiles \
+    --ssh-profiles "${GEMINI_DIR}/ssh-profiles.json" \
+    --target "${GEMINI_DIR}/docker-profiles.json"
 }
 
 sync_k3s_cluster() {
-  echo "Checking remote K3s connectivity on master..."
-  if ssh -o BatchMode=yes -o ConnectTimeout=3 master "true" 2>/dev/null; then
-    python3 -c "
-import subprocess, os, re
-
-try:
-    raw = subprocess.check_output(['ssh', 'master', 'cat /etc/rancher/k3s/k3s.yaml 2>/dev/null || sudo -n cat /etc/rancher/k3s/k3s.yaml 2>/dev/null']).decode('utf-8')
-    raw = raw.replace('name: default', 'name: k3s-master')
-    raw = raw.replace('cluster: default', 'cluster: k3s-master')
-    raw = raw.replace('user: default', 'user: k3s-master-user')
-    raw = raw.replace('server: https://127.0.0.1:6443', 'server: https://master:6443')
-    
-    tmp_path = os.path.expanduser('~/.kube/k3s-master-tmp.yaml')
-    with open(tmp_path, 'w') as f:
-        f.write(raw)
-    
-    kube_cfg = os.path.expanduser('~/.kube/config')
-    merged_cfg = os.path.expanduser('~/.kube/config.merged')
-    cmd = f'KUBECONFIG=\"{kube_cfg}:{tmp_path}\" kubectl config view --flatten > \"{merged_cfg}\" && mv \"{merged_cfg}\" \"{kube_cfg}\"'
-    subprocess.check_call(cmd, shell=True)
-    os.remove(tmp_path)
-    print('K3s cluster context k3s-master synchronized in ~/.kube/config')
-except Exception as e:
-    print(f'Notice: K3s sync skipped ({e})')
-"
-  else
-    echo "Notice: master host not reachable via SSH, skipping K3s cluster kubeconfig refresh."
-  fi
+  python3 "${MCP_SYNC_PY}" sync-k3s --home "${HOME}"
 }
 
 sync_mcp_config() {
@@ -598,391 +496,17 @@ sync_mcp_config() {
   export COPILOT_MCP_PROFILE="${COPILOT_MCP_PROFILE:-minimal}"
   export COPILOT_MCP_SERVERS="${COPILOT_MCP_SERVERS:-}"
 
-  python3 -c "
-import json, os, re, sys
-
-template_file = '${template_file}'
-target_file = '${target_file}'
-codex_config = '${codex_config}'
-codex_template = '${REPO_DIR}/dotfiles/codex/config.template.toml'
-opencode_config = '${opencode_config}'
-copilot_config = '${copilot_config}'
-
-with open(template_file, 'r') as f:
-    content = f.read()
-
-replacements = {
-    '\${HOME}': os.environ.get('HOME', ''),
-    '\${GITHUB_PERSONAL_ACCESS_TOKEN}': os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN', ''),
-    '\${BRAVE_API_KEY}': os.environ.get('BRAVE_API_KEY', ''),
-    '\${EXA_API_KEY}': os.environ.get('EXA_API_KEY', ''),
-    '\${SQLITE_DB_PATH}': os.environ.get('SQLITE_DB_PATH', ''),
-    '\${CLOUDFLARE_ACCOUNT_ID}': os.environ.get('CLOUDFLARE_ACCOUNT_ID', ''),
-    '\${CLOUDFLARE_API_TOKEN}': os.environ.get('CLOUDFLARE_API_TOKEN', ''),
-    '\${PROMETHEUS_URL}': os.environ.get('PROMETHEUS_URL', ''),
-    '\${LOKI_URL}': os.environ.get('LOKI_URL', ''),
-    '\${TAILSCALE_API_KEY}': os.environ.get('TAILSCALE_API_KEY', ''),
-    '\${UPTIME_KUMA_URL}': os.environ.get('UPTIME_KUMA_URL', ''),
-    '\${UPTIME_KUMA_JWT_TOKEN}': os.environ.get('UPTIME_KUMA_JWT_TOKEN', ''),
-    '\${HEALTHCHECKS_API_KEY}': os.environ.get('HEALTHCHECKS_API_KEY', ''),
-    '\${CADDY_ADMIN_URL}': os.environ.get('CADDY_ADMIN_URL', ''),
-    '\${POSTGRES_URL}': os.environ.get('POSTGRES_URL', ''),
-    '\${REDIS_URL}': os.environ.get('REDIS_URL', ''),
-    '\${VAULT_ADDR}': os.environ.get('VAULT_ADDR', ''),
-    '\${VAULT_TOKEN}': os.environ.get('VAULT_TOKEN', ''),
-    '\${SLACK_BOT_TOKEN}': os.environ.get('SLACK_BOT_TOKEN', ''),
-    '\${SLACK_TEAM_ID}': os.environ.get('SLACK_TEAM_ID', ''),
-    '\${DISCORD_TOKEN}': os.environ.get('DISCORD_TOKEN', ''),
-    '\${TFE_TOKEN}': os.environ.get('TFE_TOKEN', ''),
-    '\${TFE_ADDRESS}': os.environ.get('TFE_ADDRESS', ''),
-    '\${POSTMAN_API_KEY}': os.environ.get('POSTMAN_API_KEY', ''),
-    '\${SONARQUBE_TOKEN}': os.environ.get('SONARQUBE_TOKEN', ''),
-    '\${SONARQUBE_URL}': os.environ.get('SONARQUBE_URL', ''),
-    '\${SONARQUBE_ORG}': os.environ.get('SONARQUBE_ORG', '')
-}
-
-for k, v in replacements.items():
-    content = content.replace(k, v)
-
-data = json.loads(content)
-
-def safe_write_config(path, text):
-    dirname = os.path.dirname(path)
-    if dirname:
-        os.makedirs(dirname, exist_ok=True)
-    tmp_path = path + f'.tmp.{os.getpid()}'
-    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        with open(fd, 'w') as f:
-            f.write(text)
-        os.replace(tmp_path, path)
-    except Exception:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        raise
-
-# 1. Antigravity MCP config
-safe_write_config(target_file, json.dumps(data, indent=2))
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {target_file}')
-
-# 2. Codex MCP config (~/.codex/config.toml)
-codex_content = ''
-if os.path.exists(codex_config):
-    with open(codex_config, 'r') as f:
-        codex_content = f.read()
-elif os.path.exists(codex_template):
-    with open(codex_template, 'r') as f:
-        codex_content = f.read()
-
-DEFAULT_CORE_SERVERS = {
-    'ai-memory',
-    'cclsp',
-    'codebase-memory-mcp',
-    'context7',
-    'fetch',
-    'git',
-    'repomix',
-    'semgrep',
-    'sequentialthinking',
-}
-
-def resolve_allowed_servers(profile_env, servers_env, default_servers):
-    profile = os.environ.get(profile_env, 'minimal').strip().lower()
-    custom_raw = os.environ.get(servers_env, '').strip()
-
-    if profile not in ('minimal', 'full'):
-        print(f'Warning: Unrecognized {profile_env} \"{profile}\", defaulting to \"minimal\"', file=sys.stderr)
-        profile = 'minimal'
-
-    if custom_raw:
-        allowed = {s.strip() for s in custom_raw.split(',') if s.strip()}
-        return allowed, f'custom ({len(allowed)} servers)'
-    if profile == 'full':
-        return None, 'full'
-    return default_servers, 'minimal'
-
-allowed_codex_servers, codex_profile_label = resolve_allowed_servers(
-    'CODEX_MCP_PROFILE', 'CODEX_MCP_SERVERS', DEFAULT_CORE_SERVERS
-)
-
-def toml_str(val):
-    escaped = (
-        str(val)
-        .replace('\\\\', '\\\\\\\\')
-        .replace('\"', '\\\\\"')
-        .replace('\n', '\\\\n')
-        .replace('\r', '\\\\r')
-        .replace('\t', '\\\\t')
-    )
-    return f'\"{escaped}\"'
-
-toml_lines = ['\n# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===']
-for name, s in data.get('mcpServers', {}).items():
-    cmd = s.get('command', '')
-    args = s.get('args', [])
-    globally_disabled = s.get('disabled', False)
-    env = s.get('env', {})
-
-    if globally_disabled:
-        codex_enabled = False
-    elif allowed_codex_servers is not None:
-        codex_enabled = name in allowed_codex_servers
-    else:
-        codex_enabled = True
-
-    toml_lines.append(f'[mcp_servers.\"{name}\"]')
-    toml_lines.append(f'command = {toml_str(cmd)}')
-    args_str = ', '.join(toml_str(a) for a in args)
-    toml_lines.append(f'args = [{args_str}]')
-    if not codex_enabled:
-        toml_lines.append('enabled = false')
-
-    if env:
-        toml_lines.append(f'[mcp_servers.\"{name}\".env]')
-        for ek, ev in env.items():
-            toml_lines.append(f'{ek} = {toml_str(ev)}')
-    toml_lines.append('')
-
-toml_lines.append('# === END MANAGED MCP SERVERS (mcp-sync) ===\n')
-managed_block = '\n'.join(toml_lines)
-
-# Strip old managed block (including unterminated blocks)
-cleaned = re.sub(r'\n?# === BEGIN MANAGED MCP SERVERS.*?(?:# === END MANAGED MCP SERVERS[^\n]*|\Z)', '', codex_content, flags=re.DOTALL)
-# Strip any pre-existing unmanaged definitions and sub-tables of the same servers to prevent duplicate table errors
-for s_name in data.get('mcpServers', {}):
-    esc = re.escape(s_name)
-    cleaned = re.sub(rf'\n*\[mcp_servers\.(?:\"{esc}\"|{esc})(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\Z)', '', cleaned)
-
-new_content = cleaned.rstrip() + '\n' + managed_block
-safe_write_config(codex_config, new_content)
-enabled_count = sum(
-    1 for name, s in data.get('mcpServers', {}).items()
-    if not s.get('disabled', False) and (allowed_codex_servers is None or name in allowed_codex_servers)
-)
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {codex_config} ({enabled_count} enabled, profile: {codex_profile_label})')
-
-# 3. OpenCode MCP config (~/.config/opencode/opencode.json)
-allowed_opencode_servers, opencode_profile_label = resolve_allowed_servers(
-    'OPENCODE_MCP_PROFILE', 'OPENCODE_MCP_SERVERS', DEFAULT_CORE_SERVERS
-)
-
-TOKEN_AND_COMMA_RE = re.compile(
-    r'\"(?:\\\\.|[^\"\\\\])*\"|//[^\\r\\n]*|/\\*[\\s\\S]*?\\*/|,\\s*([}\\]])'
-)
-
-def strip_jsonc(text):
-    def repl(match):
-        token = match.group(0)
-        if token.startswith('\"'):
-            return token
-        if token.startswith('//') or token.startswith('/*'):
-            return ''
-        return match.group(1)
-
-    prev = None
-    curr = text
-    while prev != curr:
-        prev = curr
-        curr = TOKEN_AND_COMMA_RE.sub(repl, curr)
-    return curr
-
-def load_json_dict(path, allow_jsonc=False):
-    if not os.path.exists(path):
-        return {}
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        raw = f.read()
-    if not raw.strip():
-        return {}
-    try:
-        loaded = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        if not allow_jsonc:
-            print(
-                f'Error: Could not parse existing {path} ({exc}); aborting without overwriting',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        try:
-            loaded = json.loads(strip_jsonc(raw))
-        except json.JSONDecodeError as jsonc_exc:
-            print(
-                f'Error: Could not parse existing {path} ({jsonc_exc}); aborting without overwriting',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    if not isinstance(loaded, dict):
-        print(
-            f'Error: Expected JSON object in {path}; aborting without overwriting',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return loaded
-
-opencode_data = load_json_dict(opencode_config, allow_jsonc=True)
-
-if '\$schema' not in opencode_data:
-    opencode_data['\$schema'] = 'https://opencode.ai/config.json'
-
-existing_mcp = opencode_data.get('mcp', {})
-if not isinstance(existing_mcp, dict):
-    existing_mcp = {}
-
-managed_names = set(data.get('mcpServers', {}).keys())
-retired_opencode_names = {
-    'chrome-devtools',
-    'puppeteer',
-    'memory',
-    'server-services-configs',
-}
-opencode_mcp = {
-    k: v for k, v in existing_mcp.items()
-    if k not in managed_names and k not in retired_opencode_names
-}
-
-opencode_enabled_count = 0
-for name, s in data.get('mcpServers', {}).items():
-    cmd = s.get('command', '')
-    args = s.get('args', [])
-    globally_disabled = s.get('disabled', False)
-    env = s.get('env', {})
-
-    opencode_enabled = (not globally_disabled) and (
-        allowed_opencode_servers is None or name in allowed_opencode_servers
-    )
-    if opencode_enabled:
-        opencode_enabled_count += 1
-
-    entry = {
-        'type': 'local',
-        'command': [cmd, *args] if cmd else list(args),
-        'enabled': opencode_enabled,
-    }
-    if env:
-        entry['environment'] = env
-    opencode_mcp[name] = entry
-
-opencode_data['mcp'] = opencode_mcp
-safe_write_config(opencode_config, json.dumps(opencode_data, indent=2) + '\n')
-print(f'Synchronized {len(data.get(\"mcpServers\", {}))} MCP servers to {opencode_config} ({opencode_enabled_count} enabled, profile: {opencode_profile_label})')
-
-# 4. GitHub Copilot CLI MCP config (~/.copilot/mcp-config.json)
-allowed_copilot_servers, copilot_profile_label = resolve_allowed_servers(
-    'COPILOT_MCP_PROFILE', 'COPILOT_MCP_SERVERS', DEFAULT_CORE_SERVERS
-)
-
-copilot_data = load_json_dict(copilot_config)
-existing_copilot_mcp = copilot_data.get('mcpServers', {})
-if not isinstance(existing_copilot_mcp, dict):
-    existing_copilot_mcp = {}
-
-copilot_mcp = {
-    k: v for k, v in existing_copilot_mcp.items()
-    if k not in managed_names
-}
-
-copilot_enabled_count = 0
-for name, s in data.get('mcpServers', {}).items():
-    cmd = s.get('command', '')
-    args = s.get('args', [])
-    globally_disabled = s.get('disabled', False)
-    env = s.get('env', {})
-
-    copilot_enabled = (not globally_disabled) and (
-        allowed_copilot_servers is None or name in allowed_copilot_servers
-    )
-    if not copilot_enabled:
-        continue
-
-    copilot_enabled_count += 1
-    entry = {
-        'type': 'local',
-        'command': cmd,
-        'args': list(args),
-        'tools': ['*'],
-    }
-    if env:
-        entry['env'] = env
-    copilot_mcp[name] = entry
-
-copilot_data['mcpServers'] = copilot_mcp
-safe_write_config(copilot_config, json.dumps(copilot_data, indent=2) + '\n')
-print(f'Synchronized {copilot_enabled_count} enabled MCP servers to {copilot_config} (profile: {copilot_profile_label})')
-"
+  python3 "${MCP_SYNC_PY}" sync-mcp-config \
+    --template "${template_file}" \
+    --antigravity "${target_file}" \
+    --codex "${codex_config}" \
+    --codex-template "${REPO_DIR}/dotfiles/codex/config.template.toml" \
+    --opencode "${opencode_config}" \
+    --copilot "${copilot_config}"
 }
 
 backup_with_collision_avoidance() {
-  local src="$1"
-  local base_dest="$2"
-  local dest="${base_dest}"
-  local counter=1
-  while [[ -e "${dest}" || -L "${dest}" ]]; do
-    dest="${base_dest}.${counter}"
-    counter=$((counter + 1))
-  done
-  mv "${src}" "${dest}"
-}
-
-link_skill_into() {
-  local target_dir="$1"
-  local skill_name="$2"
-  local skill_path="$3"
-  local backup_prefix="$4"
-  local dest_skill="${target_dir}/${skill_name}"
-  if [[ "${dest_skill}" -ef "${skill_path}" ]]; then
-    return 0
-  fi
-  local needs_backup=0
-  if [[ -L "${dest_skill}" ]]; then
-    [[ "$(readlink "${dest_skill}" || true)" == "${skill_path}" ]] || needs_backup=1
-  elif [[ -e "${dest_skill}" ]]; then
-    needs_backup=1
-  fi
-  if [[ "${needs_backup}" -eq 1 ]]; then
-    local backup_root="${GEMINI_DIR}/skill-backups"
-    mkdir -p "${backup_root}"
-    local s_bak
-    s_bak="${backup_root}/${backup_prefix}.bak.$(date +%s)"
-    backup_with_collision_avoidance "${dest_skill}" "${s_bak}"
-  fi
-  ln -sfn "${skill_path}" "${dest_skill}"
-}
-
-# Prune managed or dangling skill symlinks in target_dir.
-# valid_set must be formatted with space-padded tokens (e.g. " name1 name2 ")
-# for portable Bash 3.2 compatibility without associative arrays.
-prune_managed_skill_symlinks() {
-  local target_dir="$1"
-  local valid_set="$2"
-  shift 2
-  local -a roots=("$@")
-  [[ -d "${target_dir}" ]] || return 0
-  for existing in "${target_dir}"/*; do
-    if [[ -L "${existing}" ]]; then
-      local target_dest
-      target_dest="$(readlink "${existing}" || true)"
-      local managed=0
-      local s_dir
-      for s_dir in "${roots[@]}"; do
-        if [[ "${target_dest}" == "${s_dir}/"* ]]; then
-          managed=1
-          break
-        fi
-      done
-      if [[ "${managed}" -eq 1 ]]; then
-        if [[ ! -e "${existing}" ]]; then
-          echo "Pruned stale skill link: ${existing}"
-          rm -f "${existing}"
-        else
-          local base
-          base="$(basename "${existing}")"
-          if [[ "${valid_set}" != *" ${base} "* ]]; then
-            echo "Pruned stale skill link: ${existing}"
-            rm -f "${existing}"
-          fi
-        fi
-      fi
-    fi
-  done
+  python3 "${MCP_SYNC_PY}" backup --src "$1" --base-dest "$2"
 }
 
 opencode_available() {
@@ -993,206 +517,35 @@ copilot_available() {
   command -v copilot >/dev/null 2>&1 || [[ -d "${COPILOT_DIR}" ]]
 }
 
-link_instructions_file() {
-  local dest="$1"
-  local src="$2"
-  mkdir -p "$(dirname "${dest}")"
-  if [[ -e "${dest}" && ! -L "${dest}" ]]; then
-    local bak_file="${dest}.bak"
-    [[ -e "${bak_file}" || -L "${bak_file}" ]] && bak_file="${dest}.bak.$(date +%s)"
-    backup_with_collision_avoidance "${dest}" "${bak_file}"
-  fi
-  ln -sfn "${src}" "${dest}"
-}
-
 sync_skills_and_instructions() {
-  local gemini_rules="${REPO_DIR}/dotfiles/gemini/GEMINI.md"
-  local tracked_skills_dir="${REPO_DIR}/dotfiles/agent-skills"
-  local agy_delegation_rule="${REPO_DIR}/dotfiles/gemini/antigravity-cli/rules/auto-delegation.md"
-
-  # Keep repository-tracked skills version-controlled here, then let the
-  # shared-skill sync below mirror them into each agent's discovery directory.
-  if [[ -d "${tracked_skills_dir}" ]]; then
-    local tracked_valid_skills=" "
-    mkdir -p "${HOME}/.agents/skills"
-    for tracked_skill in "${tracked_skills_dir}"/*; do
-      if [[ -d "${tracked_skill}" && -f "${tracked_skill}/SKILL.md" ]]; then
-        local tracked_skill_name
-        tracked_skill_name="$(basename "${tracked_skill}")"
-        tracked_valid_skills="${tracked_valid_skills}${tracked_skill_name} "
-        link_skill_into "${HOME}/.agents/skills" "${tracked_skill_name}" "${tracked_skill}" "${tracked_skill_name}"
-      fi
-    done
-    prune_managed_skill_symlinks "${HOME}/.agents/skills" "${tracked_valid_skills}" "${tracked_skills_dir}"
-  fi
-
-  local thinking_skills_repo="${HOME}/.local/share/cc-thinking-skills"
-  if [[ -d "${thinking_skills_repo}/skills/thinking-model-router" ]]; then
-    mkdir -p "${HOME}/.agents/skills"
-    link_skill_into "${HOME}/.agents/skills" "thinking-model-router" "${thinking_skills_repo}/skills/thinking-model-router" "thinking-model-router"
-  fi
-
-  local agy_rule_dest="${GEMINI_DIR}/antigravity-cli/rules/auto-delegation.md"
-  if [[ -f "${agy_delegation_rule}" ]]; then
-    mkdir -p "$(dirname "${agy_rule_dest}")"
-    if [[ ( -e "${agy_rule_dest}" || -L "${agy_rule_dest}" ) && "$(readlink "${agy_rule_dest}" 2>/dev/null || true)" != "${agy_delegation_rule}" ]]; then
-      local rule_backup_root="${GEMINI_DIR}/rule-backups"
-      mkdir -p "${rule_backup_root}"
-      backup_with_collision_avoidance "${agy_rule_dest}" "${rule_backup_root}/auto-delegation.md.bak.$(date +%s)"
+  local opencode_enabled="${1:-}"
+  local copilot_enabled="${2:-}"
+  if [[ -z "${opencode_enabled}" ]]; then
+    if opencode_available; then
+      opencode_enabled=1
+    else
+      opencode_enabled=0
     fi
-    ln -sfn "${agy_delegation_rule}" "${agy_rule_dest}"
   fi
-
-  local agy_statusline_src="${REPO_DIR}/bin/agy-statusline"
-  local agy_statusline_dest="${LOCAL_BIN_DIR}/agy-statusline"
-  if [[ -f "${agy_statusline_src}" ]]; then
-    if [[ ( -e "${agy_statusline_dest}" || -L "${agy_statusline_dest}" ) && "$(readlink "${agy_statusline_dest}" 2>/dev/null || true)" != "${agy_statusline_src}" ]]; then
-      local statusline_bak
-      statusline_bak="${LOCAL_BIN_DIR}/agy-statusline.bak.$(date +%s)"
-      backup_with_collision_avoidance "${agy_statusline_dest}" "${statusline_bak}"
-    fi
-    ln -sf "${agy_statusline_src}" "${agy_statusline_dest}"
-  fi
-
-  local gemini_settings_src="${REPO_DIR}/dotfiles/gemini/settings.json"
-  local gemini_settings_dest="${GEMINI_DIR}/settings.json"
-  if [[ -f "${gemini_settings_src}" ]]; then
-    if [[ ( -e "${gemini_settings_dest}" || -L "${gemini_settings_dest}" ) && "$(readlink "${gemini_settings_dest}" 2>/dev/null || true)" != "${gemini_settings_src}" ]]; then
-      local settings_bak
-      settings_bak="${GEMINI_DIR}/settings.json.bak.$(date +%s)"
-      backup_with_collision_avoidance "${gemini_settings_dest}" "${settings_bak}"
-    fi
-    ln -sfn "${gemini_settings_src}" "${gemini_settings_dest}"
-  fi
-
-  local agy_settings_src="${REPO_DIR}/dotfiles/gemini/antigravity-cli/settings.json"
-  local agy_settings_dest="${GEMINI_DIR}/antigravity-cli/settings.json"
-  if [[ -f "${agy_settings_src}" ]]; then
-    mkdir -p "$(dirname "${agy_settings_dest}")"
-    if [[ ( -e "${agy_settings_dest}" || -L "${agy_settings_dest}" ) && "$(readlink "${agy_settings_dest}" 2>/dev/null || true)" != "${agy_settings_src}" ]]; then
-      local settings_bak
-      settings_bak="${GEMINI_DIR}/antigravity-cli/settings.json.bak.$(date +%s)"
-      backup_with_collision_avoidance "${agy_settings_dest}" "${settings_bak}"
-    fi
-    ln -sfn "${agy_settings_src}" "${agy_settings_dest}"
-  fi
-
-  local agy_title_src="${REPO_DIR}/dotfiles/gemini/antigravity-cli/title.sh"
-  local agy_title_dest="${GEMINI_DIR}/antigravity-cli/title.sh"
-  if [[ -f "${agy_title_src}" ]]; then
-    mkdir -p "$(dirname "${agy_title_dest}")"
-    if [[ ( -e "${agy_title_dest}" || -L "${agy_title_dest}" ) && "$(readlink "${agy_title_dest}" 2>/dev/null || true)" != "${agy_title_src}" ]]; then
-      local title_bak
-      title_bak="${GEMINI_DIR}/antigravity-cli/title.sh.bak.$(date +%s)"
-      backup_with_collision_avoidance "${agy_title_dest}" "${title_bak}"
-    fi
-    ln -sfn "${agy_title_src}" "${agy_title_dest}"
-  fi
-
-  # Link global instructions across installed agents
-  link_instructions_file "${CODEX_DIR}/AGENTS.md" "${gemini_rules}"
-
-  local opencode_enabled=0
-  if opencode_available; then
-    opencode_enabled=1
-    mkdir -p "${OPENCODE_DIR}"
-    link_instructions_file "${OPENCODE_DIR}/AGENTS.md" "${gemini_rules}"
-
-    local removed_copilot_plugin="${OPENCODE_DIR}/plugins/copilot-student-models.ts"
-    local removed_copilot_target
-    removed_copilot_target="$(readlink "${removed_copilot_plugin}" 2>/dev/null || true)"
-    if [[ -L "${removed_copilot_plugin}" && "${removed_copilot_target}" == "${REPO_DIR}/dotfiles/opencode/plugins/copilot-student-models.ts" ]]; then
-      rm -f "${removed_copilot_plugin}"
+  if [[ -z "${copilot_enabled}" ]]; then
+    if copilot_available; then
+      copilot_enabled=1
+    else
+      copilot_enabled=0
     fi
   fi
 
-  local copilot_enabled=0
-  if copilot_available; then
-    copilot_enabled=1
-    mkdir -p "${COPILOT_DIR}/skills"
-    link_instructions_file "${COPILOT_DIR}/instructions/global.instructions.md" "${gemini_rules}"
-  fi
-
-  # Link skills
-  local -a search_dirs=("${HOME}/.agents/skills" "${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
-  local target_root="${CODEX_DIR}/skills"
-  mkdir -p "${target_root}"
-  if [[ "${opencode_enabled}" -eq 1 ]]; then
-    mkdir -p "${OPENCODE_DIR}/skills"
-  fi
-
-  local valid_skills=" "
-  local opencode_valid_skills=" "
-  for s_dir in "${search_dirs[@]}"; do
-    if [[ -d "${s_dir}" ]]; then
-      for skill_path in "${s_dir}"/*; do
-        if [[ -d "${skill_path}" && -f "${skill_path}/SKILL.md" ]]; then
-          local skill_name
-          skill_name="$(basename "${skill_path}")"
-          if [[ "${valid_skills}" == *" ${skill_name} "* ]]; then
-            continue
-          fi
-          valid_skills="${valid_skills}${skill_name} "
-          link_skill_into "${target_root}" "${skill_name}" "${skill_path}" "${skill_name}"
-
-          if [[ "${copilot_enabled}" -eq 1 ]]; then
-            link_skill_into "${COPILOT_DIR}/skills" "${skill_name}" "${skill_path}" "copilot-${skill_name}"
-          fi
-
-          # Ensure OpenCode discovers skills across all search dirs
-          if [[ "${opencode_enabled}" -eq 1 ]]; then
-            # OpenCode v1.19+ natively scans ~/.agents/skills. Skip linking when
-            # a valid skill is already present in ~/.agents/skills to avoid duplicate warnings.
-            if [[ ! -f "${HOME}/.agents/skills/${skill_name}/SKILL.md" ]]; then
-              link_skill_into "${OPENCODE_DIR}/skills" "${skill_name}" "${skill_path}" "opencode-${skill_name}"
-              opencode_valid_skills="${opencode_valid_skills}${skill_name} "
-            else
-              local opencode_dest="${OPENCODE_DIR}/skills/${skill_name}"
-              if [[ -e "${opencode_dest}" || -L "${opencode_dest}" ]]; then
-                local is_managed_link=0
-                if [[ -L "${opencode_dest}" ]]; then
-                  local link_target
-                  link_target="$(readlink "${opencode_dest}" 2>/dev/null || true)"
-                  local s_root
-                  for s_root in "${search_dirs[@]}"; do
-                    if [[ "${link_target}" == "${s_root}/"* ]]; then
-                      is_managed_link=1
-                      break
-                    fi
-                  done
-                fi
-                if [[ "${is_managed_link}" -eq 0 ]]; then
-                  local backup_root="${GEMINI_DIR}/skill-backups"
-                  mkdir -p "${backup_root}"
-                  local s_bak
-                  s_bak="${backup_root}/opencode-${skill_name}.bak.$(date +%s)"
-                  backup_with_collision_avoidance "${opencode_dest}" "${s_bak}"
-                fi
-              fi
-            fi
-          fi
-
-          # Ensure Antigravity CLI discovers skills managed in ~/.agents/skills
-          if [[ "${s_dir}" == "${HOME}/.agents/skills" ]]; then
-            mkdir -p "${GEMINI_CONFIG_DIR}/skills"
-            local gemini_skill="${GEMINI_CONFIG_DIR}/skills/${skill_name}"
-            if [[ ! -e "${gemini_skill}" || -L "${gemini_skill}" ]]; then
-              ln -sfn "${skill_path}" "${gemini_skill}"
-            fi
-          fi
-        fi
-      done
-    fi
-  done
-
-  # Prune managed/dangling skill symlinks across all agent harnesses
-  prune_managed_skill_symlinks "${target_root}" "${valid_skills}" "${search_dirs[@]}"
-  prune_managed_skill_symlinks "${GEMINI_CONFIG_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
-  prune_managed_skill_symlinks "${OPENCODE_DIR}/skills" "${opencode_valid_skills}" "${search_dirs[@]}"
-  if [[ "${copilot_enabled}" -eq 1 ]]; then
-    prune_managed_skill_symlinks "${COPILOT_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
-  fi
-  echo "Synchronized shared skills and AGENTS.md instructions across agents"
+  python3 "${MCP_SYNC_PY}" sync-skills \
+    --home "${HOME}" \
+    --repo-dir "${REPO_DIR}" \
+    --gemini-dir "${GEMINI_DIR}" \
+    --gemini-config-dir "${GEMINI_CONFIG_DIR}" \
+    --codex-dir "${CODEX_DIR}" \
+    --opencode-dir "${OPENCODE_DIR}" \
+    --copilot-dir "${COPILOT_DIR}" \
+    --local-bin-dir "${LOCAL_BIN_DIR}" \
+    --opencode-enabled "${opencode_enabled}" \
+    --copilot-enabled "${copilot_enabled}"
 }
 
 main() {
@@ -1370,8 +723,16 @@ main() {
   if (( ! configs_only )); then
     sync_k3s_cluster
   fi
+  local opencode_enabled=0
+  local copilot_enabled=0
+  if opencode_available; then
+    opencode_enabled=1
+  fi
+  if copilot_available; then
+    copilot_enabled=1
+  fi
   sync_mcp_config
-  sync_skills_and_instructions
+  sync_skills_and_instructions "${opencode_enabled}" "${copilot_enabled}"
   echo "==> Done. MCP configuration and agent parity ready."
 }
 
