@@ -70,4 +70,50 @@ grep -qx 'mcp-sync --configs-only' "${calls}"
 [[ "$(<"${home_full}/.local/share/cc-thinking-skills/SKILL.md")" == 'v2' ]]
 [[ "$(<"${home_full}/.gemini/config/plugins/ponytail/SKILL.md")" == 'v2' ]]
 
+# Case 3: Diverged clone and failing skills CLI warn and exit non-zero without skipping remaining pulls or mcp-sync.
+cat >"${fake_bin}/skills" <<EOF
+#!/usr/bin/env bash
+printf 'skills-fail %s\n' "\$*" >>"${calls}"
+exit 1
+EOF
+chmod +x "${fake_bin}/skills"
+
+git -C "${home_full}/.gemini/config/plugins/ponytail" config user.name 'Test'
+git -C "${home_full}/.gemini/config/plugins/ponytail" config user.email 'test@example.com'
+printf 'local-only\n' >"${home_full}/.gemini/config/plugins/ponytail/LOCAL.md"
+git -C "${home_full}/.gemini/config/plugins/ponytail" add LOCAL.md
+git -C "${home_full}/.gemini/config/plugins/ponytail" commit -m 'Diverge locally' >/dev/null 2>&1
+
+printf 'v3-upstream\n' >"${tmp_dir}/ponytail-seed/SKILL.md"
+git -C "${tmp_dir}/ponytail-seed" add SKILL.md
+git -C "${tmp_dir}/ponytail-seed" commit -m 'Diverge upstream' >/dev/null 2>&1
+git -C "${tmp_dir}/ponytail-seed" push >/dev/null 2>&1
+
+printf 'v3\n' >"${tmp_dir}/thinking-seed/SKILL.md"
+git -C "${tmp_dir}/thinking-seed" add SKILL.md
+git -C "${tmp_dir}/thinking-seed" commit -m 'Advance v3' >/dev/null 2>&1
+git -C "${tmp_dir}/thinking-seed" push >/dev/null 2>&1
+
+: >"${calls}"
+set +e
+HOME="${home_full}" MCP_SYNC_BIN="${fake_bin}/mcp-sync-stub" PATH="${fake_bin}:${PATH}" \
+  bash "${script}" >"${tmp_dir}/case3.out" 2>"${tmp_dir}/case3.err"
+case3_status=$?
+set -e
+[[ "${case3_status}" -eq 1 ]]
+grep -qx 'skills-fail update -g -y' "${calls}"
+grep -qx 'mcp-sync --configs-only' "${calls}"
+grep -q 'Warning: skills update -g -y failed' "${tmp_dir}/case3.err"
+grep -q 'Warning: failed to fast-forward' "${tmp_dir}/case3.err"
+[[ "$(<"${home_full}/.local/share/cc-thinking-skills/SKILL.md")" == 'v3' ]]
+
+# Case 4: Missing mcp-sync target fails explicitly.
+set +e
+HOME="${home_empty}" MCP_SYNC_BIN="${tmp_dir}/missing-mcp-sync" PATH="${fake_bin}:/usr/bin:/bin" \
+  bash "${script}" >/dev/null 2>"${tmp_dir}/case4.err"
+case4_status=$?
+set -e
+[[ "${case4_status}" -ne 0 ]]
+grep -q 'Error: mcp-sync not found' "${tmp_dir}/case4.err"
+
 echo 'update-skills checks passed'

@@ -97,7 +97,7 @@ mcp-sync --configs-only
 # Install only codebase-memory-mcp, then synchronize all three client configs:
 just setup-codebase-memory
 
-# Update external lockfile skills, standalone skill clones, and re-sync harnesses:
+# Update external lockfile skills, standalone skill clones, and re-sync harnesses (continues syncing on pull/update warnings and exits non-zero if an update step failed):
 just update-skills
 ```
 
