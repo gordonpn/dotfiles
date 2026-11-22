@@ -84,7 +84,7 @@ local edits exist (emitting a warning). Keep confidential code away from
 external inference unless explicitly authorized.
 Delegated GitHub Copilot Student workers isolate MCP exposure via `--mcp-profile` or `COPILOT_DELEGATE_MCP_PROFILE` without mutating interactive configuration; see [MCP setup](docs/mcp-setup.md) and [the shared delegation skill](dotfiles/agent-skills/delegate-coding-agents/SKILL.md).
 
-Domain-specific engineering standards profiles (HTTP APIs, events, observability, identity/security, supply chain, frontend accessibility, data architecture, and AI agents) live in [the shared engineering-standards skill](dotfiles/agent-skills/engineering-standards/SKILL.md) and synchronize on demand across Antigravity CLI, Codex CLI, OpenCode, GitHub Copilot CLI, and Claude Code via `bin/mcp-sync`.
+Domain-specific engineering standards profiles (HTTP APIs, events, observability, identity/security, supply chain, frontend accessibility, data architecture, and AI agents) live in [the shared engineering-standards skill](dotfiles/agent-skills/engineering-standards/SKILL.md) and synchronize on demand across Antigravity CLI, Codex CLI, OpenCode, and GitHub Copilot CLI via `bin/mcp-sync`.
 
 ### Installing and usage
 

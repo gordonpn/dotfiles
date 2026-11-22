@@ -553,12 +553,6 @@ printf 'old copilot instructions\n' >"${COPILOT_DIR}/instructions/global.instruc
 ln -s "${HOME}/.agents/skills/removed-copilot-skill" "${COPILOT_DIR}/skills/stale-copilot-skill"
 ln -s "${HOME}/external-skill" "${COPILOT_DIR}/skills/user-copilot-skill"
 
-mkdir -p "${CLAUDE_DIR}/skills"
-rm -f "${CLAUDE_DIR}/CLAUDE.md"
-printf 'old claude instructions\n' >"${CLAUDE_DIR}/CLAUDE.md"
-ln -s "${HOME}/.agents/skills/removed-claude-skill" "${CLAUDE_DIR}/skills/stale-claude-skill"
-ln -s "${HOME}/external-skill" "${CLAUDE_DIR}/skills/user-claude-skill"
-
 # Managed dangling symlinks to verify pruning across all agent skill directories
 mkdir -p "${GEMINI_CONFIG_DIR}/skills"
 ln -s "${repo_dir}/dotfiles/agent-skills/removed-tracked-skill" "${HOME}/.agents/skills/removed-tracked-skill"
@@ -614,16 +608,10 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
 [[ "$(readlink "${COPILOT_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
 [[ "$(readlink "${COPILOT_DIR}/skills/delegate-coding-agents")" == "${HOME}/.agents/skills/delegate-coding-agents" ]]
-[[ "$(readlink "${CLAUDE_DIR}/skills/engineering-standards")" == "${HOME}/.agents/skills/engineering-standards" ]]
-[[ "$(readlink "${CLAUDE_DIR}/skills/delegate-coding-agents")" == "${HOME}/.agents/skills/delegate-coding-agents" ]]
 [[ -L "${COPILOT_DIR}/instructions/global.instructions.md" ]]
 [[ "$(readlink "${COPILOT_DIR}/instructions/global.instructions.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
 [[ -f "${COPILOT_DIR}/instructions/global.instructions.md.bak" ]]
 [[ "$(<"${COPILOT_DIR}/instructions/global.instructions.md.bak")" == 'old copilot instructions' ]]
-[[ -L "${CLAUDE_DIR}/CLAUDE.md" ]]
-[[ "$(readlink "${CLAUDE_DIR}/CLAUDE.md")" == "${repo_dir}/dotfiles/gemini/GEMINI.md" ]]
-[[ -f "${CLAUDE_DIR}/CLAUDE.md.bak" ]]
-[[ "$(<"${CLAUDE_DIR}/CLAUDE.md.bak")" == 'old claude instructions' ]]
 [[ ! -e "${OPENCODE_DIR}/skills/shared-skill" && ! -L "${OPENCODE_DIR}/skills/shared-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/engineering-standards" && ! -L "${OPENCODE_DIR}/skills/engineering-standards" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/shared-dir-skill" && ! -L "${OPENCODE_DIR}/skills/shared-dir-skill" ]]
@@ -676,8 +664,6 @@ codex_skill_backups=("${GEMINI_DIR}/skill-backups/shared-skill.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/user-codex-skill")" == "${HOME}/external-skill" ]]
 [[ -L "${COPILOT_DIR}/skills/user-copilot-skill" ]]
 [[ "$(readlink "${COPILOT_DIR}/skills/user-copilot-skill")" == "${HOME}/external-skill" ]]
-[[ -L "${CLAUDE_DIR}/skills/user-claude-skill" ]]
-[[ "$(readlink "${CLAUDE_DIR}/skills/user-claude-skill")" == "${HOME}/external-skill" ]]
 [[ -L "${GEMINI_CONFIG_DIR}/skills/user-gemini-skill" ]]
 [[ "$(readlink "${GEMINI_CONFIG_DIR}/skills/user-gemini-skill")" == "${HOME}/external-skill" ]]
 [[ -L "${OPENCODE_DIR}/skills/user-dangling-skill" ]]
@@ -690,7 +676,6 @@ codex_skill_backups=("${GEMINI_DIR}/skill-backups/shared-skill.bak."*)
 [[ ! -e "${OPENCODE_DIR}/skills/stale-opencode-skill" && ! -L "${OPENCODE_DIR}/skills/stale-opencode-skill" ]]
 [[ ! -e "${CODEX_DIR}/skills/stale-codex-skill" && ! -L "${CODEX_DIR}/skills/stale-codex-skill" ]]
 [[ ! -e "${COPILOT_DIR}/skills/stale-copilot-skill" && ! -L "${COPILOT_DIR}/skills/stale-copilot-skill" ]]
-[[ ! -e "${CLAUDE_DIR}/skills/stale-claude-skill" && ! -L "${CLAUDE_DIR}/skills/stale-claude-skill" ]]
 [[ ! -e "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill" && ! -L "${GEMINI_CONFIG_DIR}/skills/stale-gemini-skill" ]]
 [[ ! -e "${OPENCODE_DIR}/skills/renamed-stale-skill" && ! -L "${OPENCODE_DIR}/skills/renamed-stale-skill" ]]
 
@@ -734,26 +719,24 @@ sync_skills_and_instructions
 [[ "$(readlink "${user_plugin}")" == "${HOME}/external-plugin.ts" ]]
 rm -f "${user_plugin}"
 
-# Verify sync_skills_and_instructions leaves optional agent dirs absent when unavailable
+# Verify sync_skills_and_instructions leaves optional agent dirs absent when unavailable and does not create ~/.claude
 (
   export XDG_CONFIG_HOME="${test_tmp_dir}/clean-xdg"
   OPENCODE_DIR="${XDG_CONFIG_HOME}/opencode"
   COPILOT_DIR="${test_tmp_dir}/clean-copilot"
-  CLAUDE_DIR="${test_tmp_dir}/clean-claude"
   opencode_available() { return 1; }
   copilot_available() { return 1; }
-  claude_available() { return 1; }
   sync_skills_and_instructions
   [[ ! -e "${OPENCODE_DIR}" ]]
   [[ ! -e "${COPILOT_DIR}" ]]
-  [[ ! -e "${CLAUDE_DIR}" ]]
+  [[ ! -e "${HOME}/.claude" ]]
 )
 
-# Verify symlinked agent skills directory (CLAUDE_DIR/skills -> ~/.agents/skills) preserves repository links
+# Verify symlinked agent skills directory (COPILOT_DIR/skills -> ~/.agents/skills) preserves repository links
 (
-  CLAUDE_DIR="${test_tmp_dir}/symlinked-claude"
-  mkdir -p "${CLAUDE_DIR}"
-  ln -s "${HOME}/.agents/skills" "${CLAUDE_DIR}/skills"
+  COPILOT_DIR="${test_tmp_dir}/symlinked-copilot"
+  mkdir -p "${COPILOT_DIR}"
+  ln -s "${HOME}/.agents/skills" "${COPILOT_DIR}/skills"
   sync_skills_and_instructions
   [[ -L "${HOME}/.agents/skills/engineering-standards" ]]
   [[ "$(readlink "${HOME}/.agents/skills/engineering-standards")" == "${repo_dir}/dotfiles/agent-skills/engineering-standards" ]]

@@ -13,7 +13,6 @@ GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
 CODEX_DIR="${HOME}/.codex"
 OPENCODE_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/opencode"
 COPILOT_DIR="${COPILOT_DIR:-${COPILOT_HOME:-${HOME}/.copilot}}"
-CLAUDE_DIR="${CLAUDE_DIR:-${HOME}/.claude}"
 KUBE_DIR="${HOME}/.kube"
 LOCAL_BIN_DIR="${HOME}/.local/bin"
 LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
@@ -994,10 +993,6 @@ copilot_available() {
   command -v copilot >/dev/null 2>&1 || [[ -d "${COPILOT_DIR}" ]]
 }
 
-claude_available() {
-  command -v claude >/dev/null 2>&1 || [[ -d "${CLAUDE_DIR}" ]]
-}
-
 link_instructions_file() {
   local dest="$1"
   local src="$2"
@@ -1118,13 +1113,6 @@ sync_skills_and_instructions() {
     link_instructions_file "${COPILOT_DIR}/instructions/global.instructions.md" "${gemini_rules}"
   fi
 
-  local claude_enabled=0
-  if claude_available; then
-    claude_enabled=1
-    mkdir -p "${CLAUDE_DIR}/skills"
-    link_instructions_file "${CLAUDE_DIR}/CLAUDE.md" "${gemini_rules}"
-  fi
-
   # Link skills
   local -a search_dirs=("${HOME}/.agents/skills" "${GEMINI_CONFIG_DIR}/skills" "${GEMINI_CONFIG_DIR}/plugins/ponytail/skills")
   local target_root="${CODEX_DIR}/skills"
@@ -1149,10 +1137,6 @@ sync_skills_and_instructions() {
 
           if [[ "${copilot_enabled}" -eq 1 ]]; then
             link_skill_into "${COPILOT_DIR}/skills" "${skill_name}" "${skill_path}" "copilot-${skill_name}"
-          fi
-
-          if [[ "${claude_enabled}" -eq 1 ]]; then
-            link_skill_into "${CLAUDE_DIR}/skills" "${skill_name}" "${skill_path}" "claude-${skill_name}"
           fi
 
           # Ensure OpenCode discovers skills across all search dirs
@@ -1207,9 +1191,6 @@ sync_skills_and_instructions() {
   prune_managed_skill_symlinks "${OPENCODE_DIR}/skills" "${opencode_valid_skills}" "${search_dirs[@]}"
   if [[ "${copilot_enabled}" -eq 1 ]]; then
     prune_managed_skill_symlinks "${COPILOT_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
-  fi
-  if [[ "${claude_enabled}" -eq 1 ]]; then
-    prune_managed_skill_symlinks "${CLAUDE_DIR}/skills" "${valid_skills}" "${search_dirs[@]}"
   fi
   echo "Synchronized shared skills and AGENTS.md instructions across agents"
 }
