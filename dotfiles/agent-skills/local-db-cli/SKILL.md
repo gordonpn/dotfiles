@@ -28,23 +28,24 @@ For multi-line queries, place the SQL in a dedicated `.sql` file and execute `sq
 
 ## 2. PostgreSQL (`psql` / `pgcli`)
 
-Use `psql` (or `docker exec` / `kubectl exec` against a running Postgres container/pod when `psql` is not installed on the host). Enforce read-only transactions for inspection queries.
+Use `psql` (`/opt/homebrew/bin/psql` via Homebrew `libpq` on macOS, or `docker exec` / `kubectl exec` against a running Postgres container/pod when `psql` is not installed on the host). Enforce read-only sessions via `PGOPTIONS='-c default_transaction_read_only=on'` (because a single `-c` string runs inside one implicit transaction where `SET default_transaction_read_only = on;` would only affect subsequent transactions) or wrap `.sql` file queries in `BEGIN READ ONLY; ...; COMMIT;`.
 
 ```bash
 # Inspect tables and schema using environment variables or ~/.pgpass (never inline password URIs)
-psql --no-psqlrc -v ON_ERROR_STOP=1 -c "\dt"
-psql --no-psqlrc -v ON_ERROR_STOP=1 -c "\d+ table_name"
+PGOPTIONS='-c default_transaction_read_only=on' psql --no-psqlrc -v ON_ERROR_STOP=1 -c "\dt"
+PGOPTIONS='-c default_transaction_read_only=on' psql --no-psqlrc -v ON_ERROR_STOP=1 -c "\d+ table_name"
 
-# Run a read-only query from a dedicated .sql file or single-line -c command
-psql --no-psqlrc -v ON_ERROR_STOP=1 --csv -c "SET default_transaction_read_only = on; SELECT count(*) FROM events;"
+# Run a read-only query from a single-line -c command or dedicated .sql file
+PGOPTIONS='-c default_transaction_read_only=on' psql --no-psqlrc -v ON_ERROR_STOP=1 --csv -c "SELECT count(*) FROM events;"
+PGOPTIONS='-c default_transaction_read_only=on' psql --no-psqlrc -v ON_ERROR_STOP=1 -f query.sql
 
 # Execute against a containerized or Kubernetes Postgres instance when local psql is absent
-kubectl exec -n <namespace> <postgres-pod> -- psql -U <user> -d <db> -v ON_ERROR_STOP=1 -c "\dt"
+kubectl exec -n <namespace> <postgres-pod> -- env PGOPTIONS='-c default_transaction_read_only=on' psql -U <user> -d <db> -v ON_ERROR_STOP=1 -c "\dt"
 ```
 
 ## 3. Redis (`redis-cli`)
 
-Use `redis-cli` locally or via `docker exec` / `kubectl exec`. Always prefer non-blocking `--scan` over `KEYS *`.
+Use `redis-cli` (`/opt/homebrew/bin/redis-cli` via Homebrew `redis` on macOS, or via `docker exec` / `kubectl exec`). Always prefer non-blocking `--scan` over `KEYS *`.
 
 ```bash
 # Connectivity and server health summary
@@ -68,12 +69,12 @@ redis-cli SLOWLOG GET 10
 | --- | --- | --- |
 | `sqlite` (`read_query`, `list_tables`, `describe_table`) | `sqlite3 -readonly -json <db> "<sql>"`, `.tables`, `PRAGMA table_info(<table>)` | Works on any `.db`/`.sqlite` file without reconfiguring `${SQLITE_DB_PATH}` |
 | `sqlite` (`append_insight` / `memo://insights`) | Standard Markdown notes or project artifacts | In-process MCP memo resource is not used in CLI workflows |
-| `postgres` (`query`) | `psql -v ON_ERROR_STOP=1 -c "SET default_transaction_read_only = on; ..."` | Supports `\d`, `EXPLAIN`, and explicit read-only transaction guards |
+| `postgres` (`query`) | `PGOPTIONS='-c default_transaction_read_only=on' psql -v ON_ERROR_STOP=1 -c "<sql>"` | Supports `\d`, `EXPLAIN`, and session-level read-only transaction enforcement |
 | `redis` (`redis_scan`, `redis_key_info`, `redis_health`, `redis_slowlog`) | `redis-cli --scan`, `TYPE` + `TTL`, `INFO`, `SLOWLOG GET` | Combine `INFO memory` + `INFO stats` + `SLOWLOG GET` in place of `redis_advisor` |
 
 ## Credential and data-boundary rules
 
 - **Never embed passwords in command arguments:** Do not pass `postgresql://user:password@...` or `redis-cli -a <password>` on the command line where process tables (`ps`) or shell logs can capture them.
 - **Use credential files or scoped environment variables:** Configure PostgreSQL credentials via `~/.pgpass` (`0600` permissions) or `.env` (`PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGPASSFILE`), and Redis authentication via `REDISCLI_AUTH` sourced from an untracked `.env` or secret store.
-- **Default to read-only:** Use `sqlite3 -readonly` and `SET default_transaction_read_only = on;` for all diagnostic and exploration queries.
+- **Default to read-only:** Use `sqlite3 -readonly` and `PGOPTIONS='-c default_transaction_read_only=on'` (or `BEGIN READ ONLY;`) for all diagnostic and exploration queries.
 - **Dedicated `.sql` files:** Keep non-trivial or multi-line SQL queries in dedicated `.sql` files rather than inline multi-line shell strings.

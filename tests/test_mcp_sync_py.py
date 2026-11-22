@@ -158,7 +158,11 @@ class TestMcpSyncHelpers(unittest.TestCase):
         }
         existing_copilot: dict[str, object] = {
             "customSetting": True,
-            "mcpServers": {"custom-copilot": {"type": "local", "command": "echo", "args": [], "tools": ["*"]}},
+            "mcpServers": {
+                "custom-copilot": {"type": "local", "command": "echo", "args": [], "tools": ["*"]},
+                "sqlite": {"type": "local", "command": "uvx", "args": ["mcp-server-sqlite"], "tools": ["*"]},
+                "postgres": {"type": "local", "command": "npx", "args": ["server-postgres"], "tools": ["*"]},
+            },
         }
 
         oc_data, oc_enabled = mcp_sync.render_opencode_config(existing_opencode, specs, mcp_sync.DEFAULT_CORE_SERVERS)
@@ -178,6 +182,8 @@ class TestMcpSyncHelpers(unittest.TestCase):
         cp_mcp = cast(dict[str, dict[str, object]], cp_data["mcpServers"])
         self.assertIn("custom-copilot", cp_mcp)
         self.assertIn("fetch", cp_mcp)
+        self.assertNotIn("sqlite", cp_mcp)
+        self.assertNotIn("postgres", cp_mcp)
         self.assertNotIn("docker", cp_mcp)
         self.assertNotIn("vault", cp_mcp)
 

@@ -558,7 +558,11 @@ def render_copilot_config(
     existing_mcp = dict(raw_mcp) if isinstance(raw_mcp, dict) else {}
     managed_names = {spec.name for spec in servers}
 
-    copilot_mcp: dict[str, object] = {k: v for k, v in existing_mcp.items() if k not in managed_names}
+    copilot_mcp: dict[str, object] = {
+        k: v
+        for k, v in existing_mcp.items()
+        if k not in managed_names and k not in RETIRED_OPENCODE_SERVERS
+    }
     enabled_count = 0
     for spec in servers:
         if not is_server_enabled(spec, allowed_servers):
