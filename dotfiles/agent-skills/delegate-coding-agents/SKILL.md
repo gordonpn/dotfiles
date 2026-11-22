@@ -14,14 +14,16 @@ The **agent started by the user is the orchestrator**, and always owns final des
 | Antigravity CLI | Codex, OpenCode, GitHub Copilot Student | yes | yes |
 | Codex | OpenCode, GitHub Copilot Student | yes | yes |
 
-Do **not** call a harness from inside its delegated invocation, recursively delegate, or hand tasks back in a loop. Honor explicit user choices. Prefer `delegate.sh` over same-harness `invoke_subagent` on nontrivial coding tasks, skipping low-value overhead. Keep confidential work code away from external inference.
+Do **not** call a harness from inside its delegated invocation, recursively delegate, or hand tasks back in a loop. Honor explicit user choices. Prefer the Codex plugin (when installed) for read-only/continuity work and `delegate.sh` for isolated builds over same-harness `invoke_subagent` on nontrivial coding tasks, skipping low-value overhead. Keep confidential work code away from external inference.
 
-For Antigravity CLI, route sequentially through `agy-cli -> codex -> opencode -> github copilot student` and stop after the first worker completes successfully:
+For Antigravity CLI:
 
-1. Codex CLI non-interactive execution (`codex exec` in isolated worktree with `--sandbox read-only` or `--sandbox workspace-write`).
-2. Only after classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/deepseek-v4.1-flash-free` with high variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`).
-3. If all OpenCode candidate free models fail with classified provider/quota errors, use first-party GitHub Copilot CLI under the Student plan with `--model auto`.
-4. If Copilot Student fails or is unavailable, continue with native `invoke_subagent` or directly with Antigravity.
+1. **Read-only plans, reviews, debugging, and continuity:** When the user-installed Codex plugin runner (`$HOME/.gemini/config/plugins/codex/scripts/codex-runner.mjs`) exists, route via `node "$RUNNER" task|review|adversarial-review` (adding `--resume-last` on follow-ups). If the plugin runner is absent, fall back to `delegate.sh --orchestrator agy --agent codex --mode plan`.
+2. **Isolated-worktree implementation builds and quota fallbacks:** Route via `delegate.sh` sequentially through `codex -> opencode -> github copilot student` (or pass `--agent opencode` directly after a Codex plugin quota/rate-limit failure so Codex is not retried):
+   - Codex CLI non-interactive execution (`codex exec` in isolated worktree with `--sandbox read-only` or `--sandbox workspace-write`).
+   - On classified provider, quota, rate-limit, or model-availability failure, retry across OpenCode candidate free models (`opencode/deepseek-v4.1-flash-free` with high variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free`).
+   - If all OpenCode candidate free models fail with classified provider/quota errors, use first-party GitHub Copilot CLI under the Student plan with `--model auto`.
+   - If Copilot Student fails or is unavailable, continue with native `invoke_subagent` or directly with Antigravity.
 
 For Codex, route sequentially: OpenCode free models first, then GitHub Copilot Student (`--model auto`). Codex cannot delegate to Codex.
 
@@ -32,19 +34,25 @@ Authentication and provider-initialization errors are hard stops: show a message
 Use the script in **the current skill installation**. Codex default install: `~/.agents/skills/delegate-coding-agents`; agy CLI default install: `~/.gemini/config/skills/delegate-coding-agents`.
 
 ```bash
-# Antigravity delegates a read-only plan to Codex (falling back to OpenCode and Copilot)
+# Antigravity read-only task, review, or follow-up via Codex plugin (when installed)
+RUNNER="$HOME/.gemini/config/plugins/codex/scripts/codex-runner.mjs"
+if [ -f "$RUNNER" ]; then
+  node "$RUNNER" task --resume-last 'Inspect cursor handling; propose concrete design and tests.'
+fi
+
+# Antigravity delegates a read-only plan via delegate.sh (when plugin is absent, or --agent opencode after plugin quota error)
 "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
-  --orchestrator agy --automatic --agent codex --mode plan \
+  --orchestrator agy --agent codex --mode plan \
   --id pagination-plan --task 'Inspect cursor handling; propose concrete design and tests.'
 
 # Antigravity delegates an isolated build
 "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
-  --orchestrator agy --automatic --agent codex --mode build \
+  --orchestrator agy --agent codex --mode build \
   --id pagination-api --task 'Implement cursor-based pagination and tests in API module.'
 
 # Explicit worker pin (e.g. Copilot Student with --model auto)
 "$HOME/.gemini/config/skills/delegate-coding-agents/scripts/delegate.sh" \
-  --orchestrator agy --automatic --agent copilot --mode plan \
+  --orchestrator agy --agent copilot --mode plan \
   --id copilot-review --task 'Review test coverage and edge cases.'
 ```
 
@@ -56,7 +64,7 @@ OpenCode defaults to `opencode/deepseek-v4.1-flash-free` with high variant, auto
 
 State: objective, acceptance criteria, owned files, forbidden files, compatibility constraints, permitted verification commands, and required output. Prefer a task file outside the checkout for longer prompts. Explicitly say if a task is plan-only or build.
 
-- **Plan:** explain implementation order, affected files/functions, tradeoffs, tests, and risks. No working-tree modifications. Plan requests remain prompt-constrained and the runner rejects any plan worktree that changes files.
+- **Plan:** explain implementation order, affected files/functions, tradeoffs, tests, and risks. No working-tree modifications. Prefer the Codex plugin (`codex-runner.mjs` in read-only mode) when present under Antigravity; when falling back to `delegate.sh --mode plan` on a dirty checkout for review, pass any uncommitted diff and untracked files in `--task` / `--task-file` (since the worktree snapshots committed `HEAD` only). Plan requests remain prompt-constrained and `delegate.sh` rejects any plan worktree that changes files.
 - **Build:** create/edit files only within worktree scope, add tests, run allowed checks; do not commit/push/merge/rebase. Return changed files, test outcomes and failures.
 
 The wrapper creates an external Git worktree from the **committed** base revision (`--base`, defaulting to `HEAD`), warns when uncommitted/untracked changes exist in the base checkout (excluding them from the worktree snapshot), and leaves build changes uncommitted on a `delegate/...` branch. The orchestrator inspects `DELEGATION_RESULT`, report/log files, `git status`, `git diff`, new files, and denied tool commands. Exit 0 means transport success, not correct code. If approved, stage only intended files, commit in the worktree, and cherry-pick to the integration branch. When `dirty_base=1` or `Overlapping dirty base files` is reported (`dirty_base_overlap=1` in `manifest.txt`), never copy whole files from the worktree over dirty base files or reset/checkout the base working tree to force a cherry-pick; reconcile overlapping hunks manually against the base checkout first. Run repository tests and the existing Alibaba Open Code Review pre-PR gate (if present) before PR creation.
