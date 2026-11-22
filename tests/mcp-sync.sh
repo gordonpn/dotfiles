@@ -744,6 +744,29 @@ rm -f "${user_plugin}"
   [[ "$(readlink "${HOME}/.agents/skills/delegate-coding-agents")" == "${repo_dir}/dotfiles/agent-skills/delegate-coding-agents" ]]
 )
 
+# Verify main --configs-only checks client availability before sync_mcp_config creates client directories
+(
+  clean_home="${test_tmp_dir}/clean-main-home"
+  GEMINI_DIR="${clean_home}/.gemini"
+  GEMINI_CONFIG_DIR="${GEMINI_DIR}/config"
+  CODEX_DIR="${clean_home}/.codex"
+  OPENCODE_DIR="${test_tmp_dir}/clean-main-xdg/opencode"
+  COPILOT_DIR="${test_tmp_dir}/clean-main-copilot"
+  LOCAL_BIN_DIR="${clean_home}/.local/bin"
+  LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
+  mkdir -p "${clean_home}" "${GEMINI_CONFIG_DIR}" "${CODEX_DIR}" "${LOCAL_BIN_DIR}"
+  HOME="${clean_home}"
+  opencode_available() { [[ -d "${OPENCODE_DIR}" ]]; }
+  copilot_available() { [[ -d "${COPILOT_DIR}" ]]; }
+  main --configs-only >/dev/null
+  [[ -f "${OPENCODE_DIR}/opencode.json" ]]
+  [[ -f "${COPILOT_DIR}/mcp-config.json" ]]
+  [[ ! -e "${OPENCODE_DIR}/AGENTS.md" && ! -L "${OPENCODE_DIR}/AGENTS.md" ]]
+  [[ ! -e "${OPENCODE_DIR}/skills" ]]
+  [[ ! -e "${COPILOT_DIR}/instructions/global.instructions.md" && ! -L "${COPILOT_DIR}/instructions/global.instructions.md" ]]
+  [[ ! -e "${COPILOT_DIR}/skills" ]]
+)
+
 install_codebase_memory_mcp() { echo codebase >>"$calls"; }
 install_ai_memory() { echo ai-memory >>"$calls"; }
 install_thinking_skills() { echo thinking-skills >>"$calls"; }

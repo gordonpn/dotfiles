@@ -10,7 +10,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -83,6 +85,7 @@ MANAGED_BLOCK_RE: re.Pattern[str] = re.compile(
     r"\n?# === BEGIN MANAGED MCP SERVERS.*?(?:# === END MANAGED MCP SERVERS[^\n]*|\Z)",
     flags=re.DOTALL,
 )
+TOML_HEADER_RE: re.Pattern[str] = re.compile(r"^[ \t]*\[(.+?)\](?:[ \t]*(?:#.*)?)?$")
 
 
 @dataclass(frozen=True)
@@ -113,11 +116,10 @@ class SyncSkillsConfig:
 
 
 def safe_write_config(path: Path, text: str) -> None:
-    """Write text atomically to path with 0600 permissions."""
-    if path.parent:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = Path(f"{path}.tmp.{os.getpid()}")
-    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    """Write text atomically to path using a fresh private 0600 temporary file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.tmp.", dir=path.parent)
+    tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
@@ -128,19 +130,35 @@ def safe_write_config(path: Path, text: str) -> None:
         raise
 
 
+def _strip_ssh_quotes(value: str) -> str:
+    """Strip one pair of matching surrounding quotes from an SSH config token."""
+    cleaned = value.strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ('"', "'"):
+        return cleaned[1:-1]
+    return cleaned
+
+
+def _parse_ssh_port(raw_port: str) -> int:
+    """Parse an SSH Port directive, tolerating valid OpenSSH quotes."""
+    cleaned = _strip_ssh_quotes(raw_port)
+    return int(cleaned) if cleaned.isdigit() else 22
+
+
 def parse_ssh_config(text: str, default_user: str) -> dict[str, dict[str, object]]:
     """Parse SSH Host stanzas into SSH MCP profile dictionaries."""
     profiles: dict[str, dict[str, object]] = {}
-    current_host: str | None = None
+    current_hosts: list[str] = []
     host_data: dict[str, str] = {}
 
     def flush() -> None:
-        if current_host and "hostname" in host_data:
-            profiles[current_host] = {
-                "host": host_data["hostname"],
-                "username": host_data.get("user", default_user),
-                "port": int(host_data.get("port", "22")),
-                "privateKeyPath": host_data.get("identityfile", "~/.ssh/id_ed25519"),
+        if not current_hosts or not host_data:
+            return
+        for alias in current_hosts:
+            profiles[alias] = {
+                "host": _strip_ssh_quotes(host_data.get("hostname", alias)),
+                "username": _strip_ssh_quotes(host_data.get("user", default_user)),
+                "port": _parse_ssh_port(host_data.get("port", "22")),
+                "privateKeyPath": _strip_ssh_quotes(host_data.get("identityfile", "~/.ssh/id_ed25519")),
             }
 
     for raw_line in text.splitlines():
@@ -153,14 +171,16 @@ def parse_ssh_config(text: str, default_user: str) -> dict[str, dict[str, object
         key, val = parts[0].lower(), parts[1].strip()
         if key == "host":
             flush()
-            if "*" in val or val == "github.com":
-                current_host = None
-                host_data = {}
-            else:
-                current_host = val
-                host_data = {}
-        elif current_host is not None:
-            host_data[key] = val
+            aliases: list[str] = []
+            for token in val.split():
+                alias = _strip_ssh_quotes(token)
+                if not alias or any(ch in alias for ch in ("*", "?", "!")) or alias == "github.com":
+                    continue
+                aliases.append(alias)
+            current_hosts = aliases
+            host_data = {}
+        elif current_hosts:
+            host_data.setdefault(key, val)
 
     flush()
     return profiles
@@ -202,15 +222,52 @@ def sync_docker_profiles(ssh_profiles: Path, target_file: Path) -> None:
     print(f"Generated Docker profiles (default: local, {len(profile_map) - 1} remote) in {target_file}")
 
 
+def rewrite_k3s_kubeconfig(raw: str) -> str:
+    """Rename K3s default cluster, context, user, and server to k3s-master identifiers."""
+    section = ""
+    out_lines: list[str] = []
+    for line in raw.splitlines(keepends=True):
+        stripped = line.rstrip("\r\n")
+        if stripped and not stripped[0].isspace() and not stripped.startswith(("-", "#")):
+            if stripped.startswith("clusters:"):
+                section = "clusters"
+            elif stripped.startswith("contexts:"):
+                section = "contexts"
+            elif stripped.startswith("users:"):
+                section = "users"
+            else:
+                section = ""
+                if stripped in ("current-context: default", 'current-context: "default"', "current-context: 'default'"):
+                    ending = line[len(stripped) :]
+                    line = f"current-context: k3s-master{ending}"
+            out_lines.append(line)
+            continue
+
+        if section == "clusters":
+            line = line.replace("server: https://127.0.0.1:6443", "server: https://master:6443")
+            line = re.sub(r"^([ \t]*(?:-\s+)?)name:\s*([\"']?)default\2(?=[ \t]*(?:\r?\n)?$)", r"\1name: k3s-master", line)
+        elif section == "contexts":
+            line = re.sub(r"^([ \t]*(?:-\s+)?)cluster:\s*([\"']?)default\2(?=[ \t]*(?:\r?\n)?$)", r"\1cluster: k3s-master", line)
+            line = re.sub(r"^([ \t]*(?:-\s+)?)user:\s*([\"']?)default\2(?=[ \t]*(?:\r?\n)?$)", r"\1user: k3s-master-user", line)
+            line = re.sub(r"^([ \t]*(?:-\s+)?)name:\s*([\"']?)default\2(?=[ \t]*(?:\r?\n)?$)", r"\1name: k3s-master", line)
+        elif section == "users":
+            line = re.sub(r"^([ \t]*(?:-\s+)?)name:\s*([\"']?)default\2(?=[ \t]*(?:\r?\n)?$)", r"\1name: k3s-master-user", line)
+        out_lines.append(line)
+    return "".join(out_lines)
+
+
 def sync_k3s_cluster(home: Path) -> None:
     """Fetch remote k3s.yaml from master over SSH and merge into ~/.kube/config."""
     print("Checking remote K3s connectivity on master...")
-    tmp_path = home / ".kube" / "k3s-master-tmp.yaml"
+    kube_dir = home / ".kube"
+    tmp_path: Path | None = None
+    clean_cfg: Path | None = None
     try:
         probe = subprocess.run(
             ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "master", "true"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            timeout=5,
             check=False,
         )
         if probe.returncode != 0:
@@ -220,39 +277,73 @@ def sync_k3s_cluster(home: Path) -> None:
         raw = subprocess.check_output(
             [
                 "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=5",
                 "master",
                 "cat /etc/rancher/k3s/k3s.yaml 2>/dev/null || sudo -n cat /etc/rancher/k3s/k3s.yaml 2>/dev/null",
             ],
+            timeout=15,
             text=True,
         )
-        raw = (
-            raw.replace("name: default", "name: k3s-master")
-            .replace("cluster: default", "cluster: k3s-master")
-            .replace("user: default", "user: k3s-master-user")
-            .replace("server: https://127.0.0.1:6443", "server: https://master:6443")
-        )
-        safe_write_config(tmp_path, raw)
+        rewritten = rewrite_k3s_kubeconfig(raw)
+        kube_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = kube_dir / f".k3s-master-tmp-{os.getpid()}.yaml"
+        safe_write_config(tmp_path, rewritten)
 
-        kube_cfg = home / ".kube" / "config"
+        kube_cfg = kube_dir / "config"
         env = os.environ.copy()
-        env["KUBECONFIG"] = f"{kube_cfg}:{tmp_path}"
-        flattened = subprocess.check_output(["kubectl", "config", "view", "--flatten"], env=env, text=True)
+        if kube_cfg.is_file():
+            prev_ctx_proc = subprocess.run(
+                ["kubectl", "--kubeconfig", str(kube_cfg), "config", "current-context"],
+                capture_output=True,
+                timeout=15,
+                text=True,
+                check=False,
+            )
+            prev_ctx = prev_ctx_proc.stdout.strip() if prev_ctx_proc.returncode == 0 else ""
+
+            clean_cfg = kube_dir / f".config-clean-{os.getpid()}"
+            safe_write_config(clean_cfg, kube_cfg.read_text(encoding="utf-8"))
+            for args in (
+                ["delete-context", "k3s-master"],
+                ["delete-cluster", "k3s-master"],
+                ["delete-user", "k3s-master-user"],
+                ["delete-user", "k3s-master"],
+            ):
+                subprocess.run(
+                    ["kubectl", "--kubeconfig", str(clean_cfg), "config", *args],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=15,
+                    check=False,
+                )
+            if prev_ctx and prev_ctx != "k3s-master":
+                env["KUBECONFIG"] = f"{clean_cfg}:{tmp_path}"
+            else:
+                env["KUBECONFIG"] = f"{tmp_path}:{clean_cfg}"
+        else:
+            env["KUBECONFIG"] = str(tmp_path)
+
+        flattened = subprocess.check_output(["kubectl", "config", "view", "--flatten"], env=env, timeout=15, text=True)
         safe_write_config(kube_cfg, flattened)
         print("K3s cluster context k3s-master synchronized in ~/.kube/config")
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"Notice: K3s sync skipped ({exc})")
     finally:
-        if os.path.lexists(tmp_path):
-            tmp_path.unlink()
+        for leftover in (tmp_path, clean_cfg):
+            if leftover is not None and os.path.lexists(leftover):
+                leftover.unlink()
 
 
 def hydrate_json_value(value: object, replacements: dict[str, str]) -> object:
-    """Recursively substitute placeholder tokens inside JSON string values."""
+    """Recursively substitute placeholder tokens once inside JSON string values."""
     if isinstance(value, str):
-        hydrated = value
-        for token, replacement in replacements.items():
-            hydrated = hydrated.replace(token, replacement)
-        return hydrated
+        if not replacements:
+            return value
+        pattern = re.compile("|".join(re.escape(token) for token in replacements))
+        return pattern.sub(lambda match: replacements[match.group(0)], value)
     if isinstance(value, list):
         return [hydrate_json_value(item, replacements) for item in value]
     if isinstance(value, dict):
@@ -356,11 +447,25 @@ def render_codex_toml(
     managed_block = "\n".join(toml_lines)
 
     cleaned = MANAGED_BLOCK_RE.sub("", existing_content)
-    for spec in servers:
-        esc = re.escape(spec.name)
-        cleaned = re.sub(rf'\n*\[mcp_servers\.(?:"{esc}"|{esc})(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\Z)', "", cleaned)
+    managed_prefixes: tuple[str, ...] = tuple(
+        prefix
+        for spec in servers
+        for prefix in (f'mcp_servers."{spec.name}"', f"mcp_servers.'{spec.name}'", f"mcp_servers.{spec.name}")
+    )
+    kept_lines: list[str] = []
+    skip_section = False
+    for line in cleaned.splitlines(keepends=True):
+        header_match = TOML_HEADER_RE.match(line)
+        if header_match:
+            header = header_match.group(1).strip()
+            skip_section = any(header == prefix or header.startswith(f"{prefix}.") for prefix in managed_prefixes)
+        if not skip_section:
+            kept_lines.append(line)
 
-    return cleaned.rstrip() + "\n" + managed_block, enabled_count
+    stripped_existing = "".join(kept_lines).rstrip()
+    rendered = (stripped_existing + "\n" + managed_block) if stripped_existing else managed_block.lstrip("\n")
+    tomllib.loads(rendered)
+    return rendered, enabled_count
 
 
 def strip_jsonc(text: str) -> str:
@@ -371,7 +476,7 @@ def strip_jsonc(text: str) -> str:
         if token.startswith('"'):
             return token
         if token.startswith(("//", "/*")):
-            return ""
+            return " "
         return match.group(1)
 
     prev: str | None = None
@@ -489,7 +594,11 @@ def sync_mcp_config(
         print(f"Error: Template {template_file} not found.", file=sys.stderr)
         raise SystemExit(1)
 
-    raw_template = json.loads(template_file.read_text(encoding="utf-8"))
+    try:
+        raw_template = json.loads(template_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Error: Could not parse template {template_file} ({exc}).", file=sys.stderr)
+        raise SystemExit(1) from exc
     if not isinstance(raw_template, dict):
         print(f"Error: Template {template_file} must be a JSON object.", file=sys.stderr)
         raise SystemExit(1)
@@ -511,7 +620,11 @@ def sync_mcp_config(
         codex_existing = codex_template.read_text(encoding="utf-8")
 
     allowed_codex, codex_label = resolve_allowed_servers("CODEX_MCP_PROFILE", "CODEX_MCP_SERVERS", DEFAULT_CORE_SERVERS)
-    new_codex, codex_enabled_count = render_codex_toml(codex_existing, servers, allowed_codex)
+    try:
+        new_codex, codex_enabled_count = render_codex_toml(codex_existing, servers, allowed_codex)
+    except tomllib.TOMLDecodeError as exc:
+        print(f"Error: Rendered Codex TOML for {codex_config} is invalid ({exc}).", file=sys.stderr)
+        raise SystemExit(1) from exc
     safe_write_config(codex_config, new_codex)
     print(f"Synchronized {len(servers)} MCP servers to {codex_config} ({codex_enabled_count} enabled, profile: {codex_label})")
 
@@ -632,7 +745,7 @@ def prune_managed_skill_symlinks(target_dir: Path, valid_names: set[str], roots:
         target_dest = os.readlink(existing)
         if not is_managed_link_target(target_dest, roots):
             continue
-        if not existing.exists() or existing.name not in valid_names:
+        if not existing.exists() or not (existing / "SKILL.md").is_file() or existing.name not in valid_names:
             print(f"Pruned stale skill link: {existing}")
             existing.unlink()
 

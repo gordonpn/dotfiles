@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from typing import cast
@@ -315,6 +316,151 @@ class TestMcpSyncHelpers(unittest.TestCase):
             self.assertTrue(kube_cfg.is_file())
             self.assertEqual(stat.S_IMODE(kube_cfg.stat().st_mode), 0o600)
             self.assertFalse((home / ".kube" / "k3s-master-tmp.yaml").exists())
+
+    def test_parse_ssh_config_handles_aliases_missing_hostname_and_quoted_port(self) -> None:
+        raw = (
+            "Host master master-lan\n"
+            "  HostName 100.72.77.63\n"
+            '  Port "2222"\n'
+            "Host direct.example.org\n"
+            "  User ops\n"
+        )
+
+        profiles = mcp_sync.parse_ssh_config(raw, default_user="alice")
+
+        self.assertEqual(set(profiles.keys()), {"master", "master-lan", "direct.example.org"})
+        self.assertEqual(profiles["master"]["port"], 2222)
+        self.assertEqual(profiles["master-lan"]["host"], "100.72.77.63")
+        self.assertEqual(
+            profiles["direct.example.org"],
+            {
+                "host": "direct.example.org",
+                "username": "ops",
+                "port": 22,
+                "privateKeyPath": "~/.ssh/id_ed25519",
+            },
+        )
+
+    def test_rewrite_k3s_kubeconfig_renames_refs_consistently(self) -> None:
+        sample = (
+            "apiVersion: v1\n"
+            "clusters:\n"
+            "- cluster:\n"
+            "    certificate-authority-data: CA\n"
+            "    server: https://127.0.0.1:6443\n"
+            "  name: default\n"
+            "contexts:\n"
+            "- context:\n"
+            "    cluster: default\n"
+            "    user: default\n"
+            "  name: default\n"
+            "current-context: default\n"
+            "kind: Config\n"
+            "users:\n"
+            "- name: default\n"
+            "  user:\n"
+            "    client-certificate-data: NEW_CERT\n"
+        )
+
+        rewritten = mcp_sync.rewrite_k3s_kubeconfig(sample)
+
+        self.assertIn("server: https://master:6443", rewritten)
+        self.assertIn("cluster: k3s-master", rewritten)
+        self.assertIn("user: k3s-master-user", rewritten)
+        self.assertIn("current-context: k3s-master", rewritten)
+        self.assertIn("users:\n- name: k3s-master-user\n", rewritten)
+        self.assertNotIn("default", rewritten)
+
+    def test_sync_k3s_cluster_refreshes_existing_kubeconfig_and_preserves_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            kube_cfg = home / ".kube" / "config"
+            kube_cfg.parent.mkdir(parents=True)
+            kube_cfg.write_text("current-context: prod\n", encoding="utf-8")
+
+            seen_kubeconfigs: list[str] = []
+
+            def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                if cmd[:2] == ["kubectl", "--kubeconfig"] and cmd[-2:] == ["config", "current-context"]:
+                    return subprocess.CompletedProcess(cmd, 0, stdout="prod\n", stderr="")
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+            def fake_check_output(cmd: list[str], **kwargs: object) -> str:
+                if cmd[0] == "ssh":
+                    return "current-context: default\n"
+                env = cast(dict[str, str], kwargs["env"])
+                seen_kubeconfigs.append(env["KUBECONFIG"])
+                return "current-context: prod\n"
+
+            with (
+                mock.patch("mcp_sync.subprocess.run", side_effect=fake_run),
+                mock.patch("mcp_sync.subprocess.check_output", side_effect=fake_check_output),
+            ):
+                mcp_sync.sync_k3s_cluster(home)
+
+            self.assertEqual(len(seen_kubeconfigs), 1)
+            parts = seen_kubeconfigs[0].split(":")
+            self.assertEqual(len(parts), 2)
+            self.assertIn(".config-clean-", parts[0])
+            self.assertIn(".k3s-master-tmp-", parts[1])
+
+    def test_hydrate_json_value_single_pass_prevents_chained_substitution(self) -> None:
+        value = {"arg": "${SQLITE_DB_PATH}", "combined": "${VAULT_ADDR}/${VAULT_TOKEN}"}
+
+        hydrated = mcp_sync.hydrate_json_value(
+            value,
+            {
+                "${SQLITE_DB_PATH}": "/tmp/${VAULT_TOKEN}",
+                "${VAULT_ADDR}": "https://vault.local",
+                "${VAULT_TOKEN}": "secret",
+            },
+        )
+
+        self.assertEqual(
+            hydrated,
+            {"arg": "/tmp/${VAULT_TOKEN}", "combined": "https://vault.local/secret"},
+        )
+
+    def test_render_codex_toml_preserves_indented_sections_and_strips_single_quoted(self) -> None:
+        existing = (
+            "[mcp_servers.'git']\n"
+            'command = "old-git"\n'
+            "\n"
+            "  [tui]\n"
+            '  copy_on_select = "always"\n'
+        )
+        specs = [mcp_sync.ServerSpec(name="git", command="uvx", args=("mcp-server-git",), disabled=False, env={})]
+
+        rendered, enabled = mcp_sync.render_codex_toml(existing, specs, frozenset({"git"}))
+        parsed = tomllib.loads(rendered)
+
+        self.assertEqual(enabled, 1)
+        self.assertIn("  [tui]\n", rendered)
+        self.assertEqual(cast(dict[str, object], parsed["tui"])["copy_on_select"], "always")
+        self.assertEqual(cast(dict[str, dict[str, object]], parsed["mcp_servers"])["git"]["command"], "uvx")
+
+    def test_strip_jsonc_preserves_token_boundaries_on_comments(self) -> None:
+        malformed = '{"n": 1/* comment */2}'
+
+        stripped = mcp_sync.strip_jsonc(malformed)
+
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(stripped)
+
+    def test_prune_managed_skill_symlinks_prunes_target_lacking_skill_md(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shared_root = root / "agents_skills"
+            target_dir = root / "gemini_skills"
+            skill_dir = shared_root / "alpha"
+            skill_dir.mkdir(parents=True)
+            target_dir.mkdir(parents=True)
+            link_path = target_dir / "alpha"
+            os.symlink(skill_dir, link_path)
+
+            mcp_sync.prune_managed_skill_symlinks(target_dir, {"alpha"}, (shared_root,))
+
+            self.assertFalse(os.path.lexists(link_path))
 
 
 if __name__ == "__main__":

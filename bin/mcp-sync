@@ -518,13 +518,21 @@ copilot_available() {
 }
 
 sync_skills_and_instructions() {
-  local opencode_enabled=0
-  local copilot_enabled=0
-  if opencode_available; then
-    opencode_enabled=1
+  local opencode_enabled="${1:-}"
+  local copilot_enabled="${2:-}"
+  if [[ -z "${opencode_enabled}" ]]; then
+    if opencode_available; then
+      opencode_enabled=1
+    else
+      opencode_enabled=0
+    fi
   fi
-  if copilot_available; then
-    copilot_enabled=1
+  if [[ -z "${copilot_enabled}" ]]; then
+    if copilot_available; then
+      copilot_enabled=1
+    else
+      copilot_enabled=0
+    fi
   fi
 
   python3 "${MCP_SYNC_PY}" sync-skills \
@@ -715,8 +723,16 @@ main() {
   if (( ! configs_only )); then
     sync_k3s_cluster
   fi
+  local opencode_enabled=0
+  local copilot_enabled=0
+  if opencode_available; then
+    opencode_enabled=1
+  fi
+  if copilot_available; then
+    copilot_enabled=1
+  fi
   sync_mcp_config
-  sync_skills_and_instructions
+  sync_skills_and_instructions "${opencode_enabled}" "${copilot_enabled}"
   echo "==> Done. MCP configuration and agent parity ready."
 }
 
