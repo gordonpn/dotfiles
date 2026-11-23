@@ -1,53 +1,43 @@
-# Project Execution Queue
+# Next Up
 
-- **Last Refined:** 2026-11-05 00:30 UTC-5
-- **Repository:** [gordonpn/dotfiles](https://github.com/gordonpn/dotfiles)
-- **GitHub Backlog:** [gordonpn/dotfiles Issues](https://github.com/gordonpn/dotfiles/issues)
+**Canonical Source:** [GitHub Issues](https://github.com/gordonpn/dotfiles/issues)
+**Last Refined:** 2026-11-23T17:00:00Z
+**Default Branch Snapshot (as of refinement):** `origin/master` (`47514d3`)
 
-## NOW - Recommended Next Task
+## NOW
 
-### [#23: perf(delegate): isolate delegated OpenCode workers with minimal MCP configuration](https://github.com/gordonpn/dotfiles/issues/23)
+- **#126: fix(delegate): advance fallback chain when primary candidate executable is missing** -> https://github.com/gordonpn/dotfiles/issues/126
+  - **Priority:** P2
+  - **Effort:** XS
+  - **Readiness:** READY
+  - **Dependencies:** None
+  - **Why NOW:** Small, self-contained `XS` bug fix in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` identified during PR #123 review: when `codex` is absent from `PATH`, `delegate.sh` currently exits before entering the fallback loop even when valid OpenCode free models or GitHub Copilot CLI fallbacks are installed.
+  - **First Concrete Action:** Update the pre-loop executable availability check in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` so missing primary candidates advance to the next configured fallback candidate while still failing fast when zero candidates in the chain are installed.
+  - **Definition of Done:**
+    - `delegate.sh --orchestrator agy --agent codex` advances to OpenCode/Copilot when `codex` is absent from `PATH` and at least one fallback executable is present.
+    - Running with no available candidate executables still exits non-zero with an actionable installation message.
+    - `bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh`, `just lint`, and `just test` pass cleanly.
+  - **Unblocks:** Resilient multi-agent fallback on hosts where only a subset of agent CLIs is installed.
 
-- **Priority:** P1
-- **Effort:** S
-- **Readiness:** READY
-- **Why now:** Directly resolves the 5 to 8 second cold-start latency and infinite context compaction loops experienced by delegated subagents on 64k-prompt models during `delegate.sh` runs. Local repository tasks do not require the 33 external homelab MCP servers.
-- **First action:** In `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh`, supply a clean configuration override (or an isolated OpenCode configuration with empty `mcp: {}`) when invoking `opencode run` for delegated workers.
-- **Definition of Done:**
-  - `delegate.sh --agent opencode --mode plan --task "..."` launches with an isolated MCP configuration that does not spawn external homelab MCP servers.
-  - Delegated OpenCode tasks complete without context compaction loops on 64k models.
-  - `bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh` and `just test` pass cleanly.
-- **Unblocks:** Reduces token and process load ahead of broader client-tiering in #19.
+## NEXT
 
-## NEXT - Upcoming Work
-
-1. **[#31: fix(sync): eliminate duplicate OpenCode skill discovery warnings in mcp-sync](https://github.com/gordonpn/dotfiles/issues/31)**
-   - **Priority:** P2
-   - **Effort:** XS
-   - **Readiness:** READY
-   - **Dependencies:** None
-   - **Rationale:** Quick win. OpenCode v1.19+ natively scans `~/.agents/skills`. Modifying `sync_skills_and_instructions` in `bin/mcp-sync` to avoid linking skills into `~/.config/opencode/skills` when they already exist in `~/.agents/skills` eliminates noisy startup warnings.
-
-2. **[#19: feat(mcp-sync): implement client-specific MCP enablement tiers in mcp-sync](https://github.com/gordonpn/dotfiles/issues/19)**
-   - **Priority:** P1
-   - **Effort:** M
-   - **Readiness:** READY
-   - **Dependencies:** None (can follow #23)
-   - **Rationale:** Solves the root eager-loading tool bloat across interactive OpenCode and Codex sessions. Keeps all 37 servers from `dotfiles/gemini/mcp_config.template.json` enabled for Antigravity CLI (which lazy-loads tools from disk), while defaulting OpenCode and Codex to core daily-driver servers (`context7`, `codebase-memory-mcp`, `ai-memory`, `github`), staying well below the 128-tool limit.
-
-3. **[#17: perf(mcp): reduce 547 eager MCP tool schemas across 37 configured servers in OpenCode and Codex](https://github.com/gordonpn/dotfiles/issues/17)**
-   - **Priority:** P1
-   - **Effort:** M
-   - **Readiness:** IN PROGRESS
-   - **Dependencies:** Tracks completion of #23, #31, and #19.
-   - **Rationale:** Parent Epic/Story tracking overall reduction of the 547 eager MCP schemas.
+1. **#133: test(mcp): verify reduced-profile runtime and cross-client skill parity** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/133
+   - **Dependencies:** Follows merged PR #130 (`bf7be1c`, which implemented the 6-server `DEFAULT_CORE_SERVERS` profile and `semgrep`, `repomix`, and `local-db-cli` skills for `#100` and `#101`); coordinates with `#93`.
+   - **Rationale:** Verifies live client startup tool/schema counts and skill discovery across harnesses so `#100` and `#101` can be closed with runtime evidence.
+2. **#119: feat(delegate): add mechanical per-repo and remote opt-out guard for external delegation** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/119
+   - **Dependencies:** None (can follow `#126` in `delegate.sh`).
+   - **Rationale:** Adds an explicit per-repository or remote opt-out mechanism in `delegate.sh` for confidential repositories while keeping delegation frictionless by default on personal repos.
+3. **#93: test(delegate): add live runtime verification for 64k OpenCode non-compaction and Copilot CLI MCP isolation** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/93
+   - **Dependencies:** Coordinates with `#133`.
+   - **Rationale:** Validates live 64k non-compaction and Copilot CLI MCP flag isolation outside mocked unit tests.
+4. **#86: investigation: verify DeepSeek harness MCP compatibility and minimal profile** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/86
+   - **Dependencies:** Can run in parallel with `#93` and `#133`.
+   - **Rationale:** Confirms whether any standalone DeepSeek CLI integration is needed beyond OpenCode-backed `scripts/deepseek-analyze.sh`.
 
 ## BLOCKERS
 
-None. Issues #31 and #19 are unblocked and ready for immediate implementation; #17 is in progress and tracks completion of #23, #31, and #19.
+None currently blocking execution (prior milestone issues `#17`, `#19`, `#23`, `#31`, `#99`, and `#102` are closed; `#100` and `#101` implementation landed in PR #130 at `bf7be1c` with live runtime verification tracked in `#133`).
 
 ## LATER
 
-Lower-priority deferred tasks are tracked directly in GitHub Issues:
-- [#20: investigation: establish a cross-client MCP performance baseline](https://github.com/gordonpn/dotfiles/issues/20) (P3, Effort: S)
-- [#27: investigation: evaluate project-specific MCP profiles](https://github.com/gordonpn/dotfiles/issues/27) (P3, Effort: S)
+See [all open GitHub Issues](https://github.com/gordonpn/dotfiles/issues) for `READY` P3 maintenance, test, and migration items (`#67`, `#94`, `#95`, `#98`, `#103`, `#104`, `#111`, `#112`, `#113`, `#118`, `#121`, `#125`, `#128`, `#129`, `#131`, `#132`), and `DEFERRED` / exploratory items (`#27`, `#39`, `#60`, `#61`, `#66`, `#71-#81`, `#89`).
