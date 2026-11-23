@@ -6,8 +6,6 @@
 prSections:
   - title: "All Project PRs"
     filters: "is:open user:gordonpn sort:updated-asc"
-  - title: "Review Required"
-    filters: "is:open user:gordonpn review:required sort:updated-asc"
   - title: "Recently Active"
     filters: >-
       is:open user:gordonpn
@@ -17,14 +15,14 @@ prSections:
     filters: "is:open repo:gordonpn/snaptally sort:updated-asc"
   - title: "merge-verdict"
     filters: "is:open repo:gordonpn/merge-verdict sort:updated-asc"
-  - title: "digest-engine"
-    filters: "is:open repo:gordonpn/digest-engine sort:updated-asc"
-  - title: "gym-calculator"
-    filters: "is:open repo:gordonpn/gym-calculator sort:updated-asc"
   - title: "shunt-shim"
     filters: "is:open repo:gordonpn/shunt-shim sort:updated-asc"
   - title: "dotfiles"
     filters: "is:open repo:gordonpn/dotfiles sort:updated-asc"
+  - title: "digest-engine"
+    filters: "is:open repo:gordonpn/digest-engine sort:updated-asc"
+  - title: "gym-calculator"
+    filters: "is:open repo:gordonpn/gym-calculator sort:updated-asc"
   - title: "watchgraph"
     filters: "is:open repo:gordonpn/watchgraph sort:updated-asc"
 
