@@ -1,40 +1,43 @@
 # Next Up
 
 **Canonical Source:** [GitHub Issues](https://github.com/gordonpn/dotfiles/issues)
-**Last Refined:** 2026-11-16T01:52:00Z
-**Verified Default Branch:** `origin/master` (`0010232`)
+**Last Refined:** 2026-11-23T17:00:00Z
+**Default Branch Snapshot (as of refinement):** `origin/master` (`47514d3`)
 
 ## NOW
 
-- **#99: test(agents): verify engineering-standards compliance challenge and post-merge unified symlink cutover** -> https://github.com/gordonpn/dotfiles/issues/99
+- **#126: fix(delegate): advance fallback chain when primary candidate executable is missing** -> https://github.com/gordonpn/dotfiles/issues/126
   - **Priority:** P2
-  - **Effort:** S
-  - **Readiness:** IN PROGRESS
-  - **Why NOW:** Live cutover on `master` already confirmed unified symlinks and exposed an active OpenCode/`~/.claude/skills/` duplicate-skill warning regression (`opencode debug skill --print-logs --log-level WARN`). Resolving it plus running the synthetic `engineering-standards` compliance check finishes an already started task with no external blockers.
-  - **First Concrete Action:** Inspect how `bin/mcp-sync` populates `~/.claude/skills/` and why OpenCode emits `duplicate skill name` warnings on live workstations despite `tests/mcp-sync.sh` passing.
+  - **Effort:** XS
+  - **Readiness:** READY
+  - **Dependencies:** None
+  - **Why NOW:** Small, self-contained `XS` bug fix in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` identified during PR #123 review: when `codex` is absent from `PATH`, `delegate.sh` currently exits before entering the fallback loop even when valid OpenCode free models or GitHub Copilot CLI fallbacks are installed.
+  - **First Concrete Action:** Update the pre-loop executable availability check in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` so missing primary candidates advance to the next configured fallback candidate while still failing fast when zero candidates in the chain are installed.
   - **Definition of Done:**
-    - `bin/mcp-sync` eliminates live `opencode debug skill --print-logs --log-level WARN` duplicate-skill warnings while preserving Claude Code, Copilot, Codex, Antigravity, and OpenCode parity and green `just lint` / `just test`.
-    - At least two harnesses pass the synthetic `engineering-standards` compliance challenge (including OpenCode-backed `scripts/deepseek-analyze.sh`).
-    - `docs/decisions.md` entry for `2026-11-15` links PR `#97` instead of `PR pending`.
-  - **Unblocks:** Reliable skill parity baseline across all harnesses.
+    - `delegate.sh --orchestrator agy --agent codex` advances to OpenCode/Copilot when `codex` is absent from `PATH` and at least one fallback executable is present.
+    - Running with no available candidate executables still exits non-zero with an actionable installation message.
+    - `bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh`, `just lint`, and `just test` pass cleanly.
+  - **Unblocks:** Resilient multi-agent fallback on hosts where only a subset of agent CLIs is installed.
 
 ## NEXT
 
-1. **#102: chore(mcp): remove deprecated and broken legacy MCP entries from template and sync** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/102
-   - Safe, isolated `XS` cleanup removing retired `server-services-configs`, `chrome-devtools`, `puppeteer`, and `memory` template entries and marking `caddy`, `vault`, and `discord` `disabled: true` while keeping `filesystem` (`${HOME}`) and `exa` (`agy`-lazy).
-2. **#101: feat(skills): add CLI-backed skills for semgrep, repomix, and local DB inspection** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/101
-   - Packages `semgrep`, `repomix`, and local DB CLI workflows as Agent Skills; directly **unblocks `#100`** so minimal-profile reduction preserves capability parity.
-3. **#100: perf(mcp-sync): optimize minimal MCP profile using audit schema token measurements** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/100
-   - **Depends on `#101` (`semgrep`/`repomix` skill parity); coordinates with `#104` (`brave-search` package migration).** Reduces default eager minimal profile from 9 servers (`~54k` tokens) to 6 servers (`~24.7k` tokens interactively; `~7.9k` in `delegate.sh`), keeping `brave-search` in `core`.
-4. **#93: test(delegate): add live runtime verification for 64k OpenCode non-compaction and Copilot CLI MCP isolation** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/93
-   - Independent of `#100-#102`; can run in parallel to verify live 64k non-compaction and Copilot CLI MCP flag isolation.
-5. **#86: investigation: verify DeepSeek harness MCP compatibility and minimal profile** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/86
-   - Can run in parallel with `#93` or follow `#100`; verifies whether any standalone DeepSeek CLI exists beyond OpenCode-backed `scripts/deepseek-analyze.sh`.
+1. **#133: test(mcp): verify reduced-profile runtime and cross-client skill parity** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/133
+   - **Dependencies:** Follows merged PR #130 (`bf7be1c`, which implemented the 6-server `DEFAULT_CORE_SERVERS` profile and `semgrep`, `repomix`, and `local-db-cli` skills for `#100` and `#101`); coordinates with `#93`.
+   - **Rationale:** Verifies live client startup tool/schema counts and skill discovery across harnesses so `#100` and `#101` can be closed with runtime evidence.
+2. **#119: feat(delegate): add mechanical per-repo and remote opt-out guard for external delegation** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/119
+   - **Dependencies:** None (can follow `#126` in `delegate.sh`).
+   - **Rationale:** Adds an explicit per-repository or remote opt-out mechanism in `delegate.sh` for confidential repositories while keeping delegation frictionless by default on personal repos.
+3. **#93: test(delegate): add live runtime verification for 64k OpenCode non-compaction and Copilot CLI MCP isolation** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/93
+   - **Dependencies:** Coordinates with `#133`.
+   - **Rationale:** Validates live 64k non-compaction and Copilot CLI MCP flag isolation outside mocked unit tests.
+4. **#86: investigation: verify DeepSeek harness MCP compatibility and minimal profile** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/86
+   - **Dependencies:** Can run in parallel with `#93` and `#133`.
+   - **Rationale:** Confirms whether any standalone DeepSeek CLI integration is needed beyond OpenCode-backed `scripts/deepseek-analyze.sh`.
 
 ## BLOCKERS
 
-None currently blocking execution (PR `docs/mcp-audit-decisions` open for review to persist settled `#100`-`#104` decisions).
+None currently blocking execution (prior milestone issues `#17`, `#19`, `#23`, `#31`, `#99`, and `#102` are closed; `#100` and `#101` implementation landed in PR #130 at `bf7be1c` with live runtime verification tracked in `#133`).
 
 ## LATER
 
-See [all open GitHub Issues](https://github.com/gordonpn/dotfiles/issues) for `READY` P3 maintenance and migration items (`#67`, `#94`, `#95`, `#98`, `#103`, `#104`), and `DEFERRED` / exploratory items (`#27`, `#39`, `#60`, `#61`, `#66`, `#71-#81`, `#89`).
+See [all open GitHub Issues](https://github.com/gordonpn/dotfiles/issues) for `READY` P3 maintenance, test, and migration items (`#67`, `#94`, `#95`, `#98`, `#103`, `#104`, `#111`, `#112`, `#113`, `#118`, `#121`, `#125`, `#128`, `#129`, `#131`, `#132`), and `DEFERRED` / exploratory items (`#27`, `#39`, `#60`, `#61`, `#66`, `#71-#81`, `#89`).
