@@ -1,53 +1,40 @@
-# Project Execution Queue
+# Next Up
 
-- **Last Refined:** 2026-11-05 00:30 UTC-5
-- **Repository:** [gordonpn/dotfiles](https://github.com/gordonpn/dotfiles)
-- **GitHub Backlog:** [gordonpn/dotfiles Issues](https://github.com/gordonpn/dotfiles/issues)
+**Canonical Source:** [GitHub Issues](https://github.com/gordonpn/dotfiles/issues)
+**Last Refined:** 2026-11-16T01:52:00Z
+**Verified Default Branch:** `origin/master` (`0010232`)
 
-## NOW - Recommended Next Task
+## NOW
 
-### [#23: perf(delegate): isolate delegated OpenCode workers with minimal MCP configuration](https://github.com/gordonpn/dotfiles/issues/23)
+- **#99: test(agents): verify engineering-standards compliance challenge and post-merge unified symlink cutover** -> https://github.com/gordonpn/dotfiles/issues/99
+  - **Priority:** P2
+  - **Effort:** S
+  - **Readiness:** IN PROGRESS
+  - **Why NOW:** Live cutover on `master` already confirmed unified symlinks and exposed an active OpenCode/`~/.claude/skills/` duplicate-skill warning regression (`opencode debug skill --print-logs --log-level WARN`). Resolving it plus running the synthetic `engineering-standards` compliance check finishes an already started task with no external blockers.
+  - **First Concrete Action:** Inspect how `bin/mcp-sync` populates `~/.claude/skills/` and why OpenCode emits `duplicate skill name` warnings on live workstations despite `tests/mcp-sync.sh` passing.
+  - **Definition of Done:**
+    - `bin/mcp-sync` eliminates live `opencode debug skill --print-logs --log-level WARN` duplicate-skill warnings while preserving Claude Code, Copilot, Codex, Antigravity, and OpenCode parity and green `just lint` / `just test`.
+    - At least two harnesses pass the synthetic `engineering-standards` compliance challenge (including OpenCode-backed `scripts/deepseek-analyze.sh`).
+    - `docs/decisions.md` entry for `2026-11-15` links PR `#97` instead of `PR pending`.
+  - **Unblocks:** Reliable skill parity baseline across all harnesses.
 
-- **Priority:** P1
-- **Effort:** S
-- **Readiness:** READY
-- **Why now:** Directly resolves the 5 to 8 second cold-start latency and infinite context compaction loops experienced by delegated subagents on 64k-prompt models during `delegate.sh` runs. Local repository tasks do not require the 33 external homelab MCP servers.
-- **First action:** In `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh`, supply a clean configuration override (or an isolated OpenCode configuration with empty `mcp: {}`) when invoking `opencode run` for delegated workers.
-- **Definition of Done:**
-  - `delegate.sh --agent opencode --mode plan --task "..."` launches with an isolated MCP configuration that does not spawn external homelab MCP servers.
-  - Delegated OpenCode tasks complete without context compaction loops on 64k models.
-  - `bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh` and `just test` pass cleanly.
-- **Unblocks:** Reduces token and process load ahead of broader client-tiering in #19.
+## NEXT
 
-## NEXT - Upcoming Work
-
-1. **[#31: fix(sync): eliminate duplicate OpenCode skill discovery warnings in mcp-sync](https://github.com/gordonpn/dotfiles/issues/31)**
-   - **Priority:** P2
-   - **Effort:** XS
-   - **Readiness:** READY
-   - **Dependencies:** None
-   - **Rationale:** Quick win. OpenCode v1.19+ natively scans `~/.agents/skills`. Modifying `sync_skills_and_instructions` in `bin/mcp-sync` to avoid linking skills into `~/.config/opencode/skills` when they already exist in `~/.agents/skills` eliminates noisy startup warnings.
-
-2. **[#19: feat(mcp-sync): implement client-specific MCP enablement tiers in mcp-sync](https://github.com/gordonpn/dotfiles/issues/19)**
-   - **Priority:** P1
-   - **Effort:** M
-   - **Readiness:** READY
-   - **Dependencies:** None (can follow #23)
-   - **Rationale:** Solves the root eager-loading tool bloat across interactive OpenCode and Codex sessions. Keeps all 37 servers from `dotfiles/gemini/mcp_config.template.json` enabled for Antigravity CLI (which lazy-loads tools from disk), while defaulting OpenCode and Codex to core daily-driver servers (`context7`, `codebase-memory-mcp`, `ai-memory`, `github`), staying well below the 128-tool limit.
-
-3. **[#17: perf(mcp): reduce 547 eager MCP tool schemas across 37 configured servers in OpenCode and Codex](https://github.com/gordonpn/dotfiles/issues/17)**
-   - **Priority:** P1
-   - **Effort:** M
-   - **Readiness:** IN PROGRESS
-   - **Dependencies:** Tracks completion of #23, #31, and #19.
-   - **Rationale:** Parent Epic/Story tracking overall reduction of the 547 eager MCP schemas.
+1. **#102: chore(mcp): remove deprecated and broken legacy MCP entries from template and sync** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/102
+   - Safe, isolated `XS` cleanup removing retired `server-services-configs`, `chrome-devtools`, `puppeteer`, and `memory` template entries and marking `caddy`, `vault`, and `discord` `disabled: true` while keeping `filesystem` (`${HOME}`) and `exa` (`agy`-lazy).
+2. **#101: feat(skills): add CLI-backed skills for semgrep, repomix, and local DB inspection** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/101
+   - Packages `semgrep`, `repomix`, and local DB CLI workflows as Agent Skills; directly **unblocks `#100`** so minimal-profile reduction preserves capability parity.
+3. **#100: perf(mcp-sync): optimize minimal MCP profile using audit schema token measurements** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/100
+   - **Depends on `#101` (`semgrep`/`repomix` skill parity); coordinates with `#104` (`brave-search` package migration).** Reduces default eager minimal profile from 9 servers (`~54k` tokens) to 6 servers (`~24.7k` tokens interactively; `~7.9k` in `delegate.sh`), keeping `brave-search` in `core`.
+4. **#93: test(delegate): add live runtime verification for 64k OpenCode non-compaction and Copilot CLI MCP isolation** (`priority:p2`, `effort:xs`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/93
+   - Independent of `#100-#102`; can run in parallel to verify live 64k non-compaction and Copilot CLI MCP flag isolation.
+5. **#86: investigation: verify DeepSeek harness MCP compatibility and minimal profile** (`priority:p2`, `effort:s`, `READY`) -> https://github.com/gordonpn/dotfiles/issues/86
+   - Can run in parallel with `#93` or follow `#100`; verifies whether any standalone DeepSeek CLI exists beyond OpenCode-backed `scripts/deepseek-analyze.sh`.
 
 ## BLOCKERS
 
-None. Issues #31 and #19 are unblocked and ready for immediate implementation; #17 is in progress and tracks completion of #23, #31, and #19.
+None currently blocking execution (PR `docs/mcp-audit-decisions` open for review to persist settled `#100`-`#104` decisions).
 
 ## LATER
 
-Lower-priority deferred tasks are tracked directly in GitHub Issues:
-- [#20: investigation: establish a cross-client MCP performance baseline](https://github.com/gordonpn/dotfiles/issues/20) (P3, Effort: S)
-- [#27: investigation: evaluate project-specific MCP profiles](https://github.com/gordonpn/dotfiles/issues/27) (P3, Effort: S)
+See [all open GitHub Issues](https://github.com/gordonpn/dotfiles/issues) for `READY` P3 maintenance and migration items (`#67`, `#94`, `#95`, `#98`, `#103`, `#104`), and `DEFERRED` / exploratory items (`#27`, `#39`, `#60`, `#61`, `#66`, `#71-#81`, `#89`).
