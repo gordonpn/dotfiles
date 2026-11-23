@@ -105,15 +105,15 @@ class TestMcpSyncHelpers(unittest.TestCase):
             "[tui]\n"
             'copy_on_select = "always"\n'
             "\n"
-            '[mcp_servers."git"]\n'
-            'command = "old-git"\n'
+            '[mcp_servers."fetch"]\n'
+            'command = "old-fetch"\n'
             "\n"
             "# === BEGIN MANAGED MCP SERVERS (mcp-sync) ===\n"
             "[mcp_servers.stale]\n"
             'command = "stale"'
         )
         specs = [
-            mcp_sync.ServerSpec(name="git", command="uvx", args=("mcp-server-git",), disabled=False, env={}),
+            mcp_sync.ServerSpec(name="fetch", command="uvx", args=("mcp-server-fetch",), disabled=False, env={}),
             mcp_sync.ServerSpec(
                 name="vault",
                 command="/bin/vault-mcp",
@@ -127,9 +127,9 @@ class TestMcpSyncHelpers(unittest.TestCase):
 
         self.assertEqual(enabled_count, 1)
         self.assertIn('[tui]\ncopy_on_select = "always"', rendered)
-        self.assertNotIn("old-git", rendered)
+        self.assertNotIn("old-fetch", rendered)
         self.assertNotIn("stale", rendered)
-        self.assertIn('[mcp_servers."git"]\ncommand = "uvx"\nargs = ["mcp-server-git"]', rendered)
+        self.assertIn('[mcp_servers."fetch"]\ncommand = "uvx"\nargs = ["mcp-server-fetch"]', rendered)
         self.assertIn('[mcp_servers."vault"]\ncommand = "/bin/vault-mcp"\nargs = []\nenabled = false', rendered)
         self.assertIn('VAULT_TOKEN = "tok\\"1"', rendered)
 
@@ -143,7 +143,7 @@ class TestMcpSyncHelpers(unittest.TestCase):
 
     def test_render_opencode_and_copilot_profiles(self) -> None:
         specs = [
-            mcp_sync.ServerSpec(name="git", command="uvx", args=("mcp-server-git",), disabled=False, env={}),
+            mcp_sync.ServerSpec(name="fetch", command="uvx", args=("mcp-server-fetch",), disabled=False, env={}),
             mcp_sync.ServerSpec(name="docker", command="npx", args=("docker-mcp",), disabled=False, env={"A": "1"}),
             mcp_sync.ServerSpec(name="vault", command="/bin/vault", args=(), disabled=True, env={}),
         ]
@@ -152,11 +152,17 @@ class TestMcpSyncHelpers(unittest.TestCase):
             "mcp": {
                 "custom-local": {"type": "local", "command": ["echo"], "enabled": True},
                 "memory": {"type": "local", "command": ["old"], "enabled": False},
+                "sqlite": {"type": "local", "command": ["old-sqlite"], "enabled": False},
+                "postgres": {"type": "local", "command": ["old-pg"], "enabled": False},
             },
         }
         existing_copilot: dict[str, object] = {
             "customSetting": True,
-            "mcpServers": {"custom-copilot": {"type": "local", "command": "echo", "args": [], "tools": ["*"]}},
+            "mcpServers": {
+                "custom-copilot": {"type": "local", "command": "echo", "args": [], "tools": ["*"]},
+                "sqlite": {"type": "local", "command": "uvx", "args": ["mcp-server-sqlite"], "tools": ["*"]},
+                "postgres": {"type": "local", "command": "npx", "args": ["server-postgres"], "tools": ["*"]},
+            },
         }
 
         oc_data, oc_enabled = mcp_sync.render_opencode_config(existing_opencode, specs, mcp_sync.DEFAULT_CORE_SERVERS)
@@ -167,13 +173,17 @@ class TestMcpSyncHelpers(unittest.TestCase):
         oc_mcp = cast(dict[str, dict[str, object]], oc_data["mcp"])
         self.assertIn("custom-local", oc_mcp)
         self.assertNotIn("memory", oc_mcp)
-        self.assertTrue(oc_mcp["git"]["enabled"])
+        self.assertNotIn("sqlite", oc_mcp)
+        self.assertNotIn("postgres", oc_mcp)
+        self.assertTrue(oc_mcp["fetch"]["enabled"])
         self.assertFalse(oc_mcp["docker"]["enabled"])
         self.assertFalse(oc_mcp["vault"]["enabled"])
 
         cp_mcp = cast(dict[str, dict[str, object]], cp_data["mcpServers"])
         self.assertIn("custom-copilot", cp_mcp)
-        self.assertIn("git", cp_mcp)
+        self.assertIn("fetch", cp_mcp)
+        self.assertNotIn("sqlite", cp_mcp)
+        self.assertNotIn("postgres", cp_mcp)
         self.assertNotIn("docker", cp_mcp)
         self.assertNotIn("vault", cp_mcp)
 

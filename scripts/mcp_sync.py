@@ -20,14 +20,11 @@ from typing import cast
 DEFAULT_CORE_SERVERS: frozenset[str] = frozenset(
     {
         "ai-memory",
+        "brave-search",
         "cclsp",
         "codebase-memory-mcp",
         "context7",
         "fetch",
-        "git",
-        "repomix",
-        "semgrep",
-        "sequentialthinking",
     }
 )
 
@@ -36,7 +33,9 @@ RETIRED_OPENCODE_SERVERS: frozenset[str] = frozenset(
         "chrome-devtools",
         "puppeteer",
         "memory",
+        "postgres",
         "server-services-configs",
+        "sqlite",
     }
 )
 
@@ -53,7 +52,6 @@ TEMPLATE_ENV_VARS: tuple[str, ...] = (
     "GITHUB_PERSONAL_ACCESS_TOKEN",
     "BRAVE_API_KEY",
     "EXA_API_KEY",
-    "SQLITE_DB_PATH",
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_API_TOKEN",
     "PROMETHEUS_URL",
@@ -63,7 +61,6 @@ TEMPLATE_ENV_VARS: tuple[str, ...] = (
     "UPTIME_KUMA_JWT_TOKEN",
     "HEALTHCHECKS_API_KEY",
     "CADDY_ADMIN_URL",
-    "POSTGRES_URL",
     "REDIS_URL",
     "VAULT_ADDR",
     "VAULT_TOKEN",
@@ -561,7 +558,11 @@ def render_copilot_config(
     existing_mcp = dict(raw_mcp) if isinstance(raw_mcp, dict) else {}
     managed_names = {spec.name for spec in servers}
 
-    copilot_mcp: dict[str, object] = {k: v for k, v in existing_mcp.items() if k not in managed_names}
+    copilot_mcp: dict[str, object] = {
+        k: v
+        for k, v in existing_mcp.items()
+        if k not in managed_names and k not in RETIRED_OPENCODE_SERVERS
+    }
     enabled_count = 0
     for spec in servers:
         if not is_server_enabled(spec, allowed_servers):

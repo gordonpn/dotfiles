@@ -12,14 +12,11 @@ SERVER_NAME: str = "codebase-memory-mcp"
 EXPECTED_MINIMAL_SERVERS: frozenset[str] = frozenset(
     {
         "ai-memory",
+        "brave-search",
         "cclsp",
         "codebase-memory-mcp",
         "context7",
         "fetch",
-        "git",
-        "repomix",
-        "semgrep",
-        "sequentialthinking",
     }
 )
 EXPECTED_TOOLS: frozenset[str] = frozenset(

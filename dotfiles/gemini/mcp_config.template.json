@@ -57,16 +57,6 @@
         "EXA_API_KEY": "${EXA_API_KEY}"
       }
     },
-    "sqlite": {
-      "command": "uvx",
-      "args": [
-        "--with",
-        "mcp==1.1.2",
-        "mcp-server-sqlite",
-        "--db-path",
-        "${SQLITE_DB_PATH}"
-      ]
-    },
     "cloudflare": {
       "command": "npx",
       "args": [
@@ -167,14 +157,6 @@
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"]
     },
-    "postgres": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-postgres",
-        "${POSTGRES_URL}"
-      ]
-    },
     "redis": {
       "command": "npx",
       "args": ["-y", "@yawlabs/redis-mcp"],
@@ -221,6 +203,7 @@
     "postman": {
       "command": "npx",
       "args": ["-y", "@postman/postman-mcp-server@latest"],
+      "disabled": true,
       "env": {
         "POSTMAN_API_KEY": "${POSTMAN_API_KEY}"
       }
@@ -231,6 +214,7 @@
         "-jar",
         "${HOME}/.local/share/sonarqube-mcp-server/sonarqube-mcp-server.jar"
       ],
+      "disabled": true,
       "env": {
         "STORAGE_PATH": "${HOME}/.local/share/sonarqube-mcp-server/storage",
         "SONARQUBE_URL": "${SONARQUBE_URL}",
