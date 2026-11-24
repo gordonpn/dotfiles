@@ -259,6 +259,7 @@ missing_agent_message() {
 
 has_available_candidate=0
 unique_candidates=()
+installed_candidates=()
 for ((ci=0; ci<${#CANDIDATE_AGENTS[@]}; ci++)); do
   ca="${CANDIDATE_AGENTS[ci]}"
   cm="${CANDIDATE_MODELS[ci]}"
@@ -273,6 +274,9 @@ for ((ci=0; ci<${#CANDIDATE_AGENTS[@]}; ci++)); do
   fi
   if (( ! seen_ca )); then
     unique_candidates+=("$ca")
+    if command -v "$ca" >/dev/null 2>&1; then
+      installed_candidates+=("$ca")
+    fi
   fi
   if is_candidate_runnable "$ca" "$cm"; then
     has_available_candidate=1
@@ -282,10 +286,15 @@ if (( ! has_available_candidate )); then
   if ((${#unique_candidates[@]} == 0)); then
     die 'No runnable delegate candidates configured'
   fi
+  if ((${#installed_candidates[@]} == 1)); then
+    die "No runnable model configured for delegate agent ${installed_candidates[0]}"
+  fi
+  if ((${#installed_candidates[@]} > 1)); then
+    installed_list=$(printf '%s, ' "${installed_candidates[@]}")
+    installed_list=${installed_list%, }
+    die "No runnable model configured for installed delegate agents: $installed_list"
+  fi
   if ((${#unique_candidates[@]} == 1)); then
-    if command -v "${unique_candidates[0]}" >/dev/null 2>&1; then
-      die "No runnable model configured for delegate agent ${unique_candidates[0]}"
-    fi
     die "$(missing_agent_message "${unique_candidates[0]}")"
   fi
   candidate_list=$(printf '%s, ' "${unique_candidates[@]}")
