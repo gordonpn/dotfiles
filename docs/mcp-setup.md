@@ -188,6 +188,12 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
    mcp-sync --configs-only
    ```
 
+4. **Custom `cclsp` Executable (`CCLSP_BIN`):**
+   `bin/mcp-sync` dynamically hydrates `${CCLSP_BIN}` in `dotfiles/gemini/mcp_config.template.json` using the first available match in priority order: explicit `CCLSP_BIN` environment override, `${PNPM_HOME}/bin/cclsp` (`pnpm` v12+ bin layout, defaulting `PNPM_HOME` to `~/.local/share/pnpm`), `cclsp` on `PATH`, or legacy `${PNPM_HOME}/cclsp` (`pnpm` v10 layout). If no executable is found, it falls back to `${PNPM_HOME}/bin/cclsp` with a stderr warning:
+   ```bash
+   CCLSP_BIN=/opt/homebrew/bin/cclsp mcp-sync --configs-only
+   ```
+
 ### Client & Harness Compatibility Matrix
 
 | Client / Harness | Version | Provider / Model | Startup Processes | Tool Loading | Deferred Search | Default Profile & Visible MCP Tools | Fallback / Override |
