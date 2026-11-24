@@ -22,14 +22,6 @@
       "command": ["lua-language-server"]
     },
     {
-      "extensions": ["yaml", "yml"],
-      "command": ["yaml-language-server", "--stdio"]
-    },
-    {
-      "extensions": ["json", "jsonc"],
-      "command": ["vscode-json-language-server", "--stdio"]
-    },
-    {
       "extensions": ["dockerfile", "Dockerfile"],
       "command": ["docker-langserver", "--stdio"]
     },
@@ -40,14 +32,6 @@
     {
       "extensions": ["tf", "tfvars"],
       "command": ["terraform-ls", "serve"]
-    },
-    {
-      "extensions": ["md", "markdown", "mdx"],
-      "command": ["marksman", "server"]
-    },
-    {
-      "extensions": ["toml"],
-      "command": ["taplo", "lsp", "stdio"]
     },
     {
       "extensions": ["java"],
