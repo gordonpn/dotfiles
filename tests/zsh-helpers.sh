@@ -208,10 +208,10 @@ assert_contains "antidote_hard_reset --timeout needs a timeout tool" "status=2" 
 assert_not_contains "antidote_hard_reset --timeout needs a timeout tool" "Removing" "${actual}"
 pass "antidote_hard_reset --timeout needs a timeout tool"
 
-mkdir -p "${tmp}/home/.antidote" "${tmp}/bundle dir"
+mkdir -p "${tmp}/home/.antidote" "${tmp}/home/.cache/antidote" "${tmp}/bundle dir"
 cat >"${tmp}/home/.antidote/antidote" <<'EOF'
 case $1 in
-  home) print -r -- "${ANTIDOTE_HOME:-$HOME/.cache/antidote}" ;;
+  home) print -r -- "${ANTIDOTE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/antidote}" ;;
   bundle) print -r -- 'partial bundle'; return 1 ;;
 esac
 EOF
@@ -220,12 +220,24 @@ printf '%s\n' 'working bundle' >"${tmp}/bundle dir/.zsh_plugins.zsh"
 # shellcheck disable=SC2016 # Expand variables in the isolated zsh.
 actual=$(run_zsh "${base_path}" "${tmp}/bundle dir" 'ZDOTDIR=$PWD antidote_hard_reset; print -- "status=$?"')
 assert_contains "antidote_hard_reset reports bundle failure" "status=1" "${actual}"
+assert_contains "antidote_hard_reset reaches bundle generation" "Removing Antidote cache:" "${actual}"
+[[ ! -e "${tmp}/home/.cache/antidote" ]] ||
+  fail "antidote_hard_reset removes the default cache" "${actual}"
 [[ $(cat "${tmp}/bundle dir/.zsh_plugins.zsh") == 'working bundle' ]] ||
   fail "antidote_hard_reset preserves the working bundle" "${actual}"
+[[ "${tmp}/bundle dir/.zsh_plugins.txt" -nt "${tmp}/bundle dir/.zsh_plugins.zsh" ]] ||
+  fail "antidote_hard_reset invalidates the saved bundle for startup" "${actual}"
 # shellcheck disable=SC2016 # Expand variables in the isolated zsh.
 actual=$(run_zsh "${base_path}" "${tmp}/bundle dir" 'ZDOTDIR=$PWD ANTIDOTE_HOME=$HOME antidote_hard_reset; print -- "status=$?"')
 assert_contains "antidote_hard_reset rejects custom cache" "Refusing to reset" "${actual}"
 [[ -e "${tmp}/home/.antidote/antidote" ]] || fail "antidote_hard_reset preserves the home" "${actual}"
+mkdir -p "${tmp}/bundle dir/antidote/.antidote"
+cp "${tmp}/home/.antidote/antidote" "${tmp}/bundle dir/antidote/.antidote/antidote"
+# shellcheck disable=SC2016 # Expand variables in the isolated zsh.
+actual=$(run_zsh "${base_path}" "${tmp}/bundle dir" 'HOME=$PWD/antidote XDG_CACHE_HOME=$PWD ZDOTDIR=$PWD antidote_hard_reset; print -- "status=$?"')
+assert_contains "antidote_hard_reset rejects an overlapping default cache" "Refusing to remove a parent of HOME or ZDOTDIR" "${actual}"
+[[ -e "${tmp}/bundle dir/antidote/.antidote/antidote" ]] ||
+  fail "antidote_hard_reset preserves the overlapping home" "${actual}"
 pass "antidote_hard_reset preserves the working bundle and home"
 
 
@@ -257,6 +269,45 @@ assert_contains "delete-old-branches dry run" "Skipping branch: master" "${actua
 assert_contains "delete-old-branches dry run" "Skipping branch: current" "${actual}"
 [[ -n "$(git -C "${tmp}/origin.git" branch --list old)" ]] || fail "delete-old-branches dry run" "old was deleted"
 pass "delete-old-branches dry run"
+
+old_tip=$(g -C "${tmp}/clone" rev-parse refs/heads/old)
+recent_tip=$(g -C "${tmp}/clone" rev-parse refs/heads/recent)
+g -C "${tmp}/origin.git" update-ref refs/heads/old "${recent_tip}" "${old_tip}"
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
+assert_contains "branch-delete rejects a changed origin tip" "stale info" "${actual}"
+assert_contains "branch-delete rejects a changed origin tip" "status=1" "${actual}"
+[[ $(g -C "${tmp}/origin.git" rev-parse refs/heads/old) == "${recent_tip}" &&
+   $(g -C "${tmp}/clone" rev-parse refs/heads/old) == "${old_tip}" ]] ||
+  fail "branch-delete preserves both refs after a rejected lease" "${actual}"
+g -C "${tmp}/origin.git" update-ref refs/heads/old "${old_tip}" "${recent_tip}"
+pass "branch-delete preserves both refs after a rejected lease"
+
+g -C "${tmp}/clone" update-ref refs/heads/old "${recent_tip}" "${old_tip}"
+actual=$(run_zsh "${base_path}" "${tmp}/clone" "_zsh_helpers_delete_branch old ${old_tip} ${old_tip}; print -- \"status=\$?\"")
+assert_contains "branch-delete rejects local changes before push" "changed since selection" "${actual}"
+assert_contains "branch-delete rejects local changes before push" "status=1" "${actual}"
+[[ $(g -C "${tmp}/origin.git" rev-parse refs/heads/old) == "${old_tip}" &&
+   $(g -C "${tmp}/clone" rev-parse refs/heads/old) == "${recent_tip}" ]] ||
+  fail "branch-delete preserves both refs if the local tip changes before push" "${actual}"
+g -C "${tmp}/clone" update-ref refs/heads/old "${old_tip}" "${recent_tip}"
+pass "branch-delete preserves both refs if the local tip changes before push"
+
+make_stub "${tmp}/origin.git/hooks/pre-receive" \
+  "env -i PATH=/usr/bin:/bin git --git-dir=\"${tmp}/clone/.git\" update-ref refs/heads/old ${recent_tip} ${old_tip}"
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
+assert_contains "branch-delete detects local changes during push" "changed during deletion" "${actual}"
+assert_contains "branch-delete reports the partial update" "already deleted on origin" "${actual}"
+assert_contains "branch-delete detects local changes during push" "status=1" "${actual}"
+[[ -z $(g -C "${tmp}/origin.git" branch --list old) &&
+   $(g -C "${tmp}/clone" rev-parse refs/heads/old) == "${recent_tip}" ]] ||
+  fail "branch-delete preserves the changed local tip during push" "${actual}"
+rm "${tmp}/origin.git/hooks/pre-receive"
+g -C "${tmp}/clone" update-ref refs/heads/old "${old_tip}" "${recent_tip}"
+g -C "${tmp}/clone" push -q origin old
+pass "branch-delete preserves the changed local tip during push"
+
+
+
 for arg in --help --dryrun; do
   actual=$(run_zsh "${base_path}" "${tmp}/clone" "delete-old-branches ${arg}; print -- \"status=\$?\"")
   assert_contains "delete-old-branches rejects ${arg}" "Usage: delete-old-branches [--dry-run]" "${actual}"

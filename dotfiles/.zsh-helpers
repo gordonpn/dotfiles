@@ -56,6 +56,7 @@ _zsh_helpers_delete_branch() {
   if [[ -n $local_tip ]]; then
     if [[ $(git rev-parse --verify --quiet "$ref") != "$local_tip" ]]; then
       echo "Local branch $branch changed during deletion." >&2
+      [[ -z $remote_tip ]] || echo "The branch was already deleted on origin." >&2
       return 1
     fi
     if ! git branch -D -- "$branch"; then
@@ -363,6 +364,18 @@ antidote_hard_reset() {
     return 1
   fi
 
+  local cache_path=${antidote_home:A} protected
+  for protected in "${HOME:A}" "${zdotdir:A}"; do
+    if [[ "$protected/" == "$cache_path/"* || $cache_path == / ]]; then
+      print -u2 -- "Refusing to remove a parent of HOME or ZDOTDIR: $cache_path"
+      return 1
+    fi
+  done
+
+  # Startup must regenerate if reset fails after clearing cached plugins.
+  if [[ -f $plugins_zsh ]]; then
+    touch -t 197001010000 -- "$plugins_zsh" || return $?
+  fi
   print "Removing Antidote cache: $antidote_home"
   rm -rf -- "$antidote_home" || return $?
 
