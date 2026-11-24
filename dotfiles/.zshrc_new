@@ -286,6 +286,13 @@ elif [[ "$(uname)" == "Linux" ]]; then
   source /home/gordonpn/workspace/dotfiles/dotfiles/.git-aliases
 fi
 
+# Shell helpers shared with the work machines' .zshrc files
+if [[ "$(uname)" == "Darwin" ]]; then
+  source /Users/gordonpn/workspace/dotfiles/dotfiles/.zsh-helpers
+elif [[ "$(uname)" == "Linux" ]]; then
+  source /home/gordonpn/workspace/dotfiles/dotfiles/.zsh-helpers
+fi
+
 # bat — config lives at ~/.config/bat/config (symlinked from .batconfig in dotfiles)
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 

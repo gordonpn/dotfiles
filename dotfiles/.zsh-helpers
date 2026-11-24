@@ -1,0 +1,472 @@
+# Shell helpers shared by every machine. .zshrc_new sources this file, and so do
+# the work machines' own .zshrc files, so a helper is defined in one place only.
+
+if (( $+commands[eza] )); then
+  # Tree views, limited to 2 levels so a big project does not flood the screen.
+  alias lt='eza --icons=always --tree -L 2'
+  alias lta='eza --icons=always --tree -L 2 -a'
+fi
+alias md='mkdir -p'
+alias rd=rmdir
+alias vsc='code .'
+alias ide='idea .'
+alias reload='source ~/.zshrc && exec zsh'
+alias lg='lazygit'
+alias zshrc='${EDITOR:-vim} "${ZDOTDIR:-$HOME}"/.zshrc'
+alias log_to_file='tee output_$(date +%s).log'
+
+timezsh() {
+  shell=${1-$SHELL}
+  # zsh's own time keyword: /usr/bin/time is not installed on every Linux host.
+  for i in $(seq 1 10); do time $shell -i -c exit; done
+}
+
+palette() {
+  local -a colors
+  for i in {000..255}; do
+    colors+=("%F{$i}$i%f")
+  done
+  print -cP $colors
+}
+
+printc() {
+  local color="%F{$1}"
+  echo -E ${(qqqq)${(%)color}}
+}
+
+branch-delete() {
+  # Check if a substring argument is provided. An empty one matches every branch,
+  # and an unknown second argument (a --dryrun typo) must not mean a real run.
+  if [[ -z "$1" ]] || (( $# > 2 )) || [[ $# -eq 2 && "$2" != "--dry-run" ]]; then
+    echo "Usage: $0 <substring> [--dry-run]"
+    [[ -z "$1" ]] && return 1
+    return 2
+  fi
+  local substring="$1"
+  local current_branch=$(git symbolic-ref --quiet --short HEAD)
+  local dry_run=false
+  # Unique: git branch -a lists a branch once locally and once on the remote.
+  local -aU branches_to_delete=()
+
+  # Check for dry-run flag
+  if [[ "$2" == "--dry-run" ]]; then
+    dry_run=true
+    echo "Dry run mode: No branches will be actually deleted."
+  fi
+
+  # List all branches (local and remote) and filter those containing the substring
+  while IFS= read -r branch; do
+    # Remove leading asterisk, spaces, and "remotes/origin/" if present
+    branch=$(echo "$branch" | sed 's/^[* ]*//; s/^remotes\/origin\///')
+    
+    if [[ "$branch" == "$current_branch" ]]; then
+      echo "Skipping branch: $branch"
+    elif [[ "$branch" == *"$substring"* ]]; then
+      branches_to_delete+=("$branch")
+    fi
+  done < <(git branch -a)
+
+  # Delete or simulate deletion of the filtered branches
+  local -a deleted=()
+  local failed=0
+  for branch in "${branches_to_delete[@]}"; do
+    if $dry_run; then
+      echo "Would delete branch: $branch"
+    else
+      echo "Deleting branch: $branch"
+      # Keep the local branch when the remote delete fails: it may hold the only copy.
+      if git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null &&
+        ! git push origin --delete "$branch" 2>/dev/null; then
+        echo "Could not delete $branch on origin, so the local branch stays."
+        failed=1
+        continue
+      fi
+      if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
+        ! git branch -D "$branch" 2>/dev/null; then
+        echo "Could not delete local branch $branch (checked out in a worktree?)."
+        failed=1
+        continue
+      fi
+      deleted+=("$branch")
+    fi
+  done
+
+  if $dry_run; then
+    echo "Branches that would be deleted: ${branches_to_delete[*]}"
+  else
+    echo "Deleted branches: ${deleted[*]}"
+  fi
+  return $failed
+}
+
+delete-old-branches() {
+  # Check for dry-run flag. Anything else, --help or a typo included, stops here
+  # rather than falling through to a real deletion.
+  local dry_run=false
+  if [[ "$1" == "--dry-run" && $# -eq 1 ]]; then
+    dry_run=true
+    echo "Dry run mode: No branches will be actually deleted."
+  elif (( $# )); then
+    echo "Usage: delete-old-branches [--dry-run]" >&2
+    return 2
+  fi
+
+  # About 6 months ago, from zsh's clock: BSD date on macOS has no --date.
+  zmodload zsh/datetime
+  local six_months_ago_ts=$(( EPOCHSECONDS - 182 * 24 * 60 * 60 ))
+  echo "Six months ago timestamp: $six_months_ago_ts"
+
+  # Unique: git branch -a lists a branch once locally and once on the remote.
+  local -aU branches_to_delete=()
+  local current_branch=$(git symbolic-ref --quiet --short HEAD)
+
+  # Fetch the latest data from the remote repository. Stale remote dates would
+  # select branches that have moved on since, so stop if it fails.
+  git fetch --all || { echo "Fetch failed, so nothing was deleted." >&2; return 1; }
+
+  # Iterate over all branches (local and remote)
+  while IFS= read -r branch; do
+    # Remove leading asterisk, spaces, and "remotes/origin/" if present
+    branch=$(echo "$branch" | sed 's/^[* ]*//; s/^remotes\/origin\///')
+
+    # Skip HEAD, the checked-out branch, main, master and branches prefixed with "mainline"
+    if [[ "$branch" == "HEAD" || "$branch" == "$current_branch" || "$branch" == (main|master) || "$branch" == mainline* ]]; then
+      echo "Skipping branch: $branch"
+      continue
+    fi
+
+    # Only branches on the remote. Age is the newest commit on the remote or the
+    # local copy, so unpushed local work keeps a branch whose remote tip is old.
+    if ! git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+      echo "Skipping branch with no remote: $branch"
+      continue
+    fi
+    local -a refs=("refs/remotes/origin/$branch")
+    git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null && refs+=("refs/heads/$branch")
+    local last_commit_ts=$(git log -1 --format=%ct "${refs[@]}" -- 2>/dev/null)
+    if [[ $last_commit_ts != <-> ]]; then
+      echo "Skipping branch with unknown age: $branch"
+      continue
+    fi
+    echo "Branch: $branch, Last commit timestamp: $last_commit_ts"
+
+    # Compare the last commit date with the date 6 months ago
+    if [[ "$last_commit_ts" -lt "$six_months_ago_ts" ]]; then
+      echo "Marking branch for deletion: $branch"
+      branches_to_delete+=("$branch")
+    else
+      echo "Branch is recent and will not be deleted: $branch"
+    fi
+  done < <(git branch -a)
+
+  # Delete or simulate deletion of the filtered branches
+  local -a deleted=()
+  local failed=0
+  for branch in "${branches_to_delete[@]}"; do
+    if $dry_run; then
+      echo "Would delete branch: $branch"
+    else
+      echo "Deleting branch: $branch"
+      # Keep the local branch when the remote delete fails: it may hold the only copy.
+      if git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null &&
+        ! git push origin --delete "$branch" 2>/dev/null; then
+        echo "Could not delete $branch on origin, so the local branch stays."
+        failed=1
+        continue
+      fi
+      if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
+        ! git branch -D "$branch" 2>/dev/null; then
+        echo "Could not delete local branch $branch (checked out in a worktree?)."
+        failed=1
+        continue
+      fi
+      deleted+=("$branch")
+    fi
+  done
+
+  if $dry_run; then
+    echo "Branches that would be deleted: ${branches_to_delete[*]}"
+  else
+    echo "Deleted branches: ${deleted[*]}"
+  fi
+  return $failed
+}
+
+npm() {
+  # Let `npm completion` through: .zshrc runs it at startup, whatever the directory.
+  if [ -e pnpm-lock.yaml ] && [ "$1" != completion ]; then
+    echo "This is a pnpm project. Please use pnpm instead of npm."
+    return 1
+  else
+    command npm "$@"
+  fi
+}
+
+random_rename() {
+    # Scoped to this call, so the caller's null_glob survives.
+    setopt local_options null_glob
+    local dry_run=true
+    local current_dir=$(pwd)
+    local files_found=false
+    local failed=false
+
+    # Parse command-line options
+    while getopts ":f" opt; do
+        case $opt in
+            f)
+                dry_run=false
+                ;;
+            \?)
+                echo "Invalid option: -$OPTARG" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    if ! $dry_run; then
+        local tool
+        for tool in uuidgen exiftool; do
+            (( $+commands[$tool] )) || { echo "random_rename: needs $tool" >&2; return 1; }
+        done
+    fi
+
+    rename_files() {
+        local dir="$1"
+        local dir_files_found=false
+
+        echo "Scanning directory: $dir"
+
+        for file in "$dir"/*.pdf; do
+            if [ -f "$file" ]; then
+                files_found=true
+                dir_files_found=true
+                local uuid="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+                # An empty uuid would rename every file to .pdf, each over the last.
+                if [[ -z $uuid ]]; then
+                    echo "Skipping '$(basename "$file")': uuidgen gave no name" >&2
+                    failed=true
+                    continue
+                fi
+                local new_name="$uuid.pdf"
+                if [ "$(basename "$file")" != "$new_name" ]; then
+                    if $dry_run; then
+                        echo "Would rename '$(basename "$file")' to '$new_name' and randomize metadata"
+                    else
+                        echo "Renaming '$(basename "$file")' to '$new_name' and randomizing metadata"
+                        # Randomize metadata using exiftool
+                        local random_author="Author$(( RANDOM % 1000 ))"
+                        local random_title="Title$(( RANDOM % 1000 ))"
+                        if ! exiftool -Author="$random_author" -Title="$random_title" "$file"; then
+                            echo "Skipping '$(basename "$file")': exiftool failed" >&2
+                            failed=true
+                            continue
+                        fi
+                        mv "$file" "$(dirname "$file")/$new_name" || failed=true
+                    fi
+                else
+                    echo "Skipping '$(basename "$file")' (new name would be the same)"
+                fi
+            fi
+        done
+
+        for subdir in "$dir"/*; do
+            # A glob, not =~ ^\.: zsh strips the backslash, and ^. matches every name.
+            # Not through symlinks: a link to an ancestor recurses forever, and one
+            # elsewhere would rename PDFs outside this tree.
+            if [ -d "$subdir" ] && [ ! -L "$subdir" ] && [[ $(basename "$subdir") != .* ]]; then
+                rename_files "$subdir"
+            fi
+        done
+
+        if ! $dir_files_found; then
+            echo "No PDF files to rename in directory: $dir"
+        fi
+    }
+
+    rename_files "$current_dir"
+
+    if ! $files_found; then
+        echo "No PDF files found to rename in any directory."
+    fi
+    ! $failed
+}
+
+antidote_hard_reset() {
+  emulate -L zsh
+
+  local reload=0 timeout_s="" timeout_given=0
+  while (( $# )); do
+    case "$1" in
+      --reload) reload=1 ;;
+      --timeout) timeout_s="${2:-}"; timeout_given=1; (( $# > 1 )) && shift ;;
+      --timeout=*) timeout_s="${1#*=}"; timeout_given=1 ;;
+      -h|--help)
+        print "Usage: antidote_hard_reset [--reload] [--timeout SECONDS]"
+        return 0
+        ;;
+      *) print -u2 "Unknown option: $1"; return 2 ;;
+    esac
+    shift
+  done
+  # Checked before anything is removed: a bad value would only fail after the reset.
+  if (( timeout_given )) && [[ $timeout_s != <->(|.<->)(|[smhd]) ]]; then
+    print -u2 -- "--timeout needs a duration such as 60, 1.5 or 5m"
+    return 2
+  fi
+  if (( timeout_given )) && ! (( $+commands[gtimeout] || $+commands[timeout] )); then
+    print -u2 -- "--timeout needs timeout or gtimeout on PATH"
+    return 2
+  fi
+
+  # Make sure antidote is available as an autoloaded function.
+  fpath=("$HOME/.antidote" "$HOME/.antidote/functions" $fpath)
+  autoload -Uz antidote 2>/dev/null
+
+  if ! (( $+functions[antidote] )) && ! command -v antidote >/dev/null 2>&1; then
+    print -u2 "antidote not available (expected autoload file at ~/.antidote/antidote)."
+    return 127
+  fi
+
+  local zdotdir="${ZDOTDIR:-$HOME}"
+  local plugins_txt="$zdotdir/.zsh_plugins.txt"
+  local plugins_zsh="$zdotdir/.zsh_plugins.zsh"
+
+  [[ -f "$plugins_txt" ]] || { print -u2 "Missing: $plugins_txt"; return 1; }
+
+  local antidote_home
+  antidote_home="$(antidote home)" || return $?   # where bundles are cloned
+
+  print "Removing Antidote home: $antidote_home"
+  rm -rf -- "$antidote_home" || return $?
+
+  print "Removing static file: $plugins_zsh"
+  rm -f -- "$plugins_zsh" || return $?
+
+  print "Regenerating static plugin file via: antidote bundle < $plugins_txt > $plugins_zsh"
+
+  if [[ -n "$timeout_s" ]] && command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$timeout_s" zsh -lc \
+      "fpath=(\"$HOME/.antidote\" \"$HOME/.antidote/functions\" \$fpath); autoload -Uz antidote; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false antidote bundle <\"$plugins_txt\" >\"$plugins_zsh\"" || return $?
+  elif [[ -n "$timeout_s" ]] && command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_s" zsh -lc \
+      "fpath=(\"$HOME/.antidote\" \"$HOME/.antidote/functions\" \$fpath); autoload -Uz antidote; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false antidote bundle <\"$plugins_txt\" >\"$plugins_zsh\"" || return $?
+  else
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
+      antidote bundle <"$plugins_txt" >"$plugins_zsh" || return $?
+  fi
+
+  print "Done. Static file written: $plugins_zsh"
+
+  if (( reload )); then
+    exec zsh -l
+  else
+    print "Load now with: source \"$plugins_zsh\""
+  fi
+}
+
+pack() {
+  emulate -L zsh
+  setopt local_options extended_glob
+
+  local -A o
+  zparseopts -D -E -A o -- o: s: || return 2
+
+  local url="" style="${o[-s]}" out="${o[-o]}"
+  local -i remote=0
+
+  # First positional is either a repo reference or, for the local case, a style.
+  if [[ -n "$1" ]]; then
+    if [[ "$1" == (http|https|ssh|git)://* || "$1" == *@*:* || "$1" == */* ]]; then
+      remote=1 url="$1"; shift
+    fi
+    [[ -n "$1" && -z "$style" ]] && { style="$1"; shift }
+  fi
+
+  local ext
+  case "${style:=xml}" in
+    md|markdown) style=markdown ext=md ;;
+    xml)         ext=xml ;;
+    txt|plain)   style=plain ext=txt ;;
+    *) print -u2 "pack: unknown style '$style' (xml, markdown or plain)"; return 2 ;;
+  esac
+
+  (( remote )) || url="$(git config --get remote.origin.url 2>/dev/null)"
+  [[ -n "$url" ]] || {
+    print -u2 "pack: no repo given and no git origin here"
+    return 1
+  }
+
+  # owner-repo from the URL. Strip trailing slashes and any .git, fold the
+  # scp-style colon into a slash, then take the last two path components. A
+  # single sed expression used to turn a trailing slash into "owner-repo/", so
+  # repomix wrote into a directory, and it failed outright on repo names
+  # containing a dot.
+  local ref="${${url%%/##}%.git}"
+  local -a parts=(${(s:/:)${ref//:/\/}})
+  local name="${(j:-:)parts[-2,-1]}"
+  name="${name//[^A-Za-z0-9._-]/-}"
+
+  out="${out:-${name}.${ext}}"
+
+  # repomix is a brew binary on one machine and pnpx is a binary or a shell
+  # function on another. Aliases do not apply inside a function, so resolve it
+  # explicitly.
+  local -a rmx
+  if (( $+commands[repomix] )); then
+    rmx=(repomix)
+  elif (( $+commands[pnpx] || $+functions[pnpx] )); then
+    rmx=(pnpx repomix@latest)
+  else
+    print -u2 "pack: needs repomix or pnpx on PATH"
+    return 1
+  fi
+
+  if (( remote )); then
+    print "pack: ${url} -> ${out} (${style})"
+    $rmx --remote "$url" --style "$style" --compress -o "$out" || return
+  else
+    print "pack: local repo -> ${out} (${style})"
+    $rmx --style "$style" --compress -o "$out" || return
+  fi
+
+  print "pack: ${out} ($(du -h -- "$out" 2>/dev/null | cut -f1))"
+}
+
+# macOS only: these drive launchctl, dscacheutil, sysctl and app bundles.
+if [[ "$(uname)" == "Darwin" ]]; then
+  restartcal() {
+    osascript -e 'quit app "Calendar"'
+    local pid
+    pid=$(launchctl list | awk '/exchangesyncd/ {print $1}')
+    if [[ -n $pid ]]; then
+      kill "$pid"
+    else
+      print -u2 "restartcal: exchangesyncd not running"
+    fi
+  }
+
+  dns_flush() {
+    sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+  }
+
+  clear_cache() {
+    sudo rm -rf /Library/Caches/*
+    rm -rf ~/Library/Caches/*
+  }
+
+  check_uptime() {
+    boot_time=$(sysctl -n kern.boottime | awk -F'[ ,=]+' '{print $3}')
+    now=$(date +%s)
+    uptime_sec=$(( now - boot_time ))
+    seven_days=$(( 7 * 24 * 60 * 60 ))
+
+    if [ "$uptime_sec" -gt "$seven_days" ]; then
+      uptime_days=$(( uptime_sec / 86400 ))
+      echo "Your Mac has been up for $uptime_days days. Consider rebooting."
+    fi
+  }
+
+  restart_firefox() {
+      killall Firefox && open -a Firefox
+  }
+fi

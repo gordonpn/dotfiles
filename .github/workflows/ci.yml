@@ -31,6 +31,9 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: ./.github/scripts/install-actionlint.sh
 
+      - name: Install zsh
+        run: command -v zsh || { sudo apt-get update && sudo apt-get install -y zsh; }
+
       - name: Lint
         run: just lint
 
