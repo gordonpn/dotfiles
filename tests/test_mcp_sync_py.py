@@ -479,18 +479,21 @@ class TestMcpSyncHelpers(unittest.TestCase):
             root = Path(tmp)
             home = root / "home"
             pnpm_home = root / "pnpm"
+            custom_bin = root / "custom" / "cclsp"
             v12_bin = pnpm_home / "bin" / "cclsp"
             v10_bin = pnpm_home / "cclsp"
             path_dir = root / "bin"
             path_bin = path_dir / "cclsp"
-            for candidate in (v12_bin, v10_bin, path_bin):
+            for candidate in (custom_bin, v12_bin, v10_bin, path_bin):
                 candidate.parent.mkdir(parents=True, exist_ok=True)
                 candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
                 candidate.chmod(0o755)
 
             self.assertEqual(
-                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "/custom/cclsp", "PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
-                "/custom/cclsp",
+                mcp_sync.resolve_cclsp_bin(
+                    home, {"CCLSP_BIN": str(custom_bin), "PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}
+                ),
+                str(custom_bin),
             )
             self.assertEqual(
                 mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
@@ -515,6 +518,138 @@ class TestMcpSyncHelpers(unittest.TestCase):
                 fallback = mcp_sync.resolve_cclsp_bin(home, {"PATH": ""})
             self.assertEqual(fallback, str(home / ".local" / "share" / "pnpm" / "bin" / "cclsp"))
             self.assertIn("Warning: cclsp executable not found; falling back to", stderr_buf.getvalue())
+
+    def test_resolve_cclsp_bin_rejects_nonexistent_and_non_executable_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            missing = root / "missing" / "cclsp"
+            non_exec = root / "non_exec" / "cclsp"
+            non_exec.parent.mkdir(parents=True)
+            non_exec.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            non_exec.chmod(0o644)
+
+            with self.assertRaises(ValueError) as missing_ctx:
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": str(missing)})
+            self.assertIn("CCLSP_BIN is not an executable file", str(missing_ctx.exception))
+
+            with self.assertRaises(ValueError) as non_exec_ctx:
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": str(non_exec)})
+            self.assertIn("CCLSP_BIN is not an executable file", str(non_exec_ctx.exception))
+
+            with self.assertRaises(ValueError) as dir_ctx:
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": str(non_exec.parent)})
+            self.assertIn("CCLSP_BIN is not an executable file", str(dir_ctx.exception))
+
+    def test_sync_mcp_config_exits_nonzero_on_invalid_cclsp_bin_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            template = root / "mcp_config.template.json"
+            template.write_text(
+                json.dumps({"mcpServers": {"cclsp": {"command": "${CCLSP_BIN}", "args": []}}}),
+                encoding="utf-8",
+            )
+            agy_cfg = root / "agy.json"
+            codex_cfg = root / "codex.toml"
+            codex_tpl = root / "codex.template.toml"
+            opencode_cfg = root / "opencode.json"
+            copilot_cfg = root / "copilot.json"
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(root / "nope" / "cclsp")}, clear=True),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertIn("Error: CCLSP_BIN is not an executable file", stderr_buf.getvalue())
+            self.assertFalse(agy_cfg.exists())
+            self.assertFalse(codex_cfg.exists())
+            self.assertFalse(opencode_cfg.exists())
+            self.assertFalse(copilot_cfg.exists())
+
+    def test_resolve_cclsp_bin_trims_whitespace_and_handles_whitespace_only_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            pnpm_home = root / "pnpm"
+            v12_bin = pnpm_home / "bin" / "cclsp"
+            custom_bin = root / "custom" / "cclsp"
+            for candidate in (v12_bin, custom_bin):
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                candidate.chmod(0o755)
+
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": f"  {custom_bin}  ", "PNPM_HOME": str(pnpm_home)}),
+                str(custom_bin),
+            )
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "   ", "PNPM_HOME": str(pnpm_home), "PATH": ""}),
+                str(v12_bin),
+            )
+
+    def test_resolve_cclsp_bin_normalizes_relative_paths_without_dereferencing_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prev_cwd = Path.cwd()
+            try:
+                os.chdir(tmp)
+                cwd = Path.cwd()
+                home = cwd / "home"
+                other_dir = cwd / "elsewhere"
+                other_dir.mkdir(parents=True)
+
+                target_bin = cwd / "real" / "cclsp-target"
+                target_bin.parent.mkdir(parents=True)
+                target_bin.write_text("#!/bin/sh\nprintf 'ok\\n'\n", encoding="utf-8")
+                target_bin.chmod(0o755)
+
+                rel_bin = cwd / "bin" / "cclsp"
+                rel_bin.parent.mkdir(parents=True)
+                os.symlink(target_bin, rel_bin)
+
+                resolved_explicit = mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "./bin/cclsp"})
+                self.assertEqual(resolved_explicit, str(rel_bin))
+                self.assertTrue(Path(resolved_explicit).is_absolute())
+
+                pnpm_v12 = cwd / "pnpm" / "bin" / "cclsp"
+                pnpm_v12.parent.mkdir(parents=True)
+                os.symlink(target_bin, pnpm_v12)
+                resolved_pnpm = mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": "./pnpm", "PATH": ""})
+                self.assertEqual(resolved_pnpm, str(pnpm_v12))
+
+                rel_path_bin = cwd / "rel-bin" / "cclsp"
+                rel_path_bin.parent.mkdir(parents=True)
+                os.symlink(target_bin, rel_path_bin)
+                resolved_path = mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(cwd / "missing"), "PATH": "./rel-bin"})
+                self.assertEqual(resolved_path, str(rel_path_bin))
+
+                for resolved in (resolved_explicit, resolved_pnpm, resolved_path):
+                    proc = subprocess.run([resolved], cwd=other_dir, capture_output=True, text=True, check=True)
+                    self.assertEqual(proc.stdout.strip(), "ok")
+            finally:
+                os.chdir(prev_cwd)
+
+    def test_resolve_cclsp_bin_handles_bare_command_name_on_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            bin_dir = root / "tools"
+            bin_dir.mkdir(parents=True)
+            cmd_bin = bin_dir / "my-cclsp"
+            cmd_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            cmd_bin.chmod(0o755)
+
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "my-cclsp", "PATH": str(bin_dir)}),
+                str(cmd_bin),
+            )
+
+            with self.assertRaises(ValueError) as ctx:
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "my-cclsp", "PATH": ""})
+            self.assertIn("CCLSP_BIN command not found on PATH: my-cclsp", str(ctx.exception))
 
 
 if __name__ == "__main__":

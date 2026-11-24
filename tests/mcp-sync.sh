@@ -813,14 +813,29 @@ rm -f "${user_plugin}"
   COPILOT_DIR="${test_tmp_dir}/clean-main-copilot"
   LOCAL_BIN_DIR="${clean_home}/.local/bin"
   LOCK_DIR="${GEMINI_DIR}/.mcp-sync.lock"
+  custom_cclsp="${test_tmp_dir}/custom-cclsp"
   mkdir -p "${clean_home}" "${GEMINI_CONFIG_DIR}" "${CODEX_DIR}" "${LOCAL_BIN_DIR}"
+  printf '#!/bin/sh\nexit 0\n' >"${custom_cclsp}"
+  chmod +x "${custom_cclsp}"
   HOME="${clean_home}"
   opencode_available() { [[ -d "${OPENCODE_DIR}" ]]; }
   copilot_available() { [[ -d "${COPILOT_DIR}" ]]; }
-  CCLSP_BIN="/custom/cclsp" main --configs-only >/dev/null
+  if err_out="$(CCLSP_BIN="/nonexistent/cclsp" sync_mcp_config 2>&1)"; then
+    echo 'Expected invalid CCLSP_BIN to fail sync_mcp_config' >&2
+    exit 1
+  fi
+  grep -Fq 'Error: CCLSP_BIN is not an executable file' <<<"${err_out}"
+  if err_out="$(CCLSP_BIN="/nonexistent/cclsp" HOME="${clean_home}" XDG_CONFIG_HOME="${test_tmp_dir}/clean-main-xdg" COPILOT_DIR="${COPILOT_DIR}" \
+    bash "${repo_dir}/bin/mcp-sync" --configs-only 2>&1)"; then
+    echo 'Expected invalid CCLSP_BIN to fail bin/mcp-sync --configs-only' >&2
+    exit 1
+  fi
+  grep -Fq 'Error: CCLSP_BIN is not an executable file' <<<"${err_out}"
+  [[ ! -e "${OPENCODE_DIR}/opencode.json" && ! -e "${COPILOT_DIR}/mcp-config.json" ]]
+  CCLSP_BIN="${custom_cclsp}" main --configs-only >/dev/null
   [[ -f "${OPENCODE_DIR}/opencode.json" ]]
   [[ -f "${COPILOT_DIR}/mcp-config.json" ]]
-  grep -Fq '"/custom/cclsp"' "${COPILOT_DIR}/mcp-config.json"
+  grep -Fq "\"${custom_cclsp}\"" "${COPILOT_DIR}/mcp-config.json"
   [[ ! -e "${OPENCODE_DIR}/AGENTS.md" && ! -L "${OPENCODE_DIR}/AGENTS.md" ]]
   [[ ! -e "${OPENCODE_DIR}/skills" ]]
   [[ ! -e "${COPILOT_DIR}/instructions/global.instructions.md" && ! -L "${COPILOT_DIR}/instructions/global.instructions.md" ]]
