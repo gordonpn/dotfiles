@@ -7,6 +7,7 @@ test:
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
     bash tests/agy-statusline.sh
     bash tests/agy-title.sh
+    bash tests/zsh-helpers.sh
 
 lint:
     #!/usr/bin/env bash
@@ -20,6 +21,7 @@ lint:
         "dotfiles/gemini/antigravity-cli/title.sh"
         "tests/agy-statusline.sh"
         "tests/agy-title.sh"
+        "tests/zsh-helpers.sh"
         "tests/mcp-sync.sh"
         "tests/deepseek-analyze.sh"
         "tests/deepseek-review-prompt.sh"

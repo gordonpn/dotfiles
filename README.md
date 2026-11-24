@@ -26,6 +26,16 @@ With scripts that will help me set up a Mac on a fresh install.
 - Installs zsh plugins
 - Set macOS Preferences defaults
 
+Shell helpers shared with other machines (`md`, `lg`, `pack`, `branch-delete`
+and the like) live in `dotfiles/.zsh-helpers`. `.zshrc_new` sources it, and so
+can any other machine's `.zshrc`; macOS-only helpers are defined only on Darwin.
+`branch-delete` matches substrings, skips `main` and `master`, and accepts
+`--dry-run` to preview matches. The branch helpers protect branches checked out
+in linked worktrees and verify the origin tip before deleting it.
+`delete-old-branches` keeps a branch if either its local or origin tip is recent. `antidote_hard_reset` uses the default Antidote
+cache and publishes a new static bundle only after generation succeeds.
+Run `bash tests/zsh-helpers.sh` after changing it.
+
 On macOS, login shells set the soft open-file limit to 4096 so coding agents can
 load skills and MCP servers without exhausting file descriptors. Open a new
 login shell and run `ulimit -Sn` to verify; existing background processes must be
