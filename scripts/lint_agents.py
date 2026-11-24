@@ -106,6 +106,68 @@ YAML_BLOCK_INDICATOR_RE: re.Pattern[str] = re.compile(r"^[|>](?:[+-]?\d*|\d+[+-]
 REF_LINK_DEF_RE: re.Pattern[str] = re.compile(
     r"^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*(?:<([^>\r\n]+)>|([^\s\r\n]+))"
 )
+BINARY_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".ico",
+        ".bmp",
+        ".tiff",
+        ".pdf",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".otf",
+        ".eot",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".xz",
+        ".7z",
+        ".wasm",
+        ".bin",
+        ".exe",
+        ".dll",
+        ".so",
+        ".dylib",
+        ".pyc",
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+    }
+)
+TEXT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".md",
+        ".markdown",
+        ".txt",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".py",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".js",
+        ".ts",
+        ".mjs",
+        ".cjs",
+        ".css",
+        ".html",
+        ".xml",
+        ".svg",
+        ".sql",
+        ".csv",
+        ".ini",
+        ".cfg",
+        ".conf",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -147,11 +209,26 @@ def _strip_yaml_comment(raw: str) -> str:
     return raw.strip()
 
 
-def _unquote_yaml_scalar(raw: str) -> str:
+def _parse_yaml_scalar(raw: str) -> tuple[str, str | None]:
     value = raw.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-        return value[1:-1]
-    return value
+    if not value:
+        return "", None
+    if value[0] in ("'", '"'):
+        quote = value[0]
+        if len(value) < 2 or value[-1] != quote:
+            return "", "unterminated quoted YAML scalar"
+        if quote == '"':
+            bs_count = 0
+            pos = len(value) - 2
+            while pos >= 1 and value[pos] == "\\":
+                bs_count += 1
+                pos -= 1
+            if bs_count % 2 == 1:
+                return "", "unterminated quoted YAML scalar"
+        return value[1:-1], None
+    if value.lower() == "null" or value == "~":
+        return "", None
+    return value, None
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
@@ -218,7 +295,10 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
             block_mode = True
             fields[key] = ""
         else:
-            fields[key] = _unquote_yaml_scalar(raw_rest)
+            scalar_val, scalar_err = _parse_yaml_scalar(raw_rest)
+            if scalar_err is not None:
+                return None, f"{scalar_err} for {key!r}"
+            fields[key] = scalar_val
 
     flush_current()
     return fields, None
@@ -433,8 +513,16 @@ def validate_skill_dir(skill_dir: Path) -> list[LintIssue]:
         if _has_dot_segment(rel):
             continue
 
+        suffix = file_path.suffix.lower()
+        if suffix in BINARY_EXTENSIONS:
+            continue
+
+        raw_bytes = file_path.read_bytes()
+        if suffix not in TEXT_EXTENSIONS and b"\x00" in raw_bytes:
+            continue
+
         try:
-            text = file_path.read_text(encoding="utf-8")
+            text = raw_bytes.decode("utf-8")
         except UnicodeDecodeError as exc:
             issues.append(LintIssue(path=file_path, line=None, message=f"file is not valid UTF-8: {exc}"))
             continue

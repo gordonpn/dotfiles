@@ -281,6 +281,36 @@ class TestLintAgents(unittest.TestCase):
                 ],
             )
 
+    def test_yaml_null_comment_only_and_unterminated_quotes_fail(self) -> None:
+        for bad_description in ("# TODO", "null", "~", '"unterminated'):
+            with self.subTest(description=bad_description), tempfile.TemporaryDirectory() as tmp:
+                repo = write_skill_repo(
+                    Path(tmp),
+                    skill_md=f"---\nname: demo-skill\ndescription: {bad_description}\n---\n",
+                )
+
+                issues = lint_agents.lint_repository(repo)
+
+                self.assertEqual(len(issues), 1)
+
+    def test_binary_skill_assets_are_skipped_while_invalid_utf8_docs_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_skill_repo(Path(tmp))
+            skill_dir = repo / "dotfiles" / "agent-skills" / "demo-skill"
+            assets_dir = skill_dir / "assets"
+            assets_dir.mkdir(parents=True)
+            (assets_dir / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+
+            self.assertEqual(lint_agents.lint_repository(repo), [])
+
+            refs_dir = skill_dir / "references"
+            refs_dir.mkdir(parents=True)
+            (refs_dir / "broken.md").write_bytes(b"\xff\xfe\xfd")
+
+            issues = lint_agents.lint_repository(repo)
+            self.assertEqual(len(issues), 1)
+            self.assertIn("file is not valid UTF-8", issues[0].message)
+
 
 if __name__ == "__main__":
     unittest.main()
