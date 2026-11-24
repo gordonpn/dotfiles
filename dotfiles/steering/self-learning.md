@@ -7,7 +7,8 @@ Use an existing Git-tracked lessons file that your agent loads at startup.
 For Kiro, link it into `~/.kiro/steering/lessons.md`. For Claude Code, import it
 from a loaded `CLAUDE.md` with an `@` reference. Confirm the file is loaded in a
 fresh session. If the setup has no tracked lessons file, ask the owner where to
-record durable lessons before creating one.
+record durable lessons before creating one. If the owner is unavailable,
+report the missing setup in the handoff.
 
 ## When to record
 

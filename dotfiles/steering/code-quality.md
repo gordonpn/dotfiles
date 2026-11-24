@@ -16,11 +16,10 @@ TypeScript and Python, the three that come up here.
 - Never silence the checker to get past an absent or failed case
   (`@SuppressWarnings`, `!` non-null assertion, `# type: ignore`, a blind cast,
   discarding an error). Narrow it or handle it.
-- Absence is a value, not an exception. A lookup that finds nothing returns it in
-  the type (`Optional<T>`, `T | undefined`, `Optional[T]`), never a thrown "not
-  found". At framework boundaries, use the framework's documented not-found
-  mechanism to preserve the intended response, including a throwing helper
-  when required.
+- In domain code, represent an absent lookup result in the return type
+  (`Optional<T>`, `T | undefined`, `Optional[T]`). At framework boundaries,
+  use the documented not-found mechanism to preserve the intended response,
+  including a throwing helper when required.
 - Bind once, narrowest scope. Prefer the immutable binding declared at first use
   (`final`, `const` over `let`, never `var`). Reassign only where the value
   genuinely changes.
@@ -28,9 +27,10 @@ TypeScript and Python, the three that come up here.
   are immutable, collections crossing a boundary are unmodifiable or copied, and
   a caller's argument is never mutated.
 - Handle closed sets exhaustively. A `switch` over an enum or union handles every
-  variant, and adding a variant must fail the build rather than fall through
-  silently. Use a Java switch expression with every enum constant and no
-  default, a TypeScript `never` assignment, or Python's `assert_never`.
+  variant. Add a compile-time or static type check that flags a missing case.
+  Use a Java switch expression with every enum constant and no default, a
+  TypeScript `never` assignment, or Python's `assert_never` with a type
+  checker enabled in CI.
 - In dynamic languages use the strongest typing available: annotate every
   signature, parameter, return and module-level constant, and enforce it with a
   strict checker (`mypy` or `pyright`, TypeScript strict mode).

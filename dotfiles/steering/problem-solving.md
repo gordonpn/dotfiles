@@ -46,9 +46,9 @@ parts, not the obvious ones.
 
 ## Stop after two failed attempts
 
-If a tool call, test fix, or command fails twice on the same step, stop. Say what
-failed, reassess the assumption behind it, and re-plan. A third blind retry is
-how a wrong assumption turns into a long detour.
+If the same action fails twice with the same inputs, stop retrying it. Say
+what failed, reassess the assumption behind it, and re-plan. Continue gathering
+new evidence when it can distinguish between hypotheses.
 
 ## Review by dimension
 
