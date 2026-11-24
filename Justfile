@@ -38,8 +38,16 @@ lint:
     if command -v actionlint >/dev/null 2>&1; then
         actionlint
     fi
-    uvx ruff check --target-version py311 tests/verify_mcp.py scripts/mcp_sync.py tests/test_mcp_sync_py.py
-    uvx --with mcp==1.1.2 mypy --strict tests/verify_mcp.py scripts/mcp_sync.py tests/test_mcp_sync_py.py
+    py_files=(
+        "tests/verify_mcp.py"
+        "scripts/mcp_sync.py"
+        "tests/test_mcp_sync_py.py"
+        "scripts/lint_agents.py"
+        "tests/test_lint_agents.py"
+    )
+    uvx ruff check --target-version py311 "${py_files[@]}"
+    uvx --with mcp==1.1.2 mypy --strict "${py_files[@]}"
+    python3 scripts/lint_agents.py
     git diff --check
 
 setup-codebase-memory:
