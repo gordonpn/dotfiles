@@ -21,7 +21,7 @@ fail() {
 # Source the helpers in a clean zsh with the given PATH and cwd, then run a script.
 run_zsh() {
   local path="$1" dir="$2" script="$3"
-  (cd "${dir}" && env -i HOME="${tmp}/home" PATH="${path}" "${zsh_bin}" -f -c "source '${helpers}'; ${script}" 2>&1) || true
+  (cd "${dir}" && env -i HOME="${tmp}/home" PATH="${path}" "${zsh_bin}" -f -c "source '${helpers}'; ${script}" 2>&1)
 }
 
 assert_contains() {
@@ -44,6 +44,7 @@ make_stub() {
 
 # shellcheck disable=SC2016 # stub bodies expand their variables when they run
 {
+  make_stub "${tmp}/stubs/uuidgen" 'echo 70000000-0000-4000-8000-000000000000'
   make_stub "${tmp}/stubs/npm" 'echo "npm-stub $*"'
   make_stub "${tmp}/stubs/repomix" 'echo "repomix $*"
 while [ $# -gt 0 ]; do [ "$1" = -o ] && : >"$2"; shift; done'
@@ -52,7 +53,8 @@ while [ $# -gt 0 ]; do [ "$1" = -o ] && : >"$2"; shift; done'
 
 # A PATH with only what the helpers need here, and no eza even where /usr/bin has one.
 mkdir -p "${tmp}/minbin"
-for t in basename dirname tr mv uuidgen uname cut; do ln -s "$(command -v "${t}")" "${tmp}/minbin/${t}"; done
+ln -s "${tmp}/stubs/uuidgen" "${tmp}/minbin/uuidgen"
+for t in basename dirname mv uname cut; do ln -s "$(command -v "${t}")" "${tmp}/minbin/${t}"; done
 
 # 1. Exactly the expected helpers are defined, and the macOS ones only on macOS.
 shared='md rd vsc ide reload lg zshrc log_to_file timezsh palette printc branch-delete delete-old-branches npm random_rename antidote_hard_reset pack'
@@ -93,15 +95,16 @@ assert_not_contains "branch-delete rejects an empty substring" "Deleting" "${act
 pass "branch-delete rejects an empty substring"
 
 # 4. timezsh needs no external time binary.
-actual=$(run_zsh "${base_path}" "${tmp}/work" 'timezsh true; print -- "status=$?"')
+actual=$(run_zsh "${tmp}/minbin" "${tmp}/work" 'timed_shell() { print timed-shell-called; }; timezsh timed_shell; print -- "status=$?"')
+[[ $(grep -cx timed-shell-called <<<"${actual}") -eq 10 ]] || fail "timezsh calls the shell ten times" "${actual}"
 assert_contains "timezsh runs with the shell's time" "status=0" "${actual}"
 assert_not_contains "timezsh runs with the shell's time" "no such file" "${actual}"
 pass "timezsh runs with the shell's time"
 
 # 5. npm refuses in a pnpm project and passes through elsewhere.
-mkdir -p "${tmp}/pnpm-project"
+mkdir -p "${tmp}/pnpm-project/packages/app"
 : >"${tmp}/pnpm-project/pnpm-lock.yaml"
-actual=$(run_zsh "${base_path}" "${tmp}/pnpm-project" 'npm install')
+actual=$(run_zsh "${base_path}" "${tmp}/pnpm-project/packages/app" 'npm install; print -- "status=$?"')
 assert_contains "npm refuses in a pnpm project" "Please use pnpm" "${actual}"
 assert_not_contains "npm refuses in a pnpm project" "npm-stub" "${actual}"
 actual=$(run_zsh "${base_path}" "${tmp}/pnpm-project" 'npm install; print -- "status=$?"')
@@ -154,7 +157,7 @@ assert_not_contains "random_rename dry run" "'c.pdf'" "${actual}"
 pass "random_rename dry run"
 
 mkdir -p "${tmp}/badgen"
-make_stub "${tmp}/badgen/uuidgen" 'exit 1'
+make_stub "${tmp}/badgen/uuidgen" 'echo partial; exit 1'
 make_stub "${tmp}/badgen/exiftool" 'exit 0'
 actual=$(run_zsh "${tmp}/badgen:${base_path}" "${tmp}/pdfs" 'random_rename -f; print -- "status=$?"')
 assert_contains "random_rename keeps files when uuidgen fails" "uuidgen gave no name" "${actual}"
@@ -170,9 +173,8 @@ pass "random_rename keeps files when exiftool fails"
 mkdir -p "${tmp}/okexif" "${tmp}/locked"
 make_stub "${tmp}/okexif/exiftool" 'exit 0'
 : >"${tmp}/locked/d.pdf"
-chmod a-w "${tmp}/locked"
+make_stub "${tmp}/okexif/mv" 'exit 1'
 actual=$(run_zsh "${tmp}/okexif:${base_path}" "${tmp}/locked" 'random_rename -f; print -- "status=$?"')
-chmod u+w "${tmp}/locked"
 assert_contains "random_rename -f reports a failed mv" "status=1" "${actual}"
 [[ -f "${tmp}/locked/d.pdf" ]] || fail "random_rename -f reports a failed mv" "d.pdf is gone"
 pass "random_rename -f reports a failed mv"
@@ -205,6 +207,27 @@ assert_contains "antidote_hard_reset --timeout needs a timeout tool" "needs time
 assert_contains "antidote_hard_reset --timeout needs a timeout tool" "status=2" "${actual}"
 assert_not_contains "antidote_hard_reset --timeout needs a timeout tool" "Removing" "${actual}"
 pass "antidote_hard_reset --timeout needs a timeout tool"
+
+mkdir -p "${tmp}/home/.antidote" "${tmp}/bundle dir"
+cat >"${tmp}/home/.antidote/antidote" <<'EOF'
+case $1 in
+  home) print -r -- "${ANTIDOTE_HOME:-$HOME/.cache/antidote}" ;;
+  bundle) print -r -- 'partial bundle'; return 1 ;;
+esac
+EOF
+: >"${tmp}/bundle dir/.zsh_plugins.txt"
+printf '%s\n' 'working bundle' >"${tmp}/bundle dir/.zsh_plugins.zsh"
+# shellcheck disable=SC2016 # Expand variables in the isolated zsh.
+actual=$(run_zsh "${base_path}" "${tmp}/bundle dir" 'ZDOTDIR=$PWD antidote_hard_reset; print -- "status=$?"')
+assert_contains "antidote_hard_reset reports bundle failure" "status=1" "${actual}"
+[[ $(cat "${tmp}/bundle dir/.zsh_plugins.zsh") == 'working bundle' ]] ||
+  fail "antidote_hard_reset preserves the working bundle" "${actual}"
+# shellcheck disable=SC2016 # Expand variables in the isolated zsh.
+actual=$(run_zsh "${base_path}" "${tmp}/bundle dir" 'ZDOTDIR=$PWD ANTIDOTE_HOME=$HOME antidote_hard_reset; print -- "status=$?"')
+assert_contains "antidote_hard_reset rejects custom cache" "Refusing to reset" "${actual}"
+[[ -e "${tmp}/home/.antidote/antidote" ]] || fail "antidote_hard_reset preserves the home" "${actual}"
+pass "antidote_hard_reset preserves the working bundle and home"
+
 
 # 9. delete-old-branches --dry-run picks only branches older than six months.
 old_date='2020-01-01T00:00:00Z'
@@ -278,6 +301,11 @@ assert_contains "branch-delete skips the checked-out branch" "Skipping branch: o
 assert_not_contains "branch-delete skips the checked-out branch" "Deleting" "${actual}"
 [[ -n "$(git -C "${tmp}/origin.git" branch --list old)" ]] || fail "branch-delete skips the checked-out branch" "old was deleted on origin"
 pass "branch-delete skips the checked-out branch"
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete master')
+assert_contains "branch-delete protects master" "Skipping branch: master" "${actual}"
+[[ -n $(git -C "${tmp}/origin.git" branch --list master) ]] ||
+  fail "branch-delete protects master" "${actual}"
+pass "branch-delete protects master"
 g -C "${tmp}/clone" checkout -q -b wt-old master
 old_commit wt-old
 g -C "${tmp}/clone" push -q origin wt-old
@@ -287,6 +315,8 @@ actual=$(run_zsh "${base_path}" "${tmp}/clone" 'delete-old-branches; print -- "s
 assert_contains "delete-old-branches reports a failed local delete" "Could not delete local branch wt-old" "${actual}"
 assert_contains "delete-old-branches reports a failed local delete" "status=1" "${actual}"
 assert_not_contains "delete-old-branches reports a failed local delete" "Deleted branches: old wt-old" "${actual}"
+[[ -n $(git -C "${tmp}/origin.git" branch --list wt-old) ]] ||
+  fail "delete-old-branches retains the linked worktree branch on origin" "${actual}"
 pass "delete-old-branches reports a failed local delete"
 g -C "${tmp}/clone" worktree remove --force "${tmp}/wt"
 g -C "${tmp}/clone" checkout -q -B old master

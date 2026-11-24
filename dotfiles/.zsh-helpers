@@ -16,9 +16,9 @@ alias zshrc='${EDITOR:-vim} "${ZDOTDIR:-$HOME}"/.zshrc'
 alias log_to_file='tee output_$(date +%s).log'
 
 timezsh() {
-  shell=${1-$SHELL}
+  local shell=${1:-${SHELL:-zsh}} i
   # zsh's own time keyword: /usr/bin/time is not installed on every Linux host.
-  for i in $(seq 1 10); do time $shell -i -c exit; done
+  for i in {1..10}; do time "$shell" -i -c exit; done
 }
 
 palette() {
@@ -34,37 +34,72 @@ printc() {
   echo -E ${(qqqq)${(%)color}}
 }
 
+# Check linked worktrees before changing either ref, and require origin to
+# still point at the selected commit. Keep the local ref if origin rejects it.
+_zsh_helpers_delete_branch() {
+  local branch=$1 remote_tip=$2 local_tip=$3
+  local ref="refs/heads/$branch" worktrees
+  worktrees=$(git worktree list --porcelain) || return 1
+  if [[ $'\n'$worktrees$'\n' == *$'\n'"branch $ref"$'\n'* ]]; then
+    echo "Could not delete local branch $branch (checked out in a worktree)." >&2
+    return 1
+  fi
+  if [[ $(git rev-parse --verify --quiet "$ref") != "$local_tip" ]]; then
+    echo "Local branch $branch changed since selection." >&2
+    return 1
+  fi
+  if [[ -n $remote_tip ]] &&
+    ! git push --force-with-lease="$ref:$remote_tip" origin ":$ref"; then
+    echo "Could not delete $branch on origin, so the local branch stays." >&2
+    return 1
+  fi
+  if [[ -n $local_tip ]]; then
+    if [[ $(git rev-parse --verify --quiet "$ref") != "$local_tip" ]]; then
+      echo "Local branch $branch changed during deletion." >&2
+      return 1
+    fi
+    if ! git branch -D -- "$branch"; then
+      [[ -z $remote_tip ]] || echo "The branch was already deleted on origin." >&2
+      return 1
+    fi
+  fi
+}
+
 branch-delete() {
   # Check if a substring argument is provided. An empty one matches every branch,
   # and an unknown second argument (a --dryrun typo) must not mean a real run.
-  if [[ -z "$1" ]] || (( $# > 2 )) || [[ $# -eq 2 && "$2" != "--dry-run" ]]; then
-    echo "Usage: $0 <substring> [--dry-run]"
-    [[ -z "$1" ]] && return 1
+  if [[ ${1:-} == (-h|--help) && $# -eq 1 ]]; then
+    echo "Usage: branch-delete <substring> [--dry-run]"
+    return 0
+  fi
+  if [[ -z ${1:-} ]] || (( $# > 2 )) || [[ $# -eq 2 && "$2" != "--dry-run" ]]; then
+    echo "Usage: branch-delete <substring> [--dry-run]" >&2
+    [[ -z ${1:-} ]] && return 1
     return 2
   fi
-  local substring="$1"
-  local current_branch=$(git symbolic-ref --quiet --short HEAD)
+  local substring="$1" branch ref branch_refs
   local dry_run=false
-  # Unique: git branch -a lists a branch once locally and once on the remote.
   local -aU branches_to_delete=()
-
-  # Check for dry-run flag
-  if [[ "$2" == "--dry-run" ]]; then
+  local current_ref=$(git symbolic-ref --quiet HEAD)
+  if [[ ${2:-} == "--dry-run" ]]; then
     dry_run=true
     echo "Dry run mode: No branches will be actually deleted."
   fi
 
-  # List all branches (local and remote) and filter those containing the substring
-  while IFS= read -r branch; do
-    # Remove leading asterisk, spaces, and "remotes/origin/" if present
-    branch=$(echo "$branch" | sed 's/^[* ]*//; s/^remotes\/origin\///')
-    
-    if [[ "$branch" == "$current_branch" ]]; then
+  branch_refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes/origin) || return 1
+  for ref in "${(@f)branch_refs}"; do
+    [[ $ref == refs/remotes/origin/HEAD ]] && continue
+    case $ref in
+      refs/heads/*) branch=${ref#refs/heads/} ;;
+      refs/remotes/origin/*) branch=${ref#refs/remotes/origin/} ;;
+      *) continue ;;
+    esac
+    if [[ $branch == (main|master) || "refs/heads/$branch" == "$current_ref" ]]; then
       echo "Skipping branch: $branch"
     elif [[ "$branch" == *"$substring"* ]]; then
       branches_to_delete+=("$branch")
     fi
-  done < <(git branch -a)
+  done
 
   # Delete or simulate deletion of the filtered branches
   local -a deleted=()
@@ -74,16 +109,10 @@ branch-delete() {
       echo "Would delete branch: $branch"
     else
       echo "Deleting branch: $branch"
-      # Keep the local branch when the remote delete fails: it may hold the only copy.
-      if git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null &&
-        ! git push origin --delete "$branch" 2>/dev/null; then
-        echo "Could not delete $branch on origin, so the local branch stays."
-        failed=1
-        continue
-      fi
-      if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
-        ! git branch -D "$branch" 2>/dev/null; then
-        echo "Could not delete local branch $branch (checked out in a worktree?)."
+      local remote_tip=$(git rev-parse --verify --quiet "refs/remotes/origin/$branch")
+      local local_tip=$(git rev-parse --verify --quiet "refs/heads/$branch")
+      if [[ -z $remote_tip && -z $local_tip ]] ||
+        ! _zsh_helpers_delete_branch "$branch" "$remote_tip" "$local_tip"; then
         failed=1
         continue
       fi
@@ -116,34 +145,26 @@ delete-old-branches() {
   local six_months_ago_ts=$(( EPOCHSECONDS - 182 * 24 * 60 * 60 ))
   echo "Six months ago timestamp: $six_months_ago_ts"
 
-  # Unique: git branch -a lists a branch once locally and once on the remote.
-  local -aU branches_to_delete=()
-  local current_branch=$(git symbolic-ref --quiet --short HEAD)
+  local -a branches_to_delete=()
+  local -A remote_tips local_tips
+  local current_ref=$(git symbolic-ref --quiet HEAD)
+  local branch ref branch_refs remote_tip local_tip last_commit_ts
 
-  # Fetch the latest data from the remote repository. Stale remote dates would
-  # select branches that have moved on since, so stop if it fails.
   git fetch --all || { echo "Fetch failed, so nothing was deleted." >&2; return 1; }
-
-  # Iterate over all branches (local and remote)
-  while IFS= read -r branch; do
-    # Remove leading asterisk, spaces, and "remotes/origin/" if present
-    branch=$(echo "$branch" | sed 's/^[* ]*//; s/^remotes\/origin\///')
-
-    # Skip HEAD, the checked-out branch, main, master and branches prefixed with "mainline"
-    if [[ "$branch" == "HEAD" || "$branch" == "$current_branch" || "$branch" == (main|master) || "$branch" == mainline* ]]; then
+  branch_refs=$(git for-each-ref --format='%(refname)' refs/remotes/origin) || return 1
+  for ref in "${(@f)branch_refs}"; do
+    [[ -z $ref ]] && continue
+    branch=${ref#refs/remotes/origin/}
+    if [[ "$branch" == (HEAD|main|master|mainline*) || "refs/heads/$branch" == "$current_ref" ]]; then
       echo "Skipping branch: $branch"
       continue
     fi
 
-    # Only branches on the remote. Age is the newest commit on the remote or the
-    # local copy, so unpushed local work keeps a branch whose remote tip is old.
-    if ! git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
-      echo "Skipping branch with no remote: $branch"
-      continue
-    fi
-    local -a refs=("refs/remotes/origin/$branch")
-    git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null && refs+=("refs/heads/$branch")
-    local last_commit_ts=$(git log -1 --format=%ct "${refs[@]}" -- 2>/dev/null)
+    remote_tip=$(git rev-parse --verify --quiet "$ref") || continue
+    local_tip=$(git rev-parse --verify --quiet "refs/heads/$branch")
+    local -a tips=("$remote_tip")
+    [[ -n $local_tip ]] && tips+=("$local_tip")
+    last_commit_ts=$(git log -1 --format=%ct "${tips[@]}" -- 2>/dev/null)
     if [[ $last_commit_ts != <-> ]]; then
       echo "Skipping branch with unknown age: $branch"
       continue
@@ -153,11 +174,13 @@ delete-old-branches() {
     # Compare the last commit date with the date 6 months ago
     if [[ "$last_commit_ts" -lt "$six_months_ago_ts" ]]; then
       echo "Marking branch for deletion: $branch"
+      remote_tips[$branch]=$remote_tip
+      local_tips[$branch]=$local_tip
       branches_to_delete+=("$branch")
     else
       echo "Branch is recent and will not be deleted: $branch"
     fi
-  done < <(git branch -a)
+  done
 
   # Delete or simulate deletion of the filtered branches
   local -a deleted=()
@@ -167,16 +190,7 @@ delete-old-branches() {
       echo "Would delete branch: $branch"
     else
       echo "Deleting branch: $branch"
-      # Keep the local branch when the remote delete fails: it may hold the only copy.
-      if git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null &&
-        ! git push origin --delete "$branch" 2>/dev/null; then
-        echo "Could not delete $branch on origin, so the local branch stays."
-        failed=1
-        continue
-      fi
-      if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
-        ! git branch -D "$branch" 2>/dev/null; then
-        echo "Could not delete local branch $branch (checked out in a worktree?)."
+      if ! _zsh_helpers_delete_branch "$branch" "${remote_tips[$branch]}" "${local_tips[$branch]}"; then
         failed=1
         continue
       fi
@@ -193,13 +207,19 @@ delete-old-branches() {
 }
 
 npm() {
-  # Let `npm completion` through: .zshrc runs it at startup, whatever the directory.
-  if [ -e pnpm-lock.yaml ] && [ "$1" != completion ]; then
-    echo "This is a pnpm project. Please use pnpm instead of npm."
-    return 1
-  else
-    command npm "$@"
+  # .zshrc calls npm completion at startup regardless of the directory.
+  if [[ $1 != completion ]]; then
+    local directory=${PWD:A}
+    while true; do
+      if [[ -e "$directory/pnpm-lock.yaml" ]]; then
+        echo "This is a pnpm project. Please use pnpm instead of npm."
+        return 1
+      fi
+      [[ $directory == / ]] && break
+      directory=${directory:h}
+    done
   fi
+  command npm "$@"
 }
 
 random_rename() {
@@ -240,14 +260,14 @@ random_rename() {
             if [ -f "$file" ]; then
                 files_found=true
                 dir_files_found=true
-                local uuid="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+                local uuid
                 # An empty uuid would rename every file to .pdf, each over the last.
-                if [[ -z $uuid ]]; then
+                if ! uuid=$(uuidgen) || [[ -z $uuid ]]; then
                     echo "Skipping '$(basename "$file")': uuidgen gave no name" >&2
                     failed=true
                     continue
                 fi
-                local new_name="$uuid.pdf"
+                local new_name="${(L)uuid}.pdf"
                 if [ "$(basename "$file")" != "$new_name" ]; then
                     if $dry_run; then
                         echo "Would rename '$(basename "$file")' to '$new_name' and randomize metadata"
@@ -333,27 +353,38 @@ antidote_hard_reset() {
 
   [[ -f "$plugins_txt" ]] || { print -u2 "Missing: $plugins_txt"; return 1; }
 
-  local antidote_home
-  antidote_home="$(antidote home)" || return $?   # where bundles are cloned
+  local antidote_home default_home
+  antidote_home=$(antidote home) || return $?
+  default_home=$(unset ANTIDOTE_HOME; zstyle -d ':antidote:home' dir; antidote home) || return $?
+  # Only recursively remove Antidote's default cache, never a custom path.
+  if [[ -z $default_home || $antidote_home != "$default_home" ||
+        $antidote_home != /*/antidote || -L $antidote_home ]]; then
+    print -u2 -- "Refusing to reset a non-default Antidote cache: $antidote_home"
+    return 1
+  fi
 
-  print "Removing Antidote home: $antidote_home"
+  print "Removing Antidote cache: $antidote_home"
   rm -rf -- "$antidote_home" || return $?
 
-  print "Removing static file: $plugins_zsh"
-  rm -f -- "$plugins_zsh" || return $?
-
-  print "Regenerating static plugin file via: antidote bundle < $plugins_txt > $plugins_zsh"
-
-  if [[ -n "$timeout_s" ]] && command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "$timeout_s" zsh -lc \
-      "fpath=(\"$HOME/.antidote\" \"$HOME/.antidote/functions\" \$fpath); autoload -Uz antidote; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false antidote bundle <\"$plugins_txt\" >\"$plugins_zsh\"" || return $?
-  elif [[ -n "$timeout_s" ]] && command -v timeout >/dev/null 2>&1; then
-    timeout "$timeout_s" zsh -lc \
-      "fpath=(\"$HOME/.antidote\" \"$HOME/.antidote/functions\" \$fpath); autoload -Uz antidote; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false antidote bundle <\"$plugins_txt\" >\"$plugins_zsh\"" || return $?
-  else
-    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
-      antidote bundle <"$plugins_txt" >"$plugins_zsh" || return $?
-  fi
+  local bundle_tmp
+  bundle_tmp=$(mktemp "${plugins_zsh}.XXXXXX") || return $?
+  {
+    if (( timeout_given )); then
+      local timeout_tool=timeout
+      (( $+commands[gtimeout] )) && timeout_tool=gtimeout
+      "$timeout_tool" "$timeout_s" zsh -c '
+        fpath=("$HOME/.antidote" "$HOME/.antidote/functions" $fpath)
+        autoload -Uz antidote
+        GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false antidote bundle
+      ' <"$plugins_txt" >"$bundle_tmp" || return $?
+    else
+      GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
+        antidote bundle <"$plugins_txt" >"$bundle_tmp" || return $?
+    fi
+    mv -f -- "$bundle_tmp" "$plugins_zsh" || return $?
+  } always {
+    [[ -e $bundle_tmp ]] && rm -f -- "$bundle_tmp"
+  }
 
   print "Done. Static file written: $plugins_zsh"
 
