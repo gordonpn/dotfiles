@@ -137,13 +137,6 @@ fi
 [[ -n ${TASK//[[:space:]]/} ]] || die 'Task is empty'
 [[ -z ${CODING_DELEGATE_ACTIVE:-} ]] || die 'Recursive delegation blocked'
 command -v git >/dev/null || die 'git is required'
-if [[ $AGENT == copilot ]]; then
-  command -v copilot >/dev/null || die 'Install GitHub Copilot CLI and authenticate with copilot login first'
-elif [[ $AGENT == codex ]]; then
-  command -v codex >/dev/null || die 'Install Codex CLI and authenticate with codex login first'
-else
-  command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
-fi
 
 OPENCODE_ZERO_COST_MODELS=(
   "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
@@ -236,6 +229,42 @@ elif [[ $AGENT == copilot ]]; then
     done
   fi
   (( has_opencode )) || die 'No usable OpenCode fallback models configured'
+fi
+
+missing_agent_message() {
+  case "$1" in
+    copilot) printf 'Install GitHub Copilot CLI and authenticate with copilot login first' ;;
+    codex) printf 'Install Codex CLI and authenticate with codex login first' ;;
+    *) printf 'Install/login to %s first' "$1" ;;
+  esac
+}
+
+has_available_candidate=0
+unique_candidates=()
+for ca in "${CANDIDATE_AGENTS[@]}"; do
+  seen_ca=0
+  if ((${#unique_candidates[@]} > 0)); then
+    for uc in "${unique_candidates[@]}"; do
+      if [[ $uc == "$ca" ]]; then
+        seen_ca=1
+        break
+      fi
+    done
+  fi
+  if (( ! seen_ca )); then
+    unique_candidates+=("$ca")
+    if command -v "$ca" >/dev/null 2>&1; then
+      has_available_candidate=1
+    fi
+  fi
+done
+if (( ! has_available_candidate )); then
+  if ((${#unique_candidates[@]} == 1)); then
+    die "$(missing_agent_message "${unique_candidates[0]}")"
+  fi
+  candidate_list=$(printf '%s, ' "${unique_candidates[@]}")
+  candidate_list=${candidate_list%, }
+  die "No delegate CLI found on PATH (checked: $candidate_list). Install and authenticate at least one: codex (codex login), opencode (opencode auth login), or copilot (copilot login)"
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
@@ -802,7 +831,7 @@ PY
 
   die "Failed to resolve Copilot MCP profile '$prof' in '$target_file'"
 }
-if [[ " ${CANDIDATE_AGENTS[*]} " == *" copilot "* ]]; then
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" copilot "* ]] && command -v copilot >/dev/null 2>&1; then
   resolve_copilot_mcp_profile
 fi
 
@@ -895,27 +924,60 @@ SUCCESSFUL_MODEL=''
 SUCCESSFUL_AGENT=''
 CURRENT_MODEL=''
 CURRENT_AGENT=''
+ATTEMPTED_CANDIDATE=0
+LAST_ATTEMPTED_AGENT=''
+LAST_ATTEMPTED_MODEL=''
+LAST_SKIPPED_MISSING_AGENT=''
 AUTH_FAILURE=0
 FAILED_AGENT=''
 TOTAL_CANDIDATES=${#CANDIDATE_AGENTS[@]}
+
+has_remaining_executable_candidate() {
+  local start_idx=$1
+  local j cand_agent cand_model
+  for (( j=start_idx; j<TOTAL_CANDIDATES; j++ )); do
+    cand_agent="${CANDIDATE_AGENTS[j]}"
+    cand_model="${CANDIDATE_MODELS[j]}"
+    cand_model="${cand_model#"${cand_model%%[![:space:]]*}"}"
+    cand_model="${cand_model%"${cand_model##*[![:space:]]}"}"
+    if [[ ($cand_agent == opencode || $cand_agent == copilot) && -z $cand_model ]]; then
+      continue
+    fi
+    if command -v "$cand_agent" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   CURRENT_AGENT="${CANDIDATE_AGENTS[idx]}"
   CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
   CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
   CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
   if [[ ($CURRENT_AGENT == opencode || $CURRENT_AGENT == copilot) && -z $CURRENT_MODEL ]]; then continue; fi
-  if [[ $CURRENT_AGENT == opencode ]] && ! command -v opencode >/dev/null; then continue; fi
-  if [[ $CURRENT_AGENT == copilot ]] && ! command -v copilot >/dev/null; then continue; fi
-  if [[ $CURRENT_AGENT == codex ]] && ! command -v codex >/dev/null; then continue; fi
+  if ! command -v "$CURRENT_AGENT" >/dev/null 2>&1; then
+    if ! has_remaining_executable_candidate $((idx + 1)); then
+      break
+    fi
+    if [[ $LAST_SKIPPED_MISSING_AGENT != "$CURRENT_AGENT" ]]; then
+      printf 'Agent %s executable not found on PATH; skipping to next candidate...\n' "$CURRENT_AGENT" >&2
+      LAST_SKIPPED_MISSING_AGENT="$CURRENT_AGENT"
+    fi
+    continue
+  fi
 
   # Reset worktree if retrying after a prior failed candidate
-  if (( idx > 0 )); then
+  if (( ATTEMPTED_CANDIDATE )); then
     if ! git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 \
       || ! git -C "$WORKTREE" clean -fdx >/dev/null 2>&1; then
       printf 'Failed to reset worktree before retry; stopping fallback.\n' >&2
       break
     fi
   fi
+  ATTEMPTED_CANDIDATE=1
+  LAST_ATTEMPTED_AGENT="$CURRENT_AGENT"
+  LAST_ATTEMPTED_MODEL="$CURRENT_MODEL"
 
   if [[ $CURRENT_AGENT == codex ]]; then
     if [[ ${#CODEX_DOTTED_SERVERS[@]} -gt 0 ]]; then
@@ -1016,7 +1078,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     break
   fi
   if is_provider_quota_error "$CURRENT_AGENT"; then
-    if (( idx + 1 < TOTAL_CANDIDATES )); then
+    if has_remaining_executable_candidate $((idx + 1)); then
       printf 'Agent %s (model %s) encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_AGENT" "$CURRENT_MODEL" "$RUN_EXIT" >&2
     fi
   else
@@ -1024,8 +1086,8 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   fi
 done
 
-AGENT=${SUCCESSFUL_AGENT:-${CURRENT_AGENT:-$AGENT}}
-MODEL=${SUCCESSFUL_MODEL:-${CURRENT_MODEL:-}}
+AGENT=${SUCCESSFUL_AGENT:-${LAST_ATTEMPTED_AGENT:-$AGENT}}
+MODEL=${SUCCESSFUL_MODEL:-${LAST_ATTEMPTED_MODEL:-}}
 printf 'resolved_agent=%s\nresolved_model=%s\nexit_code=%s\nresolved_mcp_profile=%s\nresolved_mcp_profile_path=%s\n' "$AGENT" "${MODEL:-'(default)'}" "$EXIT_CODE" "$(resolve_active_profile "$AGENT")" "$(resolve_active_profile_path "$AGENT")" >>"$LOG_DIR/manifest.txt"
 
 # Review both tracked and untracked changes: git diff alone omits new files.
