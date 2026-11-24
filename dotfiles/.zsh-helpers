@@ -54,15 +54,20 @@ _zsh_helpers_delete_branch() {
     return 1
   fi
   if [[ -n $local_tip ]]; then
-    if [[ $(git show-ref --verify --hash "$ref" 2>/dev/null) != "$local_tip" ]]; then
-      echo "Local branch $branch changed during deletion." >&2
-      [[ -z $remote_tip ]] || echo "The branch was already deleted on origin." >&2
+    if ! git update-ref -d "$ref" "$local_tip"; then
+      local current_local_tip
+      current_local_tip=$(git show-ref --verify --hash "$ref" 2>/dev/null) || current_local_tip=""
+      if [[ "$current_local_tip" != "$local_tip" ]]; then
+        echo "Local branch $branch changed during deletion (expected $local_tip, now ${current_local_tip:-missing}); local branch was kept." >&2
+      else
+        echo "Could not delete local branch $branch at $local_tip; local branch was kept." >&2
+      fi
+      if [[ -n $remote_tip ]]; then
+        echo "Remote branch origin/$branch was already deleted (was $remote_tip). Restore it with: git push origin ${remote_tip}:refs/heads/${branch}" >&2
+      fi
       return 1
     fi
-    if ! git branch -D -- "$branch"; then
-      [[ -z $remote_tip ]] || echo "The branch was already deleted on origin." >&2
-      return 1
-    fi
+    git config --remove-section "branch.$branch" 2>/dev/null || true
   fi
 }
 

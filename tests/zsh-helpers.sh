@@ -328,15 +328,34 @@ make_stub "${tmp}/origin.git/hooks/pre-receive" \
   "env -i PATH=/usr/bin:/bin git --git-dir=\"${tmp}/clone/.git\" update-ref refs/heads/old ${recent_tip} ${old_tip}"
 actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
 assert_contains "branch-delete detects local changes during push" "changed during deletion" "${actual}"
-assert_contains "branch-delete reports the partial update" "already deleted on origin" "${actual}"
+assert_contains "branch-delete reports the partial update" "Remote branch origin/old was already deleted" "${actual}"
+assert_contains "branch-delete reports recovery command" "git push origin ${old_tip}:refs/heads/old" "${actual}"
 assert_contains "branch-delete detects local changes during push" "status=1" "${actual}"
 [[ -z $(g -C "${tmp}/origin.git" branch --list old) &&
    $(g -C "${tmp}/clone" rev-parse refs/heads/old) == "${recent_tip}" ]] ||
   fail "branch-delete preserves the changed local tip during push" "${actual}"
 rm "${tmp}/origin.git/hooks/pre-receive"
+g -C "${tmp}/clone" push -q origin "${old_tip}:refs/heads/old"
+[[ $(g -C "${tmp}/origin.git" rev-parse refs/heads/old) == "${old_tip}" ]] ||
+  fail "branch-delete recovery command restores origin/old" "${actual}"
 g -C "${tmp}/clone" update-ref refs/heads/old "${old_tip}" "${recent_tip}"
-g -C "${tmp}/clone" push -q origin old
 pass "branch-delete preserves the changed local tip during push"
+
+make_stub "${tmp}/origin.git/hooks/pre-receive" \
+  ": >\"${tmp}/clone/.git/refs/heads/old.lock\""
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
+assert_contains "branch-delete reports local deletion failure" "Could not delete local branch old at ${old_tip}" "${actual}"
+assert_contains "branch-delete reports local deletion failure" "Remote branch origin/old was already deleted" "${actual}"
+assert_contains "branch-delete reports local deletion failure recovery" "git push origin ${old_tip}:refs/heads/old" "${actual}"
+assert_contains "branch-delete reports local deletion failure" "status=1" "${actual}"
+[[ -z $(g -C "${tmp}/origin.git" branch --list old) &&
+   $(g -C "${tmp}/clone" rev-parse refs/heads/old) == "${old_tip}" ]] ||
+  fail "branch-delete preserves unchanged local tip on local deletion failure" "${actual}"
+rm -f "${tmp}/clone/.git/refs/heads/old.lock" "${tmp}/origin.git/hooks/pre-receive"
+g -C "${tmp}/clone" push -q origin "${old_tip}:refs/heads/old"
+[[ $(g -C "${tmp}/origin.git" rev-parse refs/heads/old) == "${old_tip}" ]] ||
+  fail "branch-delete local deletion failure recovery restores origin/old" "${actual}"
+pass "branch-delete preserves unchanged local tip on local deletion failure"
 
 
 
