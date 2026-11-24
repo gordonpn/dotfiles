@@ -218,7 +218,7 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 
 | Server Name | Transport | Implementation | Key Capabilities |
 | :--- | :--- | :--- | :--- |
-| **`cclsp`** | stdio | `@ktnyt/cclsp` | Multi-language LSP router for 14 local language servers |
+| **`cclsp`** | stdio | `cclsp` | Multi-language LSP router for 10 local language servers |
 | **`fetch`** | stdio | `uvx mcp-server-fetch` | HTTP web requests and HTML-to-markdown conversion |
 | **`git`** | stdio | `uvx mcp-server-git` | Structured status, diff, log, branch, and commit operations on local repos |
 | **`playwright`** | stdio | `npx -y @playwright/mcp@latest` | Accessibility-tree browser automation and interaction |
@@ -365,3 +365,21 @@ It replaces `@modelcontextprotocol/server-github`, which npm marks "package no l
 
 ### 11. Git MCP Without a Pinned Repository
 `mcp-server-git` accepts a `--repository` argument that scopes it to one checkout. It is intentionally omitted so the `repo_path` tool parameter stays free, letting one server instance serve every repository on the machine.
+
+### 12. cclsp Language Server Scope and Startup Behavior
+`dotfiles/cclsp.json` (symlinked to `~/.config/cclsp/cclsp.json`) configures 10 code and infrastructure language servers:
+
+- TypeScript/JavaScript (`ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`): `typescript-language-server --stdio`
+- Python (`py`, `pyi`): `pyright-langserver --stdio`
+- Go (`go`): `gopls`
+- Shell (`sh`, `bash`, `zsh`): `bash-language-server start`
+- Lua (`lua`): `lua-language-server`
+- Dockerfile (`dockerfile`, `Dockerfile`): `docker-langserver --stdio`
+- Astro (`astro`): `astro-ls --stdio`
+- Terraform (`tf`, `tfvars`): `terraform-ls serve`
+- Java (`java`): `jdtls`
+- CSS/SCSS/Sass (`css`, `scss`, `sass`): `tailwindcss-language-server --stdio`
+
+Config and documentation language servers (`yaml-language-server`, `vscode-json-language-server`, `marksman`, and `taplo`) are intentionally omitted. In this repository, `cclsp@0.7.0` eagerly preloads every entry whose extensions appear within depth 3 of the workspace root (`preloadServers()`), and `taplo` emits `SchemaCatalog` decode errors while `marksman` logs bogus-workspace warnings on startup. Limiting `dotfiles/cclsp.json` to code and infrastructure servers reduces observed startup preloads on the current `dotfiles` depth-3 tree from 7 LSPs to up to 3 (`pyright-langserver`, `bash-language-server`, and `lua-language-server`), depending on which language files exist in a checkout. As a trade-off, LSP routing and diagnostics are disabled for YAML, JSON, Markdown, and TOML files; revisit this omission when upstream `cclsp` adds an option to disable eager preloads.
+
+Upstream `cclsp@0.7.0` exposes no configuration field, CLI flag, or environment variable to disable `preloadServers()`, and its `startServer()` method waits 3000 ms for a server-to-client `initialized` notification that standard LSP servers do not send, so each started LSP still logs `Error: Initialization timeout` on stderr before proceeding. In addition, `cclsp` only disposes child LSP processes on `SIGINT`/`SIGTERM` rather than `stdin` EOF, so stdio clients that do not terminate the subprocess on close (such as `mcp==1.1.2` `stdio_client`) must enforce a teardown timeout and explicitly send `SIGTERM` and wait (or terminate the process tree if the timeout expires).
