@@ -45,6 +45,11 @@ Antigravity CLI, OpenCode, and Codex share a local codebase knowledge graph MCP
 server. Run `just setup-codebase-memory` to install and configure it. See
 [MCP setup](docs/mcp-setup.md#codebase-memory-mcp) for usage and diagnostics.
 
+`dotfiles/steering/` holds tool-neutral engineering guidance for coding agents:
+how to approach a problem, how much code to change, code quality and the
+self-learning loop. Configure Kiro steering links or Claude Code `@` imports
+to load these files from this checkout.
+
 Codex and Antigravity CLI use ECC for reusable engineering workflows. Run
 `just setup-ecc` to install the pinned Codex plugin and Antigravity's
 project-local minimal profile. See [MCP setup](docs/mcp-setup.md#ecc) for details.
