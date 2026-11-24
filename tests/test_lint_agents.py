@@ -221,6 +221,66 @@ class TestLintAgents(unittest.TestCase):
             self.assertEqual(fail_code, 1)
             self.assertIn("forbidden em dash", err_buf.getvalue())
 
+            missing_skills_repo = root / "missing-skills"
+            (missing_skills_repo / "dotfiles" / "gemini").mkdir(parents=True)
+            (missing_skills_repo / "dotfiles" / "gemini" / "GEMINI.md").write_text("# Clean\n", encoding="utf-8")
+            out_buf = io.StringIO()
+            err_buf = io.StringIO()
+            with redirect_stdout(out_buf), redirect_stderr(err_buf):
+                missing_code = lint_agents.main(["--repo-dir", str(missing_skills_repo)])
+            self.assertEqual(missing_code, 1)
+            self.assertIn("missing agent-skills directory", err_buf.getvalue())
+
+    def test_frontmatter_comments_and_block_modifiers_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_skill_repo(
+                Path(tmp),
+                skill_md=(
+                    "---\n"
+                    'name: demo-skill # inline comment\n'
+                    "description: |+2\n"
+                    "  Line one.\n"
+                    "  Line two.\n"
+                    "---\n\n"
+                    "# Body\n"
+                ),
+            )
+
+            issues = lint_agents.lint_repository(repo)
+
+            self.assertEqual(issues, [])
+
+    def test_escaped_backticks_stray_brackets_and_reference_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_skill_repo(
+                Path(tmp),
+                skill_md=(
+                    "---\n"
+                    "name: demo-skill\n"
+                    "description: Valid description.\n"
+                    "---\n\n"
+                    "Escaped \\`not code [broken](references/missing.md)\n"
+                    "[ok](references/guide.md) stray](references/should-not-match.md)\n"
+                    "[missing-ref]: references/missing-ref.md\n"
+                    "[ok-ref]: <references/my guide.md>\n"
+                ),
+                extra_files={
+                    "references/guide.md": "# Guide\n",
+                    "references/my guide.md": "# Spaced Guide\n",
+                },
+            )
+
+            issues = lint_agents.lint_repository(repo)
+
+            messages = [issue.message for issue in issues]
+            self.assertEqual(
+                messages,
+                [
+                    "broken relative link target: references/missing.md",
+                    "broken relative link target: references/missing-ref.md",
+                ],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

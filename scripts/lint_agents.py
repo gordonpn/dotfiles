@@ -102,6 +102,10 @@ EMOJI_EXTRAS: frozenset[int] = frozenset({0x20E3, 0xFE0F})
 URI_SCHEME_RE: re.Pattern[str] = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 FENCE_RE: re.Pattern[str] = re.compile(r"^[ \t]*(`{3,}|~{3,})")
 YAML_KEY_RE: re.Pattern[str] = re.compile(r"^([A-Za-z0-9_-]+):(.*)$")
+YAML_BLOCK_INDICATOR_RE: re.Pattern[str] = re.compile(r"^[|>](?:[+-]?\d*|\d+[+-]?)$")
+REF_LINK_DEF_RE: re.Pattern[str] = re.compile(
+    r"^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*(?:<([^>\r\n]+)>|([^\s\r\n]+))"
+)
 
 
 @dataclass(frozen=True)
@@ -123,6 +127,26 @@ class LintIssue:
         return f"{display_path}:{self.line}: {self.message}"
 
 
+def _strip_yaml_comment(raw: str) -> str:
+    in_single = False
+    in_double = False
+    escaped = False
+    for idx, ch in enumerate(raw):
+        if escaped:
+            escaped = False
+            continue
+        if in_double and ch == "\\":
+            escaped = True
+            continue
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double and (idx == 0 or raw[idx - 1].isspace()):
+            return raw[:idx].rstrip()
+    return raw.strip()
+
+
 def _unquote_yaml_scalar(raw: str) -> str:
     value = raw.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
@@ -134,8 +158,11 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
     """Parse top-level YAML frontmatter key-value pairs from a Markdown document.
 
     Accepts a document beginning with a ``---`` delimiter line and closed by a
-    subsequent ``---`` delimiter line. Returns ``(fields, None)`` on success or
-    ``(None, error_message)`` when frontmatter is absent or malformed.
+    subsequent ``---`` delimiter line. Supports scalar values (with optional quotes
+    and unquoted ``#`` comments), folded/literal block scalars (``|``, ``>`` with
+    optional chomping or indent indicators), and indented continuation lines.
+    Returns ``(fields, None)`` on success or ``(None, error_message)`` when
+    frontmatter is absent or malformed.
     """
     lines = text.lstrip("\ufeff").splitlines()
     if not lines or lines[0].rstrip() != "---":
@@ -185,9 +212,9 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
         match = YAML_KEY_RE.match(line)
         if not match:
             return None, f"invalid YAML frontmatter line: {line!r}"
-        key, raw_rest = match.group(1), match.group(2).strip()
+        key, raw_rest = match.group(1), _strip_yaml_comment(match.group(2).strip())
         current_key = key
-        if raw_rest in ("|", "|-", ">", ">-"):
+        if YAML_BLOCK_INDICATOR_RE.match(raw_rest):
             block_mode = True
             fields[key] = ""
         else:
@@ -205,6 +232,16 @@ def strip_inline_code(line: str) -> str:
     while i < n:
         if line[i] != "`":
             out.append(line[i])
+            i += 1
+            continue
+
+        bs_count = 0
+        pos = i - 1
+        while pos >= 0 and line[pos] == "\\":
+            bs_count += 1
+            pos -= 1
+        if bs_count % 2 == 1:
+            out.append("`")
             i += 1
             continue
 
@@ -247,11 +284,12 @@ def _extract_link_target(raw_inside_parens: str) -> str:
 
 
 def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
-    """Extract relative inline Markdown link paths outside code blocks and code spans.
+    """Extract relative single-line Markdown link targets outside code blocks and spans.
 
-    Ignores fenced code blocks, inline backtick spans, external URI schemes, and
-    pure ``#anchor`` links. Returns ``(line_number, raw_target)`` pairs, preserving
-    empty targets so broken ``[text]()`` links can be reported.
+    Supports inline ``[text](target)`` links and reference-style link definitions
+    ``[id]: target``. Ignores fenced code blocks, inline backtick spans, external
+    URI schemes, and pure ``#anchor`` links. Returns ``(line_number, raw_target)``
+    pairs, preserving empty targets so broken ``[text]()`` links can be reported.
     """
     links: list[tuple[int, str]] = []
     fence_char: str | None = None
@@ -273,15 +311,23 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
         if fence_char is not None:
             continue
 
+        ref_match = REF_LINK_DEF_RE.match(raw_line)
+        if ref_match:
+            ref_target = (ref_match.group(1) or ref_match.group(2) or "").strip()
+            if not ref_target.startswith("#") and not URI_SCHEME_RE.match(ref_target):
+                links.append((line_no, ref_target))
+            continue
+
         line = strip_inline_code(raw_line)
         idx = 0
+        search_floor = 0
         length = len(line)
         while idx < length:
             bracket_close = line.find("](", idx)
             if bracket_close == -1:
                 break
-            # Require an unescaped '[' earlier on the line for a valid link span.
-            open_bracket = line.rfind("[", 0, bracket_close)
+            # Require an unescaped '[' after the previous completed link on this line.
+            open_bracket = line.rfind("[", search_floor, bracket_close)
             if open_bracket == -1 or (open_bracket > 0 and line[open_bracket - 1] == "\\"):
                 idx = bracket_close + 2
                 continue
@@ -307,6 +353,7 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
 
             target = _extract_link_target(line[bracket_close + 2 : cursor])
             idx = cursor + 1
+            search_floor = idx
 
             if target.startswith("#") or URI_SCHEME_RE.match(target):
                 continue
@@ -478,7 +525,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     skills_dir = repo_dir / "dotfiles" / "agent-skills"
-    skill_count = sum(1 for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith("."))
+    skill_count = (
+        sum(1 for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith("."))
+        if skills_dir.is_dir()
+        else 0
+    )
     print(f"Validated {skill_count} agent skill(s) and GEMINI.md with no issues.")
     return 0
 
