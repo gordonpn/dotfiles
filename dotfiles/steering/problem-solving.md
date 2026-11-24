@@ -68,7 +68,8 @@ and output a tool can parse.
 ## Delegate independent work to subagents
 
 Use subagents by default whenever the work splits into independent parts, and
-launch them together in one batch rather than one after another.
+batch independent built-in subagents within their concurrency limits. Run
+external coding workers one at a time, following the configured fallback order.
 
 - Delegate broad searches across many files or packages, per-dimension reviews,
   separate hypotheses under investigation, and per-package changes (each in its
@@ -76,8 +77,8 @@ launch them together in one batch rather than one after another.
 - Keep inline: a lookup whose target is known, a handful of tool calls, a
   one-file edit, and anything sequential, where each step needs the last one's
   result.
-- Run at most two Codex reviewers at once. Seven in parallel all failed with
-  429 Too Many Requests before any of them reached a verdict.
+- Keep reviewer concurrency within the provider's limits. If requests are
+  rate-limited before a verdict, reduce concurrency and retry when allowed.
 - Verify what a subagent returns before acting on it, as for any other agent's
   findings (see Review by dimension).
 

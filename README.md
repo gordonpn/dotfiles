@@ -37,8 +37,8 @@ server. Run `just setup-codebase-memory` to install and configure it. See
 
 `dotfiles/steering/` holds tool-neutral engineering guidance for coding agents:
 how to approach a problem, how much code to change, code quality and the
-self-learning loop. Agents that load instruction files by path (Kiro steering,
-Claude Code `@` imports) link these files into place, so edit them here.
+self-learning loop. Configure Kiro steering links or Claude Code `@` imports
+to load these files from this checkout.
 
 Codex and Antigravity CLI use ECC for reusable engineering workflows. Run
 `just setup-ecc` to install the pinned Codex plugin and Antigravity's

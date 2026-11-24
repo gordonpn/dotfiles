@@ -10,14 +10,17 @@ TypeScript and Python, the three that come up here.
 
 - Never escape the type system to get past the checker (raw types or `Object`,
   `any`, `Any`). At an untyped boundary use the explicit unknown type and narrow
-  with a checked conversion: `unknown` plus a guard, a parsed model or
-  `TypedDict`, an `instanceof` check.
+  with a checked conversion: `unknown` plus a guard, a runtime-validated
+  Python model or `TypedDict`, or an `instanceof` check. A `TypedDict`
+  declaration alone does not validate input.
 - Never silence the checker to get past an absent or failed case
   (`@SuppressWarnings`, `!` non-null assertion, `# type: ignore`, a blind cast,
   discarding an error). Narrow it or handle it.
 - Absence is a value, not an exception. A lookup that finds nothing returns it in
   the type (`Optional<T>`, `T | undefined`, `Optional[T]`), never a thrown "not
-  found". Reserve exceptions for genuinely exceptional conditions.
+  found". At framework boundaries, use the framework's documented not-found
+  mechanism to preserve the intended response, including a throwing helper
+  when required.
 - Bind once, narrowest scope. Prefer the immutable binding declared at first use
   (`final`, `const` over `let`, never `var`). Reassign only where the value
   genuinely changes.
@@ -26,8 +29,8 @@ TypeScript and Python, the three that come up here.
   a caller's argument is never mutated.
 - Handle closed sets exhaustively. A `switch` over an enum or union handles every
   variant, and adding a variant must fail the build rather than fall through
-  silently: assert exhaustiveness in the default branch with a `never`
-  assignment, `assert_never`, or a thrown `IllegalStateException`.
+  silently. Use a Java switch expression with every enum constant and no
+  default, a TypeScript `never` assignment, or Python's `assert_never`.
 - In dynamic languages use the strongest typing available: annotate every
   signature, parameter, return and module-level constant, and enforce it with a
   strict checker (`mypy` or `pyright`, TypeScript strict mode).
@@ -54,7 +57,7 @@ TypeScript and Python, the three that come up here.
 - API docs state the contract only: what it does, what it accepts, what it
   returns, what it throws. No implementation details, no design rationale, no
   claims about the rest of the codebase, no future plans, because those claims
-  rot. Inline comments still explain why, per `preferences.md`.
+  rot. Use inline comments to explain non-obvious reasons for the code.
 - A type, class or module doc states its role and contract, not an enumeration of
   what each of its methods does. That is each method's own doc's job.
 - Never reference ticket IDs, PR or CR numbers, sprint goals, milestones or

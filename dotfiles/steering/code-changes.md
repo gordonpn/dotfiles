@@ -1,8 +1,8 @@
 # Code Changes
 
 How much code to write, and how far to reach, once the approach is settled.
-`problem-solving.md` covers choosing the approach; `testing.md` covers proving
-it works. This file covers scope.
+`problem-solving.md` covers choosing the approach. Use the project's testing
+guidance to verify the change. This file covers scope.
 
 Biased toward caution over speed. For a trivial edit with an obvious answer,
 use judgement rather than ceremony.

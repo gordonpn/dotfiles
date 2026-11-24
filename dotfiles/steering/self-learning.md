@@ -3,9 +3,11 @@
 Turn corrections and repeated failures into durable behavior change, so the same
 mistake is not repeated in a later session.
 
-Lessons live in `~/.kiro/steering/lessons.md`. That file is itself a steering
-file, so anything recorded there is automatically in context next session. That
-is what closes the loop.
+Use an existing Git-tracked lessons file that your agent loads at startup.
+For Kiro, link it into `~/.kiro/steering/lessons.md`. For Claude Code, import it
+from a loaded `CLAUDE.md` with an `@` reference. Confirm the file is loaded in a
+fresh session. If the setup has no tracked lessons file, ask the owner where to
+record durable lessons before creating one.
 
 ## When to record
 
@@ -63,5 +65,6 @@ once believed.
 - Consolidate when entries start to overlap: merge duplicates, generalize
   specifics, drop the stale. Length is not itself the trigger.
 
-`lessons.md` is tracked in git. Write to it directly, but do not commit it.
-Leave the diff for review.
+Coordinate with other sessions before editing the same lessons file. Re-read
+the latest contents under that coordination and preserve unrelated edits.
+Include accepted changes in the usual repository review workflow.
