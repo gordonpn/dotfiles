@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeAlias
 from urllib.parse import unquote
 
 FORBIDDEN_DASHES: dict[str, str] = {
@@ -100,12 +103,41 @@ EMOJI_RANGES: tuple[tuple[int, int], ...] = (
 EMOJI_EXTRAS: frozenset[int] = frozenset({0x20E3, 0xFE0F})
 
 URI_SCHEME_RE: re.Pattern[str] = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
-FENCE_RE: re.Pattern[str] = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+QUOTE_PREFIX_RE: re.Pattern[str] = re.compile(r"^(?:[ \t]{0,3}>[ \t]?)*")
+FENCE_RE: re.Pattern[str] = re.compile(r"^((?:[ \t]{0,3}>[ \t]?)*)[ \t]*(`{3,}|~{3,})")
+ATX_HEADING_RE: re.Pattern[str] = re.compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]|$)")
+THEMATIC_BREAK_RE: re.Pattern[str] = re.compile(
+    r"^[ \t]{0,3}(?:(\*[ \t]*){3,}|(-[ \t]*){3,}|(_[ \t]*){3,})$"
+)
+COMMONMARK_ESCAPE_RE: re.Pattern[str] = re.compile(
+    r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])"
+)
 YAML_KEY_RE: re.Pattern[str] = re.compile(r"^([A-Za-z0-9_-]+):(.*)$")
+YAML_NESTED_KEY_RE: re.Pattern[str] = re.compile(r"^[A-Za-z0-9_-]+:(?:\s|$)")
 YAML_BLOCK_INDICATOR_RE: re.Pattern[str] = re.compile(r"^[|>](?:[+-]?\d*|\d+[+-]?)$")
+YAML_INT_RE: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
+YAML_FLOAT_RE: re.Pattern[str] = re.compile(
+    r"^(?:[+-]?(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|[+-]?\d+[eE][+-]?\d+)$"
+)
+YAML_BOOL_VALUES: dict[str, bool] = {
+    "true": True,
+    "false": False,
+    "yes": True,
+    "no": False,
+    "on": True,
+    "off": False,
+}
+YAML_SPECIAL_FLOATS: dict[str, float] = {
+    ".inf": float("inf"),
+    "+.inf": float("inf"),
+    "-.inf": float("-inf"),
+    ".nan": float("nan"),
+}
 REF_LINK_DEF_RE: re.Pattern[str] = re.compile(
     r"^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*(?:<([^>\r\n]+)>|([^\s\r\n]+))"
 )
+MAX_SNIFF_BYTES: int = 8192
+MARKDOWN_EXTENSIONS: frozenset[str] = frozenset({".md", ".markdown"})
 BINARY_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".png",
@@ -116,6 +148,16 @@ BINARY_EXTENSIONS: frozenset[str] = frozenset(
         ".ico",
         ".bmp",
         ".tiff",
+        ".avif",
+        ".heic",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".ogg",
+        ".webm",
+        ".mov",
+        ".avi",
+        ".flac",
         ".pdf",
         ".woff",
         ".woff2",
@@ -189,6 +231,16 @@ class LintIssue:
         return f"{display_path}:{self.line}: {self.message}"
 
 
+@dataclass(frozen=True)
+class _YamlCollection:
+    """Marker for non-string YAML collection values (mappings or sequences)."""
+
+    kind: str
+
+
+YamlValue: TypeAlias = str | bool | int | float | _YamlCollection | None
+
+
 def _strip_yaml_comment(raw: str) -> str:
     in_single = False
     in_double = False
@@ -209,37 +261,119 @@ def _strip_yaml_comment(raw: str) -> str:
     return raw.strip()
 
 
-def _parse_yaml_scalar(raw: str) -> tuple[str, str | None]:
+def _parse_quoted_yaml_scalar(value: str) -> tuple[str | None, str | None]:
+    quote = value[0]
+    n = len(value)
+    if n < 2:
+        return None, "unterminated quoted YAML scalar"
+
+    if quote == '"':
+        idx = 1
+        while idx < n:
+            ch = value[idx]
+            if ch == "\\":
+                idx += 2
+                continue
+            if ch == '"':
+                if idx == n - 1:
+                    return value[1:-1], None
+                return None, "unexpected trailing characters after quoted YAML scalar"
+            idx += 1
+        return None, "unterminated quoted YAML scalar"
+
+    idx = 1
+    while idx < n:
+        if value[idx] == "'":
+            if idx + 1 < n and value[idx + 1] == "'":
+                idx += 2
+                continue
+            if idx == n - 1:
+                return value[1:-1].replace("''", "'"), None
+            return None, "unexpected trailing characters after quoted YAML scalar"
+        idx += 1
+    return None, "unterminated quoted YAML scalar"
+
+
+def _is_balanced_flow_collection(value: str) -> bool:
+    stack: list[str] = []
+    in_single = False
+    in_double = False
+    idx = 0
+    n = len(value)
+    while idx < n:
+        ch = value[idx]
+        if in_double:
+            if ch == "\\":
+                idx += 2
+                continue
+            if ch == '"':
+                in_double = False
+            idx += 1
+            continue
+        if in_single:
+            if ch == "'":
+                if idx + 1 < n and value[idx + 1] == "'":
+                    idx += 2
+                    continue
+                in_single = False
+            idx += 1
+            continue
+        if ch == '"':
+            in_double = True
+        elif ch == "'":
+            in_single = True
+        elif ch == "[":
+            stack.append("]")
+        elif ch == "{":
+            stack.append("}")
+        elif ch in ("]", "}"):
+            if not stack or stack.pop() != ch:
+                return False
+            if not stack and idx != n - 1:
+                return False
+        idx += 1
+    return not in_single and not in_double and not stack
+
+
+def _parse_yaml_scalar(raw: str) -> tuple[YamlValue, bool, str | None]:
+    """Return ``(value, is_quoted, error_message)`` for a YAML scalar line."""
     value = raw.strip()
     if not value:
-        return "", None
+        return None, False, None
     if value[0] in ("'", '"'):
-        quote = value[0]
-        if len(value) < 2 or value[-1] != quote:
-            return "", "unterminated quoted YAML scalar"
-        if quote == '"':
-            bs_count = 0
-            pos = len(value) - 2
-            while pos >= 1 and value[pos] == "\\":
-                bs_count += 1
-                pos -= 1
-            if bs_count % 2 == 1:
-                return "", "unterminated quoted YAML scalar"
-        return value[1:-1], None
-    if value.lower() == "null" or value == "~":
-        return "", None
-    return value, None
+        quoted_val, quoted_err = _parse_quoted_yaml_scalar(value)
+        return quoted_val, True, quoted_err
+    if value[0] in ("]", "}"):
+        return None, False, "unexpected YAML flow collection delimiter"
+    if value[0] in ("[", "{"):
+        if not _is_balanced_flow_collection(value):
+            return None, False, "malformed YAML flow collection"
+        kind = "sequence" if value[0] == "[" else "mapping"
+        return _YamlCollection(kind), False, None
+    lowered = value.lower()
+    if lowered == "null" or value == "~":
+        return None, False, None
+    if lowered in YAML_BOOL_VALUES:
+        return YAML_BOOL_VALUES[lowered], False, None
+    if lowered in YAML_SPECIAL_FLOATS:
+        return YAML_SPECIAL_FLOATS[lowered], False, None
+    if YAML_INT_RE.match(value):
+        return int(value, 10), False, None
+    if YAML_FLOAT_RE.match(value):
+        return float(value), False, None
+    return value, False, None
 
 
-def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
+def parse_frontmatter(text: str) -> tuple[dict[str, YamlValue] | None, str | None]:
     """Parse top-level YAML frontmatter key-value pairs from a Markdown document.
 
     Accepts a document beginning with a ``---`` delimiter line and closed by a
-    subsequent ``---`` delimiter line. Supports scalar values (with optional quotes
-    and unquoted ``#`` comments), folded/literal block scalars (``|``, ``>`` with
-    optional chomping or indent indicators), and indented continuation lines.
-    Returns ``(fields, None)`` on success or ``(None, error_message)`` when
-    frontmatter is absent or malformed.
+    subsequent ``---`` delimiter line. Supports typed scalars (strings,
+    booleans, numbers, null), folded/literal block scalars (``|``, ``>`` with
+    optional chomping or indent indicators), flow collections, nested
+    mappings/sequences, and plain multiline continuations. Rejects duplicate
+    keys and malformed syntax. Returns ``(fields, None)`` on success or
+    ``(None, error_message)`` when frontmatter is absent or malformed.
     """
     lines = text.lstrip("\ufeff").splitlines()
     if not lines or lines[0].rstrip() != "---":
@@ -254,18 +388,25 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
     if closing_idx is None:
         return None, "missing closing YAML frontmatter delimiter '---'"
 
-    fields: dict[str, str] = {}
+    fields: dict[str, YamlValue] = {}
     current_key: str | None = None
     block_lines: list[str] = []
     block_mode = False
+    current_is_quoted = False
+    current_is_collection = False
+    current_allows_plain = False
 
     def flush_current() -> None:
         nonlocal current_key, block_lines, block_mode
+        nonlocal current_is_quoted, current_is_collection, current_allows_plain
         if current_key is not None and block_mode:
             fields[current_key] = "\n".join(block_lines).strip()
         current_key = None
         block_lines = []
         block_mode = False
+        current_is_quoted = False
+        current_is_collection = False
+        current_allows_plain = False
 
     for line in lines[1:closing_idx]:
         if not line.strip():
@@ -276,51 +417,123 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str] | None, str | None]:
             continue
 
         if line[0] in (" ", "\t"):
-            if current_key is not None:
-                if block_mode:
-                    block_lines.append(line.strip())
-                else:
-                    existing = fields.get(current_key, "")
-                    joined = f"{existing} {line.strip()}".strip()
-                    fields[current_key] = joined
+            if current_key is None:
+                return None, f"unexpected indented YAML line: {line!r}"
+            if block_mode:
+                block_lines.append(line.strip())
+                continue
+            if current_is_quoted:
+                return None, f"invalid indented continuation after quoted scalar for {current_key!r}"
+            if current_is_collection:
+                continue
+
+            stripped = _strip_yaml_comment(line.strip())
+            if not stripped:
+                continue
+            if not current_allows_plain:
+                return None, f"invalid indented continuation for {current_key!r}"
+            if stripped == "-" or stripped.startswith("- "):
+                fields[current_key] = _YamlCollection("sequence")
+                current_is_collection = True
+                continue
+            if YAML_NESTED_KEY_RE.match(stripped):
+                fields[current_key] = _YamlCollection("mapping")
+                current_is_collection = True
+                continue
+
+            existing = fields.get(current_key)
+            existing_text = existing if isinstance(existing, str) else ""
+            fields[current_key] = f"{existing_text} {stripped}".strip()
             continue
 
         flush_current()
         match = YAML_KEY_RE.match(line)
         if not match:
             return None, f"invalid YAML frontmatter line: {line!r}"
-        key, raw_rest = match.group(1), _strip_yaml_comment(match.group(2).strip())
+        key = match.group(1)
+        if key in fields:
+            return None, f"duplicate YAML frontmatter key: {key!r}"
+
+        raw_rest = _strip_yaml_comment(match.group(2).strip())
         current_key = key
         if YAML_BLOCK_INDICATOR_RE.match(raw_rest):
             block_mode = True
             fields[key] = ""
-        else:
-            scalar_val, scalar_err = _parse_yaml_scalar(raw_rest)
-            if scalar_err is not None:
-                return None, f"{scalar_err} for {key!r}"
-            fields[key] = scalar_val
+            continue
+
+        scalar_val, is_quoted, scalar_err = _parse_yaml_scalar(raw_rest)
+        if scalar_err is not None:
+            return None, f"{scalar_err} for {key!r}"
+
+        fields[key] = scalar_val
+        current_is_quoted = is_quoted
+        current_is_collection = isinstance(scalar_val, _YamlCollection)
+        current_allows_plain = (not is_quoted) and (
+            raw_rest == "" or isinstance(scalar_val, str)
+        )
 
     flush_current()
     return fields, None
 
 
-def strip_inline_code(line: str) -> str:
-    """Replace inline backtick code spans on a single line with spaces."""
+def _is_escaped(text: str, pos: int) -> bool:
+    bs_count = 0
+    cursor = pos - 1
+    while cursor >= 0 and text[cursor] == "\\":
+        bs_count += 1
+        cursor -= 1
+    return bs_count % 2 == 1
+
+
+def _find_unescaped_open_bracket(line: str, floor: int, close_pos: int) -> int:
+    depth = 0
+    pos = close_pos - 1
+    while pos >= floor:
+        if not _is_escaped(line, pos):
+            if line[pos] == "]":
+                depth += 1
+            elif line[pos] == "[":
+                if depth == 0:
+                    return pos
+                depth -= 1
+        pos -= 1
+    return -1
+
+
+def _strip_inline_code_stateful(line: str, open_tick_len: int = 0) -> tuple[str, int]:
+    """Mask inline backtick code spans on ``line``, carrying ``open_tick_len`` across lines."""
     out: list[str] = []
     i = 0
     n = len(line)
+
+    if open_tick_len > 0:
+        search_idx = 0
+        close_pos = -1
+        while search_idx < n:
+            if line[search_idx] == "`":
+                run_len = 0
+                while search_idx + run_len < n and line[search_idx + run_len] == "`":
+                    run_len += 1
+                if run_len == open_tick_len:
+                    close_pos = search_idx
+                    break
+                search_idx += run_len
+            else:
+                search_idx += 1
+        if close_pos == -1:
+            return " " * n, open_tick_len
+        end_pos = close_pos + open_tick_len
+        out.append(" " * end_pos)
+        i = end_pos
+        open_tick_len = 0
+
     while i < n:
         if line[i] != "`":
             out.append(line[i])
             i += 1
             continue
 
-        bs_count = 0
-        pos = i - 1
-        while pos >= 0 and line[pos] == "\\":
-            bs_count += 1
-            pos -= 1
-        if bs_count % 2 == 1:
+        if _is_escaped(line, i):
             out.append("`")
             i += 1
             continue
@@ -348,10 +561,20 @@ def strip_inline_code(line: str) -> str:
             out.append(" " * (end_pos - i))
             i = end_pos
         else:
-            out.append("`" * tick_len)
-            i += tick_len
+            out.append(" " * (n - i))
+            return "".join(out), tick_len
 
-    return "".join(out)
+    return "".join(out), 0
+
+
+def strip_inline_code(line: str) -> str:
+    """Replace inline backtick code spans on a single line with spaces."""
+    masked, _ = _strip_inline_code_stateful(line, 0)
+    return masked
+
+
+def _is_external_or_anchor(target: str) -> bool:
+    return target.startswith(("#", "//")) or bool(URI_SCHEME_RE.match(target))
 
 
 def _extract_link_target(raw_inside_parens: str) -> str:
@@ -367,38 +590,78 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
     """Extract relative single-line Markdown link targets outside code blocks and spans.
 
     Supports inline ``[text](target)`` links and reference-style link definitions
-    ``[id]: target``. Ignores fenced code blocks, inline backtick spans, external
-    URI schemes, and pure ``#anchor`` links. Returns ``(line_number, raw_target)``
+    ``[id]: target``. Ignores fenced code blocks (including blockquoted fences),
+    multiline inline backtick spans, external URI schemes, protocol-relative
+    network-path URLs, and pure ``#anchor`` links. Returns ``(line_number, raw_target)``
     pairs, preserving empty targets so broken ``[text]()`` links can be reported.
     """
     links: list[tuple[int, str]] = []
     fence_char: str | None = None
     fence_len = 0
+    fence_quote_depth = 0
+    open_tick_len = 0
+    prev_quote_depth = 0
 
     for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        quote_match = QUOTE_PREFIX_RE.match(raw_line)
+        quote_prefix = quote_match.group(0) if quote_match else ""
+        line_quote_depth = quote_prefix.count(">")
+        content_after_quote = raw_line[len(quote_prefix) :]
+
+        if fence_char is not None and fence_quote_depth > 0 and line_quote_depth < fence_quote_depth:
+            fence_char = None
+            fence_len = 0
+            fence_quote_depth = 0
+
         fence_match = FENCE_RE.match(raw_line)
         if fence_match:
-            marker = fence_match.group(1)
+            quote_depth = fence_match.group(1).count(">")
+            marker = fence_match.group(2)
+            trailing = raw_line[fence_match.end() :]
             if fence_char is None:
-                fence_char = marker[0]
-                fence_len = len(marker)
-                continue
-            if marker[0] == fence_char and len(marker) >= fence_len and raw_line[fence_match.end() :].strip() == "":
+                if not (marker[0] == "`" and "`" in trailing):
+                    fence_char = marker[0]
+                    fence_len = len(marker)
+                    fence_quote_depth = quote_depth
+                    open_tick_len = 0
+                    prev_quote_depth = line_quote_depth
+                    continue
+            elif (
+                quote_depth == fence_quote_depth
+                and marker[0] == fence_char
+                and len(marker) >= fence_len
+                and trailing.strip() == ""
+            ):
                 fence_char = None
                 fence_len = 0
+                fence_quote_depth = 0
+                open_tick_len = 0
+                prev_quote_depth = line_quote_depth
                 continue
 
         if fence_char is not None:
+            prev_quote_depth = line_quote_depth
             continue
 
-        ref_match = REF_LINK_DEF_RE.match(raw_line)
-        if ref_match:
-            ref_target = (ref_match.group(1) or ref_match.group(2) or "").strip()
-            if not ref_target.startswith("#") and not URI_SCHEME_RE.match(ref_target):
-                links.append((line_no, ref_target))
-            continue
+        if (
+            not content_after_quote.strip()
+            or line_quote_depth != prev_quote_depth
+            or ATX_HEADING_RE.match(content_after_quote)
+            or THEMATIC_BREAK_RE.match(content_after_quote)
+        ):
+            open_tick_len = 0
 
-        line = strip_inline_code(raw_line)
+        prev_quote_depth = line_quote_depth
+
+        if open_tick_len == 0:
+            ref_match = REF_LINK_DEF_RE.match(raw_line)
+            if ref_match:
+                ref_target = (ref_match.group(1) or ref_match.group(2) or "").strip()
+                if not _is_external_or_anchor(ref_target):
+                    links.append((line_no, ref_target))
+                continue
+
+        line, open_tick_len = _strip_inline_code_stateful(raw_line, open_tick_len)
         idx = 0
         search_floor = 0
         length = len(line)
@@ -406,9 +669,12 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
             bracket_close = line.find("](", idx)
             if bracket_close == -1:
                 break
+            if _is_escaped(line, bracket_close):
+                idx = bracket_close + 2
+                continue
             # Require an unescaped '[' after the previous completed link on this line.
-            open_bracket = line.rfind("[", search_floor, bracket_close)
-            if open_bracket == -1 or (open_bracket > 0 and line[open_bracket - 1] == "\\"):
+            open_bracket = _find_unescaped_open_bracket(line, search_floor, bracket_close)
+            if open_bracket == -1:
                 idx = bracket_close + 2
                 continue
 
@@ -435,7 +701,7 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
             idx = cursor + 1
             search_floor = idx
 
-            if target.startswith("#") or URI_SCHEME_RE.match(target):
+            if _is_external_or_anchor(target):
                 continue
             links.append((line_no, target))
 
@@ -472,11 +738,137 @@ def _has_dot_segment(rel_path: Path) -> bool:
     return any(part.startswith(".") for part in rel_path.parts)
 
 
-def validate_skill_dir(skill_dir: Path) -> list[LintIssue]:
+def _git_tracked_files(repo_dir: Path) -> set[Path] | None:
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "ls-files",
+                "-z",
+                "--",
+                "dotfiles/agent-skills",
+                "dotfiles/gemini/GEMINI.md",
+            ],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return {
+        repo_dir / os.fsdecode(raw_entry)
+        for raw_entry in proc.stdout.split(b"\x00")
+        if raw_entry
+    }
+
+
+def _discover_skill_dirs(repo_dir: Path, tracked_files: set[Path] | None) -> list[Path]:
+    skills_dir = repo_dir / "dotfiles" / "agent-skills"
+    if not skills_dir.is_dir():
+        return []
+    if tracked_files is None:
+        return [p for p in sorted(skills_dir.iterdir()) if p.is_dir() and not p.name.startswith(".")]
+
+    discovered: set[Path] = set()
+    for tracked_path in tracked_files:
+        try:
+            rel = tracked_path.relative_to(skills_dir)
+        except ValueError:
+            continue
+        if len(rel.parts) >= 2:
+            discovered.add(skills_dir / rel.parts[0])
+    return sorted(discovered)
+
+
+def _decode_sniffed_text(file_path: Path) -> str | None:
+    """Sniff up to ``MAX_SNIFF_BYTES`` bytes to skip non-text assets without whole-file reads."""
+    with file_path.open("rb") as fh:
+        head = fh.read(MAX_SNIFF_BYTES + 1)
+
+    if b"\x00" in head:
+        return None
+
+    if len(head) <= MAX_SNIFF_BYTES:
+        try:
+            return head.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+    prefix = head[:MAX_SNIFF_BYTES]
+    try:
+        prefix.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        if exc.reason != "unexpected end of data" or exc.start < len(prefix) - 3:
+            return None
+
+    raw_bytes = file_path.read_bytes()
+    if b"\x00" in raw_bytes:
+        return None
+    try:
+        return raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _validate_frontmatter_fields(
+    skill_md: Path,
+    skill_dir_name: str,
+    fields: dict[str, YamlValue],
+) -> list[LintIssue]:
+    issues: list[LintIssue] = []
+
+    if "name" not in fields or fields["name"] is None:
+        issues.append(LintIssue(path=skill_md, line=1, message="frontmatter missing non-empty 'name'"))
+    else:
+        name_val = fields["name"]
+        if not isinstance(name_val, str):
+            issues.append(
+                LintIssue(path=skill_md, line=1, message="frontmatter 'name' must be a non-empty string")
+            )
+        else:
+            name = name_val.strip()
+            if not name:
+                issues.append(
+                    LintIssue(path=skill_md, line=1, message="frontmatter missing non-empty 'name'")
+                )
+            elif name != skill_dir_name:
+                issues.append(
+                    LintIssue(
+                        path=skill_md,
+                        line=1,
+                        message=f"frontmatter 'name' ({name!r}) does not match folder name ({skill_dir_name!r})",
+                    )
+                )
+
+    if "description" not in fields or fields["description"] is None:
+        issues.append(LintIssue(path=skill_md, line=1, message="frontmatter missing non-empty 'description'"))
+    else:
+        desc_val = fields["description"]
+        if not isinstance(desc_val, str):
+            issues.append(
+                LintIssue(path=skill_md, line=1, message="frontmatter 'description' must be a non-empty string")
+            )
+        elif not desc_val.strip():
+            issues.append(
+                LintIssue(path=skill_md, line=1, message="frontmatter missing non-empty 'description'")
+            )
+
+    return issues
+
+
+def validate_skill_dir(
+    skill_dir: Path,
+    tracked_files: set[Path] | None = None,
+    resolved_tracked: set[Path] | None = None,
+) -> list[LintIssue]:
     """Validate frontmatter, relative Markdown links, and text formatting for one skill."""
     issues: list[LintIssue] = []
     skill_md = skill_dir / "SKILL.md"
-    if not skill_md.is_file():
+    skill_md_tracked = tracked_files is None or skill_md in tracked_files
+    if not skill_md_tracked or not skill_md.is_file():
         issues.append(LintIssue(path=skill_md, line=None, message="missing required SKILL.md"))
         return issues
 
@@ -490,51 +882,48 @@ def validate_skill_dir(skill_dir: Path) -> list[LintIssue]:
     if fm_error is not None or fields is None:
         issues.append(LintIssue(path=skill_md, line=1, message=fm_error or "invalid frontmatter"))
     else:
-        name = fields.get("name", "").strip()
-        if not name:
-            issues.append(LintIssue(path=skill_md, line=1, message="frontmatter missing non-empty 'name'"))
-        elif name != skill_dir.name:
-            issues.append(
-                LintIssue(
-                    path=skill_md,
-                    line=1,
-                    message=f"frontmatter 'name' ({name!r}) does not match folder name ({skill_dir.name!r})",
-                )
-            )
-        description = fields.get("description", "").strip()
-        if not description:
-            issues.append(LintIssue(path=skill_md, line=1, message="frontmatter missing non-empty 'description'"))
+        issues.extend(_validate_frontmatter_fields(skill_md, skill_dir.name, fields))
 
     skill_root = skill_dir.resolve()
-    for file_path in sorted(skill_dir.rglob("*")):
-        if not file_path.is_file():
-            continue
-        rel = file_path.relative_to(skill_dir)
-        if _has_dot_segment(rel):
-            continue
+    if resolved_tracked is None and tracked_files is not None:
+        resolved_tracked = {p.resolve() for p in tracked_files}
+    if tracked_files is None:
+        candidate_files = [
+            p
+            for p in sorted(skill_dir.rglob("*"))
+            if p.is_file() and not _has_dot_segment(p.relative_to(skill_dir))
+        ]
+    else:
+        candidate_files = [
+            p for p in sorted(tracked_files) if p.is_relative_to(skill_dir) and p.is_file()
+        ]
 
+    for file_path in candidate_files:
         suffix = file_path.suffix.lower()
         if suffix in BINARY_EXTENSIONS:
             continue
 
-        raw_bytes = file_path.read_bytes()
-        if suffix not in TEXT_EXTENSIONS and b"\x00" in raw_bytes:
-            continue
-
-        try:
-            text = raw_bytes.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            issues.append(LintIssue(path=file_path, line=None, message=f"file is not valid UTF-8: {exc}"))
-            continue
+        if suffix in TEXT_EXTENSIONS:
+            try:
+                text = file_path.read_bytes().decode("utf-8")
+            except UnicodeDecodeError as exc:
+                issues.append(LintIssue(path=file_path, line=None, message=f"file is not valid UTF-8: {exc}"))
+                continue
+        else:
+            sniffed_text = _decode_sniffed_text(file_path)
+            if sniffed_text is None:
+                continue
+            text = sniffed_text
 
         issues.extend(check_text_formatting(file_path, text))
 
-        if file_path.suffix.lower() == ".md":
+        if suffix in MARKDOWN_EXTENSIONS:
             for line_no, raw_target in extract_relative_markdown_links(text):
                 if not raw_target:
                     issues.append(LintIssue(path=file_path, line=line_no, message="empty relative Markdown link target"))
                     continue
-                clean_target = unquote(raw_target.split("#", 1)[0].split("?", 1)[0])
+                unescaped_target = COMMONMARK_ESCAPE_RE.sub(r"\1", raw_target)
+                clean_target = unquote(unescaped_target.split("#", 1)[0].split("?", 1)[0])
                 if not clean_target:
                     continue
                 resolved = (file_path.parent / clean_target).resolve()
@@ -554,16 +943,31 @@ def validate_skill_dir(skill_dir: Path) -> list[LintIssue]:
                             message=f"broken relative link target: {raw_target}",
                         )
                     )
+                elif resolved_tracked is not None:
+                    is_tracked_file = resolved.is_file() and resolved in resolved_tracked
+                    is_tracked_dir = resolved.is_dir() and any(
+                        p.is_relative_to(resolved) for p in resolved_tracked
+                    )
+                    if not (is_tracked_file or is_tracked_dir):
+                        issues.append(
+                            LintIssue(
+                                path=file_path,
+                                line=line_no,
+                                message=f"broken relative link target: {raw_target}",
+                            )
+                        )
 
     return issues
 
 
-def lint_repository(repo_dir: Path) -> list[LintIssue]:
-    """Validate tracked agent skills and shared Gemini rules under ``repo_dir``."""
+def _lint_repository_with_count(repo_dir: Path) -> tuple[list[LintIssue], int]:
     issues: list[LintIssue] = []
+    tracked_files = _git_tracked_files(repo_dir)
+    resolved_tracked = {p.resolve() for p in tracked_files} if tracked_files is not None else None
 
     gemini_rules = repo_dir / "dotfiles" / "gemini" / "GEMINI.md"
-    if not gemini_rules.is_file():
+    gemini_tracked = tracked_files is None or gemini_rules in tracked_files
+    if not gemini_tracked or not gemini_rules.is_file():
         issues.append(LintIssue(path=gemini_rules, line=None, message="missing required GEMINI.md"))
     else:
         try:
@@ -576,16 +980,22 @@ def lint_repository(repo_dir: Path) -> list[LintIssue]:
     skills_dir = repo_dir / "dotfiles" / "agent-skills"
     if not skills_dir.is_dir():
         issues.append(LintIssue(path=skills_dir, line=None, message="missing agent-skills directory"))
-        return issues
+        return issues, 0
 
-    skill_dirs = [p for p in sorted(skills_dir.iterdir()) if p.is_dir() and not p.name.startswith(".")]
+    skill_dirs = _discover_skill_dirs(repo_dir, tracked_files)
     if not skill_dirs:
         issues.append(LintIssue(path=skills_dir, line=None, message="no tracked skill directories found"))
-        return issues
+        return issues, 0
 
     for skill_dir in skill_dirs:
-        issues.extend(validate_skill_dir(skill_dir))
+        issues.extend(validate_skill_dir(skill_dir, tracked_files, resolved_tracked))
 
+    return issues, len(skill_dirs)
+
+
+def lint_repository(repo_dir: Path) -> list[LintIssue]:
+    """Validate tracked agent skills and shared Gemini rules under ``repo_dir``."""
+    issues, _ = _lint_repository_with_count(repo_dir)
     return issues
 
 
@@ -605,19 +1015,13 @@ def main(argv: list[str] | None = None) -> int:
     """Run repository lint checks and return exit code 0 when clean or 1 on failure."""
     args = build_parser().parse_args(argv)
     repo_dir = args.repo_dir.resolve()
-    issues = lint_repository(repo_dir)
+    issues, skill_count = _lint_repository_with_count(repo_dir)
     if issues:
         for issue in issues:
             print(issue.format(repo_dir), file=sys.stderr)
         print(f"Found {len(issues)} agent lint issue(s).", file=sys.stderr)
         return 1
 
-    skills_dir = repo_dir / "dotfiles" / "agent-skills"
-    skill_count = (
-        sum(1 for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith("."))
-        if skills_dir.is_dir()
-        else 0
-    )
     print(f"Validated {skill_count} agent skill(s) and GEMINI.md with no issues.")
     return 0
 
