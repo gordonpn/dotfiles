@@ -487,6 +487,7 @@ sync_mcp_config() {
   export OPENCODE_MCP_SERVERS="${OPENCODE_MCP_SERVERS:-}"
   export COPILOT_MCP_PROFILE="${COPILOT_MCP_PROFILE:-minimal}"
   export COPILOT_MCP_SERVERS="${COPILOT_MCP_SERVERS:-}"
+  export PNPM_HOME="${PNPM_HOME:-${HOME}/.local/share/pnpm}"
   export CCLSP_BIN="${CCLSP_BIN:-}"
 
   python3 "${MCP_SYNC_PY}" sync-mcp-config \

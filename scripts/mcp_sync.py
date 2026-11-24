@@ -585,7 +585,11 @@ def render_copilot_config(
 
 
 def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = None) -> str:
-    """Resolve the cclsp executable path across pnpm v12, PATH, and legacy pnpm v10 layouts."""
+    """Resolve the cclsp executable path across pnpm v12, PATH, and legacy pnpm v10 layouts.
+
+    Executable checks use ``os.access(..., os.X_OK)`` as a best-effort local UID
+    probe and emit a warning to stderr when falling back without an executable match.
+    """
     active_env = os.environ if env is None else env
     explicit = active_env.get("CCLSP_BIN", "").strip()
     if explicit:
@@ -607,6 +611,10 @@ def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = 
     if v10_candidate.is_file() and os.access(v10_candidate, os.X_OK):
         return str(v10_candidate)
 
+    print(
+        f"Warning: cclsp executable not found; falling back to {v12_candidate}. Set CCLSP_BIN or install cclsp.",
+        file=sys.stderr,
+    )
     return str(v12_candidate)
 
 
@@ -635,7 +643,7 @@ def sync_mcp_config(
     replacements = {f"${{{var}}}": os.environ.get(var, "") for var in TEMPLATE_ENV_VARS}
     if not replacements["${CCLSP_BIN}"]:
         home_raw = replacements["${HOME}"]
-        home_dir = Path(home_raw) if home_raw else None
+        home_dir = Path(home_raw) if home_raw else Path.home()
         replacements["${CCLSP_BIN}"] = resolve_cclsp_bin(home=home_dir, env=os.environ)
     hydrated_raw = hydrate_json_value(raw_template, replacements)
     hydrated_data = cast(dict[str, object], hydrated_raw)

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import stat
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import tomllib
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from typing import cast
 from unittest import mock
@@ -508,10 +510,11 @@ class TestMcpSyncHelpers(unittest.TestCase):
             )
 
             v10_bin.unlink()
-            self.assertEqual(
-                mcp_sync.resolve_cclsp_bin(home, {"PATH": ""}),
-                str(home / ".local" / "share" / "pnpm" / "bin" / "cclsp"),
-            )
+            stderr_buf = io.StringIO()
+            with redirect_stderr(stderr_buf):
+                fallback = mcp_sync.resolve_cclsp_bin(home, {"PATH": ""})
+            self.assertEqual(fallback, str(home / ".local" / "share" / "pnpm" / "bin" / "cclsp"))
+            self.assertIn("Warning: cclsp executable not found; falling back to", stderr_buf.getvalue())
 
 
 if __name__ == "__main__":

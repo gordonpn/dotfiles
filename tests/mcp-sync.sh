@@ -7,6 +7,7 @@ trap 'rm -rf "$test_tmp_dir"' EXIT
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$HOME/.cache/uv}"
 export HOME="${test_tmp_dir}/home"
 export XDG_CONFIG_HOME="${test_tmp_dir}/xdg"
+export PNPM_HOME="${test_tmp_dir}/pnpm"
 export TMPDIR="${test_tmp_dir}"
 mkdir -p "$HOME" "$XDG_CONFIG_HOME"
 
@@ -816,9 +817,10 @@ rm -f "${user_plugin}"
   HOME="${clean_home}"
   opencode_available() { [[ -d "${OPENCODE_DIR}" ]]; }
   copilot_available() { [[ -d "${COPILOT_DIR}" ]]; }
-  main --configs-only >/dev/null
+  CCLSP_BIN="/custom/cclsp" main --configs-only >/dev/null
   [[ -f "${OPENCODE_DIR}/opencode.json" ]]
   [[ -f "${COPILOT_DIR}/mcp-config.json" ]]
+  grep -Fq '"/custom/cclsp"' "${COPILOT_DIR}/mcp-config.json"
   [[ ! -e "${OPENCODE_DIR}/AGENTS.md" && ! -L "${OPENCODE_DIR}/AGENTS.md" ]]
   [[ ! -e "${OPENCODE_DIR}/skills" ]]
   [[ ! -e "${COPILOT_DIR}/instructions/global.instructions.md" && ! -L "${COPILOT_DIR}/instructions/global.instructions.md" ]]
