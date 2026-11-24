@@ -12,7 +12,7 @@ Usage: delegate.sh --agent codex|opencode|copilot --mode plan|build --task '...'
 Options:
   --task-file PATH     Read task from file instead of --task
   --id SLUG            Human-readable run identifier (default: task)
-  --model MODEL        Override selected delegate model
+  --model MODEL        Override selected delegate model (pins single agent without fallback)
   --base REF           Git revision to snapshot (default: HEAD)
   --orchestrator NAME  codex|agy (default: codex)
   --automatic          Mark run as automatic delegation (accepted for compatibility)
@@ -137,13 +137,6 @@ fi
 [[ -n ${TASK//[[:space:]]/} ]] || die 'Task is empty'
 [[ -z ${CODING_DELEGATE_ACTIVE:-} ]] || die 'Recursive delegation blocked'
 command -v git >/dev/null || die 'git is required'
-if [[ $AGENT == copilot ]]; then
-  command -v copilot >/dev/null || die 'Install GitHub Copilot CLI and authenticate with copilot login first'
-elif [[ $AGENT == codex ]]; then
-  command -v codex >/dev/null || die 'Install Codex CLI and authenticate with codex login first'
-else
-  command -v "$AGENT" >/dev/null || die "Install/login to $AGENT first"
-fi
 
 OPENCODE_ZERO_COST_MODELS=(
   "${OPENCODE_DELEGATE_MODEL:-opencode/deepseek-v4.1-flash-free}"
@@ -236,6 +229,81 @@ elif [[ $AGENT == copilot ]]; then
     done
   fi
   (( has_opencode )) || die 'No usable OpenCode fallback models configured'
+fi
+
+trim_ws() {
+  local val=$1
+  val="${val#"${val%%[![:space:]]*}"}"
+  val="${val%"${val##*[![:space:]]}"}"
+  printf '%s' "$val"
+}
+
+is_candidate_runnable() {
+  local agent=$1
+  local model
+  model=$(trim_ws "$2")
+  if [[ ($agent == opencode || $agent == copilot) && -z $model ]]; then
+    return 1
+  fi
+  command -v "$agent" >/dev/null 2>&1
+}
+
+missing_agent_message() {
+  case "$1" in
+    copilot) printf 'Install GitHub Copilot CLI and authenticate with copilot login first' ;;
+    codex) printf 'Install Codex CLI and authenticate with codex login first' ;;
+    opencode) printf 'Install OpenCode CLI first; use opencode auth login if the selected provider requires it' ;;
+    *) printf 'Install/login to %s first' "$1" ;;
+  esac
+}
+
+has_available_candidate=0
+unique_candidates=()
+installed_candidates=()
+for ((ci=0; ci<${#CANDIDATE_AGENTS[@]}; ci++)); do
+  ca="${CANDIDATE_AGENTS[ci]}"
+  cm="${CANDIDATE_MODELS[ci]}"
+  seen_ca=0
+  if ((${#unique_candidates[@]} > 0)); then
+    for uc in "${unique_candidates[@]}"; do
+      if [[ $uc == "$ca" ]]; then
+        seen_ca=1
+        break
+      fi
+    done
+  fi
+  if (( ! seen_ca )); then
+    unique_candidates+=("$ca")
+    if command -v "$ca" >/dev/null 2>&1; then
+      installed_candidates+=("$ca")
+    fi
+  fi
+  if is_candidate_runnable "$ca" "$cm"; then
+    has_available_candidate=1
+  fi
+done
+if (( ! has_available_candidate )); then
+  if ((${#unique_candidates[@]} == 0)); then
+    die 'No runnable delegate candidates configured'
+  fi
+  if ((${#installed_candidates[@]} == 1)); then
+    die "No runnable model configured for delegate agent ${installed_candidates[0]}"
+  fi
+  if ((${#installed_candidates[@]} > 1)); then
+    installed_list=$(printf '%s, ' "${installed_candidates[@]}")
+    installed_list=${installed_list%, }
+    die "No runnable model configured for installed delegate agents: $installed_list"
+  fi
+  if ((${#unique_candidates[@]} == 1)); then
+    die "$(missing_agent_message "${unique_candidates[0]}")"
+  fi
+  candidate_list=$(printf '%s, ' "${unique_candidates[@]}")
+  candidate_list=${candidate_list%, }
+  install_advice=''
+  for ca in "${unique_candidates[@]}"; do
+    install_advice+=" $(missing_agent_message "$ca");"
+  done
+  die "No delegate CLI found on PATH (checked: $candidate_list).${install_advice%;}"
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
@@ -439,7 +507,9 @@ PY
 
   die "Failed to generate OpenCode MCP profile '$prof' in '$target_file'"
 }
-resolve_opencode_mcp_profile
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" opencode "* ]] && command -v opencode >/dev/null 2>&1; then
+  resolve_opencode_mcp_profile
+fi
 
 CODEX_MCP_PROFILE=''
 CODEX_MCP_ARGS=()
@@ -578,7 +648,9 @@ resolve_codex_mcp_profile() {
     printf '%s\n' "$s" >> "$target_file"
   done <<< "$servers"
 }
-resolve_codex_mcp_profile
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" codex "* ]] && command -v codex >/dev/null 2>&1; then
+  resolve_codex_mcp_profile
+fi
 
 COPILOT_MCP_PROFILE=''
 COPILOT_MCP_ARGS=()
@@ -802,7 +874,7 @@ PY
 
   die "Failed to resolve Copilot MCP profile '$prof' in '$target_file'"
 }
-if [[ " ${CANDIDATE_AGENTS[*]} " == *" copilot "* ]]; then
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" copilot "* ]] && command -v copilot >/dev/null 2>&1; then
   resolve_copilot_mcp_profile
 fi
 
@@ -895,27 +967,52 @@ SUCCESSFUL_MODEL=''
 SUCCESSFUL_AGENT=''
 CURRENT_MODEL=''
 CURRENT_AGENT=''
+ATTEMPTED_CANDIDATE=0
+LAST_ATTEMPTED_AGENT=''
+LAST_ATTEMPTED_MODEL=''
+LAST_SKIPPED_MISSING_AGENT=''
 AUTH_FAILURE=0
 FAILED_AGENT=''
 TOTAL_CANDIDATES=${#CANDIDATE_AGENTS[@]}
+
+has_remaining_executable_candidate() {
+  local start_idx=$1
+  local j
+  for (( j=start_idx; j<TOTAL_CANDIDATES; j++ )); do
+    if is_candidate_runnable "${CANDIDATE_AGENTS[j]}" "${CANDIDATE_MODELS[j]}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   CURRENT_AGENT="${CANDIDATE_AGENTS[idx]}"
-  CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
-  CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
-  CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
+  CURRENT_MODEL=$(trim_ws "${CANDIDATE_MODELS[idx]}")
   if [[ ($CURRENT_AGENT == opencode || $CURRENT_AGENT == copilot) && -z $CURRENT_MODEL ]]; then continue; fi
-  if [[ $CURRENT_AGENT == opencode ]] && ! command -v opencode >/dev/null; then continue; fi
-  if [[ $CURRENT_AGENT == copilot ]] && ! command -v copilot >/dev/null; then continue; fi
-  if [[ $CURRENT_AGENT == codex ]] && ! command -v codex >/dev/null; then continue; fi
+  if ! command -v "$CURRENT_AGENT" >/dev/null 2>&1; then
+    if ! has_remaining_executable_candidate $((idx + 1)); then
+      printf 'Agent %s executable not found on PATH and no further executable candidates remain; stopping.\n' "$CURRENT_AGENT" >&2
+      break
+    fi
+    if [[ $LAST_SKIPPED_MISSING_AGENT != "$CURRENT_AGENT" ]]; then
+      printf 'Agent %s executable not found on PATH; skipping to next candidate...\n' "$CURRENT_AGENT" >&2
+      LAST_SKIPPED_MISSING_AGENT="$CURRENT_AGENT"
+    fi
+    continue
+  fi
 
   # Reset worktree if retrying after a prior failed candidate
-  if (( idx > 0 )); then
+  if (( ATTEMPTED_CANDIDATE )); then
     if ! git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 \
       || ! git -C "$WORKTREE" clean -fdx >/dev/null 2>&1; then
       printf 'Failed to reset worktree before retry; stopping fallback.\n' >&2
       break
     fi
   fi
+  ATTEMPTED_CANDIDATE=1
+  LAST_ATTEMPTED_AGENT="$CURRENT_AGENT"
+  LAST_ATTEMPTED_MODEL="$CURRENT_MODEL"
 
   if [[ $CURRENT_AGENT == codex ]]; then
     if [[ ${#CODEX_DOTTED_SERVERS[@]} -gt 0 ]]; then
@@ -1016,7 +1113,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     break
   fi
   if is_provider_quota_error "$CURRENT_AGENT"; then
-    if (( idx + 1 < TOTAL_CANDIDATES )); then
+    if has_remaining_executable_candidate $((idx + 1)); then
       printf 'Agent %s (model %s) encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_AGENT" "$CURRENT_MODEL" "$RUN_EXIT" >&2
     fi
   else
@@ -1024,8 +1121,8 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   fi
 done
 
-AGENT=${SUCCESSFUL_AGENT:-${CURRENT_AGENT:-$AGENT}}
-MODEL=${SUCCESSFUL_MODEL:-${CURRENT_MODEL:-}}
+AGENT=${SUCCESSFUL_AGENT:-${LAST_ATTEMPTED_AGENT:-$AGENT}}
+MODEL=${SUCCESSFUL_MODEL:-${LAST_ATTEMPTED_MODEL:-}}
 printf 'resolved_agent=%s\nresolved_model=%s\nexit_code=%s\nresolved_mcp_profile=%s\nresolved_mcp_profile_path=%s\n' "$AGENT" "${MODEL:-'(default)'}" "$EXIT_CODE" "$(resolve_active_profile "$AGENT")" "$(resolve_active_profile_path "$AGENT")" >>"$LOG_DIR/manifest.txt"
 
 # Review both tracked and untracked changes: git diff alone omits new files.
