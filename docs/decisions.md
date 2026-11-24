@@ -2,6 +2,13 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-24: Enforce agents.delegationAllowed opt-out guard in delegate.sh
+
+- Decision: Check `git -C "$ROOT" config --get agents.delegationAllowed` in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` immediately after resolving the repository root and before creating logs, worktrees, or MCP profiles or invoking external providers; treat `false`/`0`/`no`/`off` and unrecognized values as hard failures, leave unconfigured repositories allowed (`delegation_policy=default`), treat `true`/`1`/`yes`/`on` as `delegation_policy=explicit_allow`, and record `delegation_policy` in `manifest.txt` (while keeping `--automatic` as a compatibility flag).
+- Rationale: Provides a deterministic mechanical guardrail against accidental external inference inside confidential or employer-restricted repositories under context pressure without reintroducing default-deny opt-in friction on personal repositories.
+- Rejected alternatives: Reintroducing a mandatory default-deny `agents.delegationAllowed=true` opt-in across all repositories (blocks routine personal repo delegation), relying solely on prose instructions in `SKILL.md` and `GEMINI.md` (lacks runtime enforcement), or allowing unrecognized config values to fail open (risks silent bypass on typos).
+- Source: [#119 feat(delegate): add mechanical per-repo and remote opt-out guard for external delegation](https://github.com/gordonpn/dotfiles/issues/119).
+
 ## 2026-11-22: Convert Tier-1 MCP servers to CLI skills, optimize minimal core profile, and disable postman and sonarqube
 
 - Decision: Add tracked CLI-backed Agent Skills under `dotfiles/agent-skills/` for `semgrep`, `repomix`, and `local-db-cli` (`sqlite3`, `psql`, `redis-cli`), remove `sqlite` and `postgres` from `dotfiles/gemini/mcp_config.template.json` (and perform intentional name-based pruning of `RETIRED_OPENCODE_SERVERS` across both OpenCode and Copilot configs while keeping `redis` in the template as an opt-in non-core server), mark `postman` and `sonarqube` `"disabled": true` by default, and update `DEFAULT_CORE_SERVERS` in `scripts/mcp_sync.py` (plus `tests/verify_mcp.py`, `delegate.sh`, and `opencode-minimal-profile.json`) to the 6 core servers (`ai-memory`, `brave-search`, `cclsp`, `codebase-memory-mcp`, `context7`, `fetch`).

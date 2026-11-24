@@ -307,6 +307,35 @@ if (( ! has_available_candidate )); then
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
+policy_status=0
+raw_policy=$(git -C "$ROOT" config --get agents.delegationAllowed 2>/dev/null) || policy_status=$?
+case "$policy_status" in
+  0)
+    normalized_policy=$(printf '%s' "$(trim_ws "$raw_policy")" | tr '[:upper:]' '[:lower:]')
+    case "$normalized_policy" in
+      ''|false|0|no|off)
+        policy_scope=$(git -C "$ROOT" config --show-scope --get agents.delegationAllowed 2>/dev/null | awk 'NR==1 {print $1}')
+        if [[ -z $policy_scope || $policy_scope == local ]]; then
+          die "External delegation is disabled for this repository (agents.delegationAllowed=$raw_policy). Unset or run 'git config --local agents.delegationAllowed true' to enable."
+        else
+          die "External delegation is disabled for this repository (agents.delegationAllowed=$raw_policy, scope=$policy_scope). Unset it in $policy_scope config or run 'git config --local agents.delegationAllowed true' when overriding is intended."
+        fi
+        ;;
+      true|1|yes|on)
+        DELEGATION_POLICY='explicit_allow'
+        ;;
+      *)
+        die "Invalid git config value for agents.delegationAllowed: '$raw_policy' (expected true/false/1/0/yes/no/on/off)"
+        ;;
+    esac
+    ;;
+  1)
+    DELEGATION_POLICY='default'
+    ;;
+  *)
+    die "Failed reading agents.delegationAllowed from Git config (git config exit $policy_status); refusing to delegate."
+    ;;
+esac
 BASE_SHA=$(git -C "$ROOT" rev-parse --verify "${BASE}^{commit}") || die "Invalid base revision: $BASE"
 SAFE_ID=$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g;s/^[.-]+//;s/[.-]+$//')
 [[ -n $SAFE_ID ]] || SAFE_ID=task
@@ -926,6 +955,7 @@ run_id=$RUN_ID
 agent=$AGENT
 orchestrator=$ORCHESTRATOR
 automatic=$AUTOMATIC
+delegation_policy=$DELEGATION_POLICY
 dirty_base=$DIRTY_BASE
 mode=$MODE
 requested_model=${MODEL:-'(default)'}

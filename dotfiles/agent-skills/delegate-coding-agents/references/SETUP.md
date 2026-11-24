@@ -62,6 +62,6 @@ enable global shell-approval bypass.
 - OpenCode free models operate anonymously with zero credentials; account login is not required for the free-tier delegation path.
 - Keep confidential or employer-restricted code away from external hosted models unless explicitly authorized.
 - Worktrees snapshot the committed `--base` revision (`HEAD` by default); when the base checkout has uncommitted or untracked changes, `delegate.sh` warns and records that local edits are excluded rather than aborting.
-- `--automatic` is accepted for backwards compatibility as a no-op; no per-repo `agents.delegationAllowed` config is required.
+- `--automatic` is accepted for backwards compatibility as a no-op; unconfigured repositories work out of the box (`delegation_policy=default`). For confidential or employer-restricted repositories, run `git config --local agents.delegationAllowed false` (or set it globally in `~/.gitconfig` and override locally with `true`) to enforce a hard runtime block before `delegate.sh` creates worktrees or invokes external providers.
 - One-shot OpenCode, Codex, and Copilot Student delegations apply a minimal MCP profile (`minimal` by default) to disable unrelated cloud, database, monitoring, and chat servers without mutating user configurations (via `OPENCODE_CONFIG` for OpenCode, ephemeral `-c` overrides for Codex, and ephemeral `--disable-builtin-mcps` / `--disable-mcp-server` flags for Copilot).
 - Plans stay in an isolated detached worktree, builds on new `delegate/...` branches; review and integrate only verified changes.
