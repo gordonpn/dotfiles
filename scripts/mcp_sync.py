@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -49,6 +50,7 @@ DOCKER_HOST_KEYWORDS: tuple[str, ...] = (
 
 TEMPLATE_ENV_VARS: tuple[str, ...] = (
     "HOME",
+    "CCLSP_BIN",
     "GITHUB_PERSONAL_ACCESS_TOKEN",
     "BRAVE_API_KEY",
     "EXA_API_KEY",
@@ -582,6 +584,32 @@ def render_copilot_config(
     return result, enabled_count
 
 
+def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = None) -> str:
+    """Resolve the cclsp executable path across pnpm v12, PATH, and legacy pnpm v10 layouts."""
+    active_env = os.environ if env is None else env
+    explicit = active_env.get("CCLSP_BIN", "").strip()
+    if explicit:
+        return explicit
+
+    base_home = Path.home() if home is None else home
+    pnpm_home_raw = active_env.get("PNPM_HOME", "").strip()
+    pnpm_home = Path(pnpm_home_raw) if pnpm_home_raw else base_home / ".local" / "share" / "pnpm"
+
+    v12_candidate = pnpm_home / "bin" / "cclsp"
+    if v12_candidate.is_file() and os.access(v12_candidate, os.X_OK):
+        return str(v12_candidate)
+
+    path_candidate = shutil.which("cclsp", path=active_env.get("PATH"))
+    if path_candidate:
+        return path_candidate
+
+    v10_candidate = pnpm_home / "cclsp"
+    if v10_candidate.is_file() and os.access(v10_candidate, os.X_OK):
+        return str(v10_candidate)
+
+    return str(v12_candidate)
+
+
 def sync_mcp_config(
     template_file: Path,
     antigravity_target: Path,
@@ -605,6 +633,10 @@ def sync_mcp_config(
         raise SystemExit(1)
 
     replacements = {f"${{{var}}}": os.environ.get(var, "") for var in TEMPLATE_ENV_VARS}
+    if not replacements["${CCLSP_BIN}"]:
+        home_raw = replacements["${HOME}"]
+        home_dir = Path(home_raw) if home_raw else None
+        replacements["${CCLSP_BIN}"] = resolve_cclsp_bin(home=home_dir, env=os.environ)
     hydrated_raw = hydrate_json_value(raw_template, replacements)
     hydrated_data = cast(dict[str, object], hydrated_raw)
     servers = extract_servers(hydrated_data)

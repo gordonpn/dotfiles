@@ -139,6 +139,9 @@ ai_entry="$(jq -c '.mcpServers["ai-memory"]' "${TEMPLATE_DIR}/mcp_config.templat
 ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-bridge\",\"--no-session-id\",\"--server-url\",\"http://127.0.0.1:49374/mcp\"]}"
 [[ "$ai_entry" == "$ai_expected" ]]
 
+cclsp_cmd="$(jq -r '.mcpServers["cclsp"].command' "${TEMPLATE_DIR}/mcp_config.template.json")"
+[[ "$cclsp_cmd" == "\${CCLSP_BIN}" ]]
+
 [[ "$(jq -r '.mcpServers | has("chrome-devtools")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("puppeteer")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
 [[ "$(jq -r '.mcpServers | has("memory")' "${TEMPLATE_DIR}/mcp_config.template.json")" == "false" ]]
@@ -156,7 +159,11 @@ ai_expected="{\"command\":\"\${HOME}/.local/bin/ai-memory\",\"args\":[\"mcp-brid
 get_secret() { printf ''; }
 gh() { return 1; }
 
-unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS OPENCODE_MCP_PROFILE OPENCODE_MCP_SERVERS
+unset CODEX_MCP_PROFILE CODEX_MCP_SERVERS OPENCODE_MCP_PROFILE OPENCODE_MCP_SERVERS CCLSP_BIN
+export PNPM_HOME="${HOME}/.local/share/pnpm"
+mkdir -p "${PNPM_HOME}/bin"
+printf '#!/bin/sh\nexit 0\n' > "${PNPM_HOME}/bin/cclsp"
+chmod +x "${PNPM_HOME}/bin/cclsp"
 mkdir -p "${OPENCODE_DIR}"
 cat >"${OPENCODE_DIR}/opencode.json" <<'JSON'
 {
@@ -211,6 +218,8 @@ sync_mcp_config
 [[ "$(jq -r '.mcp["ai-memory"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
 [[ "$(jq -r '.mcp["brave-search"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
 [[ "$(jq -r '.mcp["cclsp"].enabled' "${OPENCODE_DIR}/opencode.json")" == "true" ]]
+[[ "$(jq -r '.mcp["cclsp"].command[0]' "${OPENCODE_DIR}/opencode.json")" == "${PNPM_HOME}/bin/cclsp" ]]
+[[ "$(jq -r '.mcpServers["cclsp"].command' "${GEMINI_CONFIG_DIR}/mcp_config.json")" == "${PNPM_HOME}/bin/cclsp" ]]
 [[ "$(jq -r '.mcp["git"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["repomix"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]
 [[ "$(jq -r '.mcp["semgrep"].enabled' "${OPENCODE_DIR}/opencode.json")" == "false" ]]

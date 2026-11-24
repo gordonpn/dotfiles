@@ -472,6 +472,47 @@ class TestMcpSyncHelpers(unittest.TestCase):
 
             self.assertFalse(os.path.lexists(link_path))
 
+    def test_resolve_cclsp_bin_prefers_explicit_then_pnpm_v12_then_path_then_v10(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            pnpm_home = root / "pnpm"
+            v12_bin = pnpm_home / "bin" / "cclsp"
+            v10_bin = pnpm_home / "cclsp"
+            path_dir = root / "bin"
+            path_bin = path_dir / "cclsp"
+            for candidate in (v12_bin, v10_bin, path_bin):
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                candidate.chmod(0o755)
+
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "/custom/cclsp", "PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
+                "/custom/cclsp",
+            )
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
+                str(v12_bin),
+            )
+
+            v12_bin.unlink()
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
+                str(path_bin),
+            )
+
+            path_bin.unlink()
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(pnpm_home), "PATH": ""}),
+                str(v10_bin),
+            )
+
+            v10_bin.unlink()
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"PATH": ""}),
+                str(home / ".local" / "share" / "pnpm" / "bin" / "cclsp"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
