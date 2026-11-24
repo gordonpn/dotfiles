@@ -21,7 +21,9 @@ fail() {
 # Source the helpers in a clean zsh with the given PATH and cwd, then run a script.
 run_zsh() {
   local path="$1" dir="$2" script="$3"
-  (cd "${dir}" && env -i HOME="${tmp}/home" PATH="${path}" "${zsh_bin}" -f -c "source '${helpers}'; ${script}" 2>&1)
+  # shellcheck disable=SC2016 # Expand positional parameters in the child shell.
+  (cd "${dir}" && env -i HOME="${tmp}/home" PATH="${path}" "${zsh_bin}" \
+    -f -c 'source "$1" || exit; eval "$2"' zsh "${helpers}" "${script}" 2>&1)
 }
 
 assert_contains() {
@@ -238,6 +240,23 @@ actual=$(run_zsh "${base_path}" "${tmp}/bundle dir" 'HOME=$PWD/antidote XDG_CACH
 assert_contains "antidote_hard_reset rejects an overlapping default cache" "Refusing to remove a parent of HOME or ZDOTDIR" "${actual}"
 [[ -e "${tmp}/bundle dir/antidote/.antidote/antidote" ]] ||
   fail "antidote_hard_reset preserves the overlapping home" "${actual}"
+mkdir -p "${tmp}/bad-staging" "${tmp}/home/.cache/antidote" "${tmp}/timeout-stubs"
+make_stub "${tmp}/bad-staging/mktemp" 'exit 1'
+# shellcheck disable=SC2016 # Expand variables in the isolated zsh.
+actual=$(run_zsh "${tmp}/bad-staging:${base_path}" "${tmp}/bundle dir" 'ZDOTDIR=$PWD antidote_hard_reset; print -- "status=$?"')
+assert_contains "antidote_hard_reset reports staging failure" "status=1" "${actual}"
+[[ -d "${tmp}/home/.cache/antidote" ]] || fail "antidote_hard_reset preserves cache on staging failure" "${actual}"
+
+# shellcheck disable=SC2016 # Expand positional parameters in the stub.
+make_stub "${tmp}/timeout-stubs/gtimeout" 'shift; exec "$@"'
+mkdir -p "${tmp}/bundle dir/functions"
+mv "${tmp}/home/.antidote/antidote" "${tmp}/bundle dir/functions/antidote"
+sed 's/partial bundle/new bundle/; s/; return 1/; return 0/' "${tmp}/bundle dir/functions/antidote" > "${tmp}/bundle dir/functions/antidote.new"
+mv "${tmp}/bundle dir/functions/antidote.new" "${tmp}/bundle dir/functions/antidote"
+# shellcheck disable=SC2016 # Expand variables in the isolated zsh.
+actual=$(run_zsh "${tmp}/timeout-stubs:${base_path}" "${tmp}/bundle dir" 'fpath=("$PWD/functions" $fpath); ZDOTDIR=$PWD antidote_hard_reset --timeout 5')
+[[ $(cat "${tmp}/bundle dir/.zsh_plugins.zsh") == 'new bundle' ]] ||
+  fail "antidote_hard_reset passes the custom fpath to the timeout child" "${actual}"
 pass "antidote_hard_reset preserves the working bundle and home"
 
 
@@ -269,6 +288,19 @@ assert_contains "delete-old-branches dry run" "Skipping branch: master" "${actua
 assert_contains "delete-old-branches dry run" "Skipping branch: current" "${actual}"
 [[ -n "$(git -C "${tmp}/origin.git" branch --list old)" ]] || fail "delete-old-branches dry run" "old was deleted"
 pass "delete-old-branches dry run"
+
+g -C "${tmp}/clone" branch feature/--dry-run-notes
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete --dry-run; print -- "status=$?"')
+assert_contains "branch-delete rejects a missing substring" "status=2" "${actual}"
+[[ -n $(g -C "${tmp}/clone" branch --list feature/--dry-run-notes) ]] ||
+  fail "branch-delete preserves branches when the substring is missing" "${actual}"
+g -C "${tmp}/clone" branch -D feature/--dry-run-notes >/dev/null
+g -C "${tmp}/clone" branch audit-local-only
+g -C "${tmp}/clone" tag refs/remotes/origin/audit-local-only
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete audit-local-only')
+assert_contains "branch-delete ignores tags named like tracking refs" "Deleted branches: audit-local-only" "${actual}"
+pass "branch-delete checks the substring and exact tracking refs"
+
 
 old_tip=$(g -C "${tmp}/clone" rev-parse refs/heads/old)
 recent_tip=$(g -C "${tmp}/clone" rev-parse refs/heads/recent)

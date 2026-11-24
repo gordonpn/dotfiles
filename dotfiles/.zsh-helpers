@@ -44,7 +44,7 @@ _zsh_helpers_delete_branch() {
     echo "Could not delete local branch $branch (checked out in a worktree)." >&2
     return 1
   fi
-  if [[ $(git rev-parse --verify --quiet "$ref") != "$local_tip" ]]; then
+  if [[ $(git show-ref --verify --hash "$ref" 2>/dev/null) != "$local_tip" ]]; then
     echo "Local branch $branch changed since selection." >&2
     return 1
   fi
@@ -54,7 +54,7 @@ _zsh_helpers_delete_branch() {
     return 1
   fi
   if [[ -n $local_tip ]]; then
-    if [[ $(git rev-parse --verify --quiet "$ref") != "$local_tip" ]]; then
+    if [[ $(git show-ref --verify --hash "$ref" 2>/dev/null) != "$local_tip" ]]; then
       echo "Local branch $branch changed during deletion." >&2
       [[ -z $remote_tip ]] || echo "The branch was already deleted on origin." >&2
       return 1
@@ -73,7 +73,7 @@ branch-delete() {
     echo "Usage: branch-delete <substring> [--dry-run]"
     return 0
   fi
-  if [[ -z ${1:-} ]] || (( $# > 2 )) || [[ $# -eq 2 && "$2" != "--dry-run" ]]; then
+  if [[ -z ${1:-} || $1 == -* ]] || (( $# > 2 )) || [[ $# -eq 2 && "$2" != "--dry-run" ]]; then
     echo "Usage: branch-delete <substring> [--dry-run]" >&2
     [[ -z ${1:-} ]] && return 1
     return 2
@@ -110,8 +110,8 @@ branch-delete() {
       echo "Would delete branch: $branch"
     else
       echo "Deleting branch: $branch"
-      local remote_tip=$(git rev-parse --verify --quiet "refs/remotes/origin/$branch")
-      local local_tip=$(git rev-parse --verify --quiet "refs/heads/$branch")
+      local remote_tip=$(git show-ref --verify --hash "refs/remotes/origin/$branch" 2>/dev/null)
+      local local_tip=$(git show-ref --verify --hash "refs/heads/$branch" 2>/dev/null)
       if [[ -z $remote_tip && -z $local_tip ]] ||
         ! _zsh_helpers_delete_branch "$branch" "$remote_tip" "$local_tip"; then
         failed=1
@@ -161,8 +161,8 @@ delete-old-branches() {
       continue
     fi
 
-    remote_tip=$(git rev-parse --verify --quiet "$ref") || continue
-    local_tip=$(git rev-parse --verify --quiet "refs/heads/$branch")
+    remote_tip=$(git show-ref --verify --hash "$ref" 2>/dev/null) || continue
+    local_tip=$(git show-ref --verify --hash "refs/heads/$branch" 2>/dev/null)
     local -a tips=("$remote_tip")
     [[ -n $local_tip ]] && tips+=("$local_tip")
     last_commit_ts=$(git log -1 --format=%ct "${tips[@]}" -- 2>/dev/null)
@@ -372,24 +372,24 @@ antidote_hard_reset() {
     fi
   done
 
-  # Startup must regenerate if reset fails after clearing cached plugins.
-  if [[ -f $plugins_zsh ]]; then
-    touch -t 197001010000 -- "$plugins_zsh" || return $?
-  fi
-  print "Removing Antidote cache: $antidote_home"
-  rm -rf -- "$antidote_home" || return $?
-
   local bundle_tmp
   bundle_tmp=$(mktemp "${plugins_zsh}.XXXXXX") || return $?
   {
+    # Startup must regenerate if reset fails after clearing cached plugins.
+    if [[ -f $plugins_zsh ]]; then
+      touch -t 197001010000 -- "$plugins_zsh" || return $?
+    fi
+    print "Removing Antidote cache: $antidote_home"
+    rm -rf -- "$antidote_home" || return $?
+
     if (( timeout_given )); then
       local timeout_tool=timeout
       (( $+commands[gtimeout] )) && timeout_tool=gtimeout
       "$timeout_tool" "$timeout_s" zsh -c '
-        fpath=("$HOME/.antidote" "$HOME/.antidote/functions" $fpath)
+        fpath=("$@")
         autoload -Uz antidote
         GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false antidote bundle
-      ' <"$plugins_txt" >"$bundle_tmp" || return $?
+      ' zsh "${fpath[@]}" <"$plugins_txt" >"$bundle_tmp" || return $?
     else
       GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false \
         antidote bundle <"$plugins_txt" >"$bundle_tmp" || return $?
