@@ -1211,7 +1211,8 @@ ln -sf "$TMP/bin/opencode" "$TMP/bin-only-opencode/opencode"
 
 # --orchestrator agy --agent codex advances to opencode when codex is absent from PATH
 : >"$OPENCODE_MOCK_CALL_LOG"
-PATH="$TMP/bin-no-codex:$SYS_BIN" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id missing-codex-plan --task 'Fallback to opencode when codex missing' >"$TMP/missing-codex-plan.out" 2>"$TMP/missing-codex-plan.err"
+CODEX_DELEGATE_MCP_PROFILE="$TMP/absent-codex.toml" PATH="$TMP/bin-no-codex:$SYS_BIN" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id missing-codex-plan --task 'Fallback to opencode when codex missing' >"$TMP/missing-codex-plan.out" 2>"$TMP/missing-codex-plan.err"
+[[ -s "$OPENCODE_MOCK_CALL_LOG" ]]
 grep -q 'Agent: codex (plan)' "$TMP/missing-codex-plan.out"
 grep -q 'Worker: opencode' "$TMP/missing-codex-plan.out"
 grep -q 'Model: opencode/deepseek-v4.1-flash-free' "$TMP/missing-codex-plan.out"
@@ -1229,7 +1230,9 @@ WT_MISSING_CODEX=$(sed -n 's/^  Worktree: //p' "$TMP/missing-codex-build.out" | 
 [[ -f $WT_MISSING_CODEX/agent-change.txt ]]
 
 # --orchestrator agy --agent codex advances to copilot when both codex and opencode are absent
-PATH="$TMP/bin-only-copilot:$SYS_BIN" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id missing-codex-opencode --task 'Fallback to copilot when codex and opencode missing' >"$TMP/missing-codex-opencode.out" 2>"$TMP/missing-codex-opencode.err"
+: >"$COPILOT_MOCK_CALL_LOG"
+OPENCODE_DELEGATE_MCP_PROFILE="$TMP/absent-opencode.json" PATH="$TMP/bin-only-copilot:$SYS_BIN" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id missing-codex-opencode --task 'Fallback to copilot when codex and opencode missing' >"$TMP/missing-codex-opencode.out" 2>"$TMP/missing-codex-opencode.err"
+[[ -s "$COPILOT_MOCK_CALL_LOG" ]]
 grep -q 'Agent: codex (plan)' "$TMP/missing-codex-opencode.out"
 grep -q 'Worker: copilot' "$TMP/missing-codex-opencode.out"
 grep -q 'Model: auto' "$TMP/missing-codex-opencode.out"
@@ -1260,6 +1263,9 @@ if PATH="$TMP/bin-empty:$SYS_BIN" "$SCRIPT" --agent opencode --mode plan --id mi
   echo 'Expected failure when opencode and copilot are missing from PATH' >&2; exit 1
 fi
 grep -q 'No delegate CLI found on PATH (checked: opencode, copilot)' "$TMP/missing-all-opencode.err"
+if grep -q 'codex login' "$TMP/missing-all-opencode.err"; then
+  echo 'Unexpected advice to install Codex outside the candidate chain' >&2; exit 1
+fi
 
 # Pinned --model fails cleanly when that agent executable is missing even if fallbacks exist
 : >"$OPENCODE_MOCK_CALL_LOG"
@@ -1273,7 +1279,7 @@ grep -q 'Install Codex CLI and authenticate with codex login first' "$TMP/pinned
 if PATH="$TMP/bin-only-copilot:$SYS_BIN" "$SCRIPT" --agent opencode --model opencode/deepseek-v4.1-flash-free --mode plan --id pinned-missing-opencode --task 'Pinned opencode missing' >"$TMP/pinned-missing-opencode.out" 2>"$TMP/pinned-missing-opencode.err"; then
   echo 'Expected pinned opencode invocation to fail when opencode is missing' >&2; exit 1
 fi
-grep -q 'Install/login to opencode first' "$TMP/pinned-missing-opencode.err"
+grep -q 'Install OpenCode CLI first' "$TMP/pinned-missing-opencode.err"
 [[ ! -s $COPILOT_MOCK_CALL_LOG ]]
 
 if PATH="$TMP/bin-only-opencode:$SYS_BIN" "$SCRIPT" --agent copilot --model auto --mode plan --id pinned-missing-copilot --task 'Pinned copilot missing' >"$TMP/pinned-missing-copilot.out" 2>"$TMP/pinned-missing-copilot.err"; then

@@ -252,6 +252,7 @@ missing_agent_message() {
   case "$1" in
     copilot) printf 'Install GitHub Copilot CLI and authenticate with copilot login first' ;;
     codex) printf 'Install Codex CLI and authenticate with codex login first' ;;
+    opencode) printf 'Install OpenCode CLI first; use opencode auth login if the selected provider requires it' ;;
     *) printf 'Install/login to %s first' "$1" ;;
   esac
 }
@@ -289,7 +290,11 @@ if (( ! has_available_candidate )); then
   fi
   candidate_list=$(printf '%s, ' "${unique_candidates[@]}")
   candidate_list=${candidate_list%, }
-  die "No delegate CLI found on PATH (checked: $candidate_list). Install and authenticate at least one: codex (codex login), opencode (opencode auth login), or copilot (copilot login)"
+  install_advice=''
+  for ca in "${unique_candidates[@]}"; do
+    install_advice+=" $(missing_agent_message "$ca");"
+  done
+  die "No delegate CLI found on PATH (checked: $candidate_list).${install_advice%;}"
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'Run inside a Git repository'
@@ -493,7 +498,9 @@ PY
 
   die "Failed to generate OpenCode MCP profile '$prof' in '$target_file'"
 }
-resolve_opencode_mcp_profile
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" opencode "* ]] && command -v opencode >/dev/null 2>&1; then
+  resolve_opencode_mcp_profile
+fi
 
 CODEX_MCP_PROFILE=''
 CODEX_MCP_ARGS=()
@@ -632,7 +639,9 @@ resolve_codex_mcp_profile() {
     printf '%s\n' "$s" >> "$target_file"
   done <<< "$servers"
 }
-resolve_codex_mcp_profile
+if [[ " ${CANDIDATE_AGENTS[*]} " == *" codex "* ]] && command -v codex >/dev/null 2>&1; then
+  resolve_codex_mcp_profile
+fi
 
 COPILOT_MCP_PROFILE=''
 COPILOT_MCP_ARGS=()
