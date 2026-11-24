@@ -12,7 +12,7 @@ Usage: delegate.sh --agent codex|opencode|copilot --mode plan|build --task '...'
 Options:
   --task-file PATH     Read task from file instead of --task
   --id SLUG            Human-readable run identifier (default: task)
-  --model MODEL        Override selected delegate model
+  --model MODEL        Override selected delegate model (pins single agent without fallback)
   --base REF           Git revision to snapshot (default: HEAD)
   --orchestrator NAME  codex|agy (default: codex)
   --automatic          Mark run as automatic delegation (accepted for compatibility)
@@ -231,6 +231,23 @@ elif [[ $AGENT == copilot ]]; then
   (( has_opencode )) || die 'No usable OpenCode fallback models configured'
 fi
 
+trim_ws() {
+  local val=$1
+  val="${val#"${val%%[![:space:]]*}"}"
+  val="${val%"${val##*[![:space:]]}"}"
+  printf '%s' "$val"
+}
+
+is_candidate_runnable() {
+  local agent=$1
+  local model
+  model=$(trim_ws "$2")
+  if [[ ($agent == opencode || $agent == copilot) && -z $model ]]; then
+    return 1
+  fi
+  command -v "$agent" >/dev/null 2>&1
+}
+
 missing_agent_message() {
   case "$1" in
     copilot) printf 'Install GitHub Copilot CLI and authenticate with copilot login first' ;;
@@ -241,7 +258,9 @@ missing_agent_message() {
 
 has_available_candidate=0
 unique_candidates=()
-for ca in "${CANDIDATE_AGENTS[@]}"; do
+for ((ci=0; ci<${#CANDIDATE_AGENTS[@]}; ci++)); do
+  ca="${CANDIDATE_AGENTS[ci]}"
+  cm="${CANDIDATE_MODELS[ci]}"
   seen_ca=0
   if ((${#unique_candidates[@]} > 0)); then
     for uc in "${unique_candidates[@]}"; do
@@ -253,13 +272,19 @@ for ca in "${CANDIDATE_AGENTS[@]}"; do
   fi
   if (( ! seen_ca )); then
     unique_candidates+=("$ca")
-    if command -v "$ca" >/dev/null 2>&1; then
-      has_available_candidate=1
-    fi
+  fi
+  if is_candidate_runnable "$ca" "$cm"; then
+    has_available_candidate=1
   fi
 done
 if (( ! has_available_candidate )); then
+  if ((${#unique_candidates[@]} == 0)); then
+    die 'No runnable delegate candidates configured'
+  fi
   if ((${#unique_candidates[@]} == 1)); then
+    if command -v "${unique_candidates[0]}" >/dev/null 2>&1; then
+      die "No runnable model configured for delegate agent ${unique_candidates[0]}"
+    fi
     die "$(missing_agent_message "${unique_candidates[0]}")"
   fi
   candidate_list=$(printf '%s, ' "${unique_candidates[@]}")
@@ -934,16 +959,9 @@ TOTAL_CANDIDATES=${#CANDIDATE_AGENTS[@]}
 
 has_remaining_executable_candidate() {
   local start_idx=$1
-  local j cand_agent cand_model
+  local j
   for (( j=start_idx; j<TOTAL_CANDIDATES; j++ )); do
-    cand_agent="${CANDIDATE_AGENTS[j]}"
-    cand_model="${CANDIDATE_MODELS[j]}"
-    cand_model="${cand_model#"${cand_model%%[![:space:]]*}"}"
-    cand_model="${cand_model%"${cand_model##*[![:space:]]}"}"
-    if [[ ($cand_agent == opencode || $cand_agent == copilot) && -z $cand_model ]]; then
-      continue
-    fi
-    if command -v "$cand_agent" >/dev/null 2>&1; then
+    if is_candidate_runnable "${CANDIDATE_AGENTS[j]}" "${CANDIDATE_MODELS[j]}"; then
       return 0
     fi
   done
@@ -952,12 +970,11 @@ has_remaining_executable_candidate() {
 
 for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   CURRENT_AGENT="${CANDIDATE_AGENTS[idx]}"
-  CURRENT_MODEL="${CANDIDATE_MODELS[idx]}"
-  CURRENT_MODEL="${CURRENT_MODEL#"${CURRENT_MODEL%%[![:space:]]*}"}"
-  CURRENT_MODEL="${CURRENT_MODEL%"${CURRENT_MODEL##*[![:space:]]}"}"
+  CURRENT_MODEL=$(trim_ws "${CANDIDATE_MODELS[idx]}")
   if [[ ($CURRENT_AGENT == opencode || $CURRENT_AGENT == copilot) && -z $CURRENT_MODEL ]]; then continue; fi
   if ! command -v "$CURRENT_AGENT" >/dev/null 2>&1; then
     if ! has_remaining_executable_candidate $((idx + 1)); then
+      printf 'Agent %s executable not found on PATH and no further executable candidates remain; stopping.\n' "$CURRENT_AGENT" >&2
       break
     fi
     if [[ $LAST_SKIPPED_MISSING_AGENT != "$CURRENT_AGENT" ]]; then

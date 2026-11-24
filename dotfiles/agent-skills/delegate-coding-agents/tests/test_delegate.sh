@@ -1192,7 +1192,12 @@ git checkout -- rename-src.txt
 SYS_BIN="$TMP/sys-bin"
 mkdir -p "$SYS_BIN"
 for tool in awk basename bash cat comm cp date dirname env git grep head jq mkdir mv pwd python3 rm sed sh sort tail tr wc; do
-  tool_path=$(command -v "$tool" 2>/dev/null || true)
+  if [[ $tool == python3 ]]; then
+    # Resolve shim wrappers (such as pyenv) to the real interpreter binary before symlinking.
+    tool_path=$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null || true)
+  else
+    tool_path=$(command -v "$tool" 2>/dev/null || true)
+  fi
   if [[ -n $tool_path ]]; then
     ln -sf "$tool_path" "$SYS_BIN/$tool"
   fi
@@ -1292,5 +1297,21 @@ fi
 grep -q 'Worker: opencode' "$TMP/missing-codex-copilot-quota.out"
 quota_only_opencode_log=$(sed -n 's/^  Logs: //p' "$TMP/missing-codex-copilot-quota.out" | head -n 1)
 grep -q 'resolved_agent=opencode' "$quota_only_opencode_log/manifest.txt"
+
+# Whitespace-only pinned model fails preflight before creating any worktree
+before_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 | wc -l)
+if PATH="$TMP/bin-only-opencode:$SYS_BIN" "$SCRIPT" --agent opencode --model '   ' --mode plan --id whitespace-opencode-model --task 'Whitespace pinned model' >"$TMP/whitespace-model.out" 2>"$TMP/whitespace-model.err"; then
+  echo 'Expected whitespace-only pinned opencode model to fail preflight' >&2; exit 1
+fi
+grep -q 'No runnable model configured for delegate agent opencode' "$TMP/whitespace-model.err"
+after_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 | wc -l)
+[[ $before_wt_count -eq $after_wt_count ]]
+
+# Whitespace OPENCODE_DELEGATE_MODEL skips empty primary slot cleanly when falling back from missing codex
+: >"$OPENCODE_MOCK_CALL_LOG"
+PATH="$TMP/bin-only-opencode:$SYS_BIN" OPENCODE_DELEGATE_MODEL='   ' "$SCRIPT" --orchestrator agy --agent codex --mode plan --id whitespace-env-model --task 'Fallback past whitespace env model' >"$TMP/whitespace-env.out" 2>"$TMP/whitespace-env.err"
+grep -q 'Worker: opencode' "$TMP/whitespace-env.out"
+grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/whitespace-env.out"
+grep -q 'Exit: 0' "$TMP/whitespace-env.out"
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'
