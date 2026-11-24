@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "cclsp": {
-      "command": "${HOME}/.local/share/pnpm/cclsp",
+      "command": "${CCLSP_BIN}",
       "disabled": false,
       "env": {
         "CCLSP_CONFIG_PATH": "${HOME}/.config/cclsp/cclsp.json"
