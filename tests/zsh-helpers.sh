@@ -514,6 +514,27 @@ assert_not_contains "delete-old-branches reports a failed local delete" "Deleted
   fail "delete-old-branches retains the linked worktree branch on origin" "${actual}"
 pass "delete-old-branches reports a failed local delete"
 g -C "${tmp}/clone" worktree remove --force "${tmp}/wt"
+
+# Linked-worktree inspection failures abort branch deletion without mutating origin or local refs.
+mkdir -p "${tmp}/wt-fail-git-bin"
+cat >"${tmp}/wt-fail-git-bin/git" <<EOF
+#!/bin/sh
+real_git="$(command -v git)"
+if [ "\$1" = "worktree" ]; then
+  exit 1
+fi
+exec "\$real_git" "\$@"
+EOF
+chmod +x "${tmp}/wt-fail-git-bin/git"
+actual=$(run_zsh "${tmp}/wt-fail-git-bin:${base_path}" "${tmp}/clone" 'branch-delete wt-old; print -- "status=$?"')
+assert_contains "branch-delete aborts when git worktree list fails" "Could not verify linked worktrees for wt-old." "${actual}"
+assert_contains "branch-delete aborts when git worktree list fails" "status=1" "${actual}"
+[[ -n $(git -C "${tmp}/origin.git" branch --list wt-old) && -n $(git -C "${tmp}/clone" branch --list wt-old) ]] ||
+  fail "branch-delete keeps refs when git worktree list fails" "${actual}"
+pass "branch-delete aborts when git worktree list fails"
+g -C "${tmp}/clone" push -q origin :refs/heads/wt-old
+g -C "${tmp}/clone" branch -D wt-old >/dev/null
+
 g -C "${tmp}/clone" checkout -q -B old master
 old_commit old
 g -C "${tmp}/clone" push -q -f origin old

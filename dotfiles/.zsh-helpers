@@ -34,6 +34,7 @@ printc() {
   echo -E ${(qqqq)${(%)color}}
 }
 
+# Returns 0 when checked out in a worktree, 1 when absent, and 2 if git fails.
 _zsh_helpers_branch_in_worktree() {
   local ref=$1 worktrees
   worktrees=$(git worktree list --porcelain) || return 2
