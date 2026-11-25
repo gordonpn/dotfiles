@@ -29,7 +29,9 @@ FOREIGN_HEREDOC_DELIMS: frozenset[str] = frozenset(
     {"PY", "PYTHON", "NODE", "JS", "JAVASCRIPT", "TS", "TYPESCRIPT", "RUBY", "RB", "PERL", "PL"}
 )
 ENV_ASSIGN_RE: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-WRAPPER_COMMANDS: frozenset[str] = frozenset({"env", "command", "exec", "nohup", "time"})
+WRAPPER_COMMANDS: frozenset[str] = frozenset(
+    {"env", "command", "exec", "nice", "nohup", "sudo", "time", "xargs"}
+)
 
 # Audited workflow block scalars that cannot be externalized in GitHub Actions syntax.
 WORKFLOW_BLOCK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
@@ -242,12 +244,43 @@ def _read_heredoc_delimiter(line: str, pos: int) -> tuple[str, bool, int] | None
     return delim, strip_tabs, pos
 
 
+def _matching_cmd_subst_closes(
+    candidate: str,
+    delimiter: str,
+    state_stack: list[tuple[str, int, str | None]],
+    paren_depths: list[int],
+) -> int:
+    if not candidate.startswith(delimiter):
+        return 0
+    suffix = candidate[len(delimiter) :]
+    if not suffix or any(ch != ")" for ch in suffix):
+        return 0
+    closable = 0
+    state_idx = len(state_stack) - 1
+    depth_idx = len(paren_depths) - 1
+    while (
+        state_idx >= 0
+        and depth_idx >= 0
+        and state_stack[state_idx][0] == "cmd_subst"
+        and paren_depths[depth_idx] == 0
+    ):
+        closable += 1
+        state_idx -= 1
+        depth_idx -= 1
+    if len(suffix) <= closable:
+        return len(suffix)
+    return 0
+
+
 def _consume_pending_heredocs(
     path: Path,
     lines: list[str],
     line_idx: int,
     pending_heredocs: list[_PendingHeredoc],
     issues: list[LintIssue],
+    state_stack: list[tuple[str, int, str | None]],
+    paren_depths: list[int],
+    cmd_tokens_stack: list[list[str]],
 ) -> int:
     total_lines = len(lines)
     for heredoc in pending_heredocs:
@@ -259,6 +292,16 @@ def _consume_pending_heredocs(
                 candidate = candidate.lstrip("\t")
             line_idx += 1
             if candidate == heredoc.delimiter:
+                terminated = True
+                break
+            close_count = _matching_cmd_subst_closes(
+                candidate, heredoc.delimiter, state_stack, paren_depths
+            )
+            if close_count > 0:
+                for _ in range(close_count):
+                    state_stack.pop()
+                    paren_depths.pop()
+                    cmd_tokens_stack.pop()
                 terminated = True
                 break
             body_lines += 1
@@ -508,11 +551,27 @@ def _scan_shell_blocks(path: Path, text: str) -> list[LintIssue]:
 
         if pending_heredocs and not in_quote and not line_continued:
             line_idx = _consume_pending_heredocs(
-                path, lines, line_idx, pending_heredocs, issues
+                path,
+                lines,
+                line_idx,
+                pending_heredocs,
+                issues,
+                state_stack,
+                paren_depths,
+                cmd_tokens_stack,
             )
 
     if pending_heredocs:
-        _consume_pending_heredocs(path, lines, line_idx, pending_heredocs, issues)
+        _consume_pending_heredocs(
+            path,
+            lines,
+            line_idx,
+            pending_heredocs,
+            issues,
+            state_stack,
+            paren_depths,
+            cmd_tokens_stack,
+        )
 
     return issues
 

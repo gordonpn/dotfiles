@@ -72,6 +72,9 @@ class TestLintEmbeddedLangs(unittest.TestCase):
                     "EOF\n"
                     "printf 'prompt<<%s\\n' \"$delim\"\n"
                     "grep -q 'pattern' <<< \"${value:-}\"\n"
+                    "out=$(cat <<'EOF'\n"
+                    "hello\n"
+                    "EOF)\n"
                 ),
             )
 
@@ -292,14 +295,38 @@ class TestLintEmbeddedLangs(unittest.TestCase):
                     "python3 - <<\"PY\"\n"
                     "print('double-quoted-delim')\n"
                     "PY\n"
+                    "out=$(cat <<'EOF'\n"
+                    "hello\n"
+                    "EOF)\n"
+                    "out=$(python3 - <<'PY'\n"
+                    "print(1)\n"
+                    "PY)\n"
+                    "sudo python3 - <<'EOF'\n"
+                    "print('sudo')\n"
+                    "EOF\n"
+                    "nice python3 - <<'EOF'\n"
+                    "print('nice')\n"
+                    "EOF\n"
+                    "xargs python3 - <<'EOF'\n"
+                    "print('xargs')\n"
+                    "EOF\n"
+                    "python3 -c \"$(\n"
+                    "  echo 1\n"
+                    ")\"\n"
                 ),
             )
 
             issues = lint_embedded_langs.lint_repository(root)
 
-            self.assertEqual([i.line for i in issues], [2, 7, 10, 14, 17])
+            self.assertEqual([i.line for i in issues], [2, 7, 10, 14, 17, 23, 26, 29, 32, 35])
             self.assertTrue(all(i.path == sh_path.resolve() for i in issues))
             self.assertIn("python3", issues[3].message)
+            self.assertIn("multi-line embedded python3 heredoc", issues[5].message)
+            self.assertNotIn("unterminated", issues[5].message)
+            self.assertIn("multi-line embedded python3 heredoc", issues[6].message)
+            self.assertIn("multi-line embedded python3 heredoc", issues[7].message)
+            self.assertIn("multi-line embedded python3 heredoc", issues[8].message)
+            self.assertIn("multi-line inline python3 snippet", issues[9].message)
 
     def test_unterminated_foreign_heredoc_is_flagged_even_after_unterminated_fifo(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
