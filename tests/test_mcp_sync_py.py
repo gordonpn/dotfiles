@@ -919,6 +919,115 @@ class TestMcpSyncHelpers(unittest.TestCase):
             self.assertFalse(codex_cfg.exists())
             self.assertEqual(list(root.rglob("*.tmp.*")), [])
 
+    def test_sync_mcp_config_cleans_staged_temp_files_on_snapshot_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            agy_sentinel = b'{"sentinel": true}\n'
+            agy_cfg.write_bytes(agy_sentinel)
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch.object(Path, "read_bytes", side_effect=OSError("injected snapshot failure")),
+                mock.patch("mcp_sync.os.replace") as replace_mock,
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertIn("Failed to commit MCP config updates", stderr_buf.getvalue())
+            replace_mock.assert_not_called()
+            self.assertEqual(agy_cfg.read_bytes(), agy_sentinel)
+            self.assertFalse(os.path.lexists(codex_cfg))
+            self.assertFalse(os.path.lexists(opencode_cfg))
+            self.assertFalse(os.path.lexists(copilot_cfg))
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+    def test_sync_mcp_config_rolls_back_symlink_targets_without_replacing_with_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            codex_cfg.parent.mkdir(parents=True)
+
+            tracked_agy = root / "tracked" / "mcp_config.json"
+            tracked_agy.parent.mkdir(parents=True)
+            tracked_sentinel = b'{"mcpServers": {"cclsp": {"command": "/tracked/cclsp"}}}\n'
+            tracked_agy.write_bytes(tracked_sentinel)
+            os.symlink(tracked_agy, agy_cfg)
+
+            dangling_target = root / "tracked" / "missing-codex.toml"
+            os.symlink(dangling_target, codex_cfg)
+
+            real_replace = os.replace
+            replace_calls = 0
+
+            def failing_third_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+                nonlocal replace_calls
+                replace_calls += 1
+                if replace_calls == 3:
+                    raise OSError("injected replace failure")
+                real_replace(src, dst)
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch("mcp_sync.os.replace", side_effect=failing_third_replace),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertIn("Failed to commit MCP config updates", stderr_buf.getvalue())
+            self.assertTrue(agy_cfg.is_symlink())
+            self.assertEqual(os.readlink(agy_cfg), str(tracked_agy))
+            self.assertEqual(tracked_agy.read_bytes(), tracked_sentinel)
+            self.assertTrue(codex_cfg.is_symlink())
+            self.assertEqual(os.readlink(codex_cfg), str(dangling_target))
+            self.assertFalse(os.path.lexists(opencode_cfg))
+            self.assertFalse(os.path.lexists(copilot_cfg))
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+    def test_sync_mcp_config_rolls_back_multiple_previously_absent_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+
+            real_replace = os.replace
+            replace_calls = 0
+
+            def failing_fourth_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+                nonlocal replace_calls
+                replace_calls += 1
+                if replace_calls == 4:
+                    raise OSError("injected fourth replace failure")
+                real_replace(src, dst)
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch("mcp_sync.os.replace", side_effect=failing_fourth_replace),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertIn("Failed to commit MCP config updates", stderr_buf.getvalue())
+            for cfg_path in (agy_cfg, codex_cfg, opencode_cfg, copilot_cfg):
+                self.assertFalse(os.path.lexists(cfg_path), f"Expected {cfg_path} to be unlinked")
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
     def test_sync_mcp_config_updates_all_clients_with_cclsp_and_0600_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

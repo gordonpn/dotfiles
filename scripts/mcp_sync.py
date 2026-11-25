@@ -117,12 +117,31 @@ class SyncSkillsConfig:
 
 @dataclass(frozen=True)
 class _TargetSnapshot:
-    """Pre-commit state of a target file for best-effort rollback."""
+    """Pre-commit state of a target file or symlink for best-effort rollback."""
 
     target: Path
     existed: bool
     content: bytes
     mode: int
+    symlink_target: str | None = None
+
+
+def _atomic_restore_bytes(target: Path, content: bytes, mode: int) -> None:
+    """Atomically write raw bytes and mode to target via a temporary file."""
+    fd, rb_name = tempfile.mkstemp(prefix=f".{target.name}.tmp.", dir=target.parent)
+    rb_tmp = Path(rb_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
+        os.chmod(rb_tmp, mode)
+        os.replace(rb_tmp, target)
+    except BaseException:
+        if os.path.lexists(rb_tmp):
+            try:
+                rb_tmp.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def _stage_config_file(target: Path, content: str) -> Path:
@@ -142,12 +161,29 @@ def _stage_config_file(target: Path, content: str) -> Path:
 
 
 def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
-    """Snapshot existing target files and atomically replace them with staged files."""
+    """Commit staged files via per-file atomic replace with best-effort atomic rollback.
+
+    Commits each staged file individually with ``os.replace``. On handled errors or
+    interrupts, rolls back already-committed targets atomically per file (restoring
+    symlinks, replacing regular files via temporary files, or unlinking newly created
+    targets). This is not crash-atomic across power loss or ``SIGKILL`` and does not
+    provide single-transaction isolation to concurrent readers across all four targets.
+    """
     snapshots: list[_TargetSnapshot] = []
     committed: list[_TargetSnapshot] = []
     try:
         for target, _ in staged_configs:
-            if target.is_file():
+            if target.is_symlink():
+                snapshots.append(
+                    _TargetSnapshot(
+                        target=target,
+                        existed=True,
+                        content=b"",
+                        mode=0o600,
+                        symlink_target=os.readlink(target),
+                    )
+                )
+            elif target.is_file():
                 snapshots.append(
                     _TargetSnapshot(
                         target=target,
@@ -165,9 +201,10 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
     except BaseException:
         for snapshot in reversed(committed):
             try:
-                if snapshot.existed:
-                    snapshot.target.write_bytes(snapshot.content)
-                    os.chmod(snapshot.target, snapshot.mode)
+                if snapshot.symlink_target is not None:
+                    atomic_symlink(Path(snapshot.symlink_target), snapshot.target)
+                elif snapshot.existed:
+                    _atomic_restore_bytes(snapshot.target, snapshot.content, snapshot.mode)
                 elif os.path.lexists(snapshot.target):
                     snapshot.target.unlink()
             except OSError as rollback_exc:
@@ -175,13 +212,14 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
                     f"Warning: Failed to roll back {snapshot.target} ({rollback_exc}).",
                     file=sys.stderr,
                 )
+        raise
+    finally:
         for _, tmp_path in staged_configs:
             if os.path.lexists(tmp_path):
                 try:
                     tmp_path.unlink()
                 except OSError:
                     pass
-        raise
 
 
 def safe_write_config(path: Path, text: str) -> None:
