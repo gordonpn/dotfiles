@@ -189,8 +189,9 @@ When additional MCP servers are needed for specific tasks, multiple tiers of ove
    ```
 
 4. **Custom `cclsp` Executable (`CCLSP_BIN`):**
-   `bin/mcp-sync` dynamically hydrates `${CCLSP_BIN}` in `dotfiles/gemini/mcp_config.template.json` using the first available match in priority order: explicit `CCLSP_BIN` environment override, `${PNPM_HOME}/bin/cclsp` (`pnpm` v12+ bin layout, defaulting `PNPM_HOME` to `~/.local/share/pnpm`), `cclsp` on `PATH`, or legacy `${PNPM_HOME}/cclsp` (`pnpm` v10 layout). If no executable is found, it falls back to `${PNPM_HOME}/bin/cclsp` with a stderr warning:
+   `bin/mcp-sync` dynamically hydrates `${CCLSP_BIN}` in `dotfiles/gemini/mcp_config.template.json` using the first available match in priority order: explicit `CCLSP_BIN` environment override, `${PNPM_HOME}/bin/cclsp` (`pnpm` v12+ bin layout, defaulting `PNPM_HOME` to `~/.local/share/pnpm`), `cclsp` on `PATH`, or legacy `${PNPM_HOME}/cclsp` (`pnpm` v10 layout). A non-empty `CCLSP_BIN` is trimmed, normalized to an absolute path (without dereferencing symlinks), and validated as an executable file or command on `PATH` (exiting non-zero if invalid); whitespace-only `CCLSP_BIN` falls back to auto-discovery, and relative `PNPM_HOME` or `PATH` candidates are normalized to absolute paths. If auto-discovery finds no executable, it falls back to `${PNPM_HOME}/bin/cclsp` with a stderr warning:
    ```bash
+   # Must point to an executable file or a command name on PATH:
    CCLSP_BIN=/opt/homebrew/bin/cclsp mcp-sync --configs-only
    ```
 

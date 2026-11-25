@@ -584,31 +584,59 @@ def render_copilot_config(
     return result, enabled_count
 
 
-def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = None) -> str:
-    """Resolve the cclsp executable path across pnpm v12, PATH, and legacy pnpm v10 layouts.
+def _normalize_path(raw: str | Path) -> Path:
+    """Return an absolute Path with user-home expansion and without dereferencing symlinks."""
+    return Path(os.path.abspath(os.path.expanduser(str(raw))))
 
-    Executable checks use ``os.access(..., os.X_OK)`` as a best-effort local UID
-    probe and emit a warning to stderr when falling back without an executable match.
+
+def _is_executable_file(path: Path) -> bool:
+    """Return True when path points to an executable regular file."""
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = None) -> str:
+    """Resolve and validate the cclsp executable path.
+
+    Checks an explicit ``CCLSP_BIN`` override first, then ``PNPM_HOME/bin/cclsp``,
+    ``cclsp`` on ``PATH``, and legacy ``PNPM_HOME/cclsp``. Returns an absolute
+    path string without dereferencing symlinks, and warns to stderr when
+    falling back without an executable match. Raises ``ValueError`` if a
+    non-empty ``CCLSP_BIN`` override is not an executable file or PATH command.
     """
     active_env = os.environ if env is None else env
+    path_env = active_env.get("PATH", "")
     explicit = active_env.get("CCLSP_BIN", "").strip()
     if explicit:
-        return explicit
+        if "/" in explicit or os.sep in explicit or explicit.startswith((".", "~")) or bool(Path(explicit).drive):
+            candidate = _normalize_path(explicit)
+            if not _is_executable_file(candidate):
+                raise ValueError(f"CCLSP_BIN is not an executable file: {explicit} (resolved to {candidate})")
+            return str(candidate)
 
-    base_home = Path.home() if home is None else home
+        found = shutil.which(explicit, path=path_env)
+        if not found:
+            raise ValueError(f"CCLSP_BIN command not found on PATH: {explicit}")
+        found_path = _normalize_path(found)
+        if not _is_executable_file(found_path):
+            raise ValueError(f"CCLSP_BIN is not an executable file: {explicit} (resolved to {found_path})")
+        return str(found_path)
+
+    base_home = _normalize_path(Path.home() if home is None else home)
     pnpm_home_raw = active_env.get("PNPM_HOME", "").strip()
-    pnpm_home = Path(pnpm_home_raw) if pnpm_home_raw else base_home / ".local" / "share" / "pnpm"
+    pnpm_home = _normalize_path(pnpm_home_raw) if pnpm_home_raw else base_home / ".local" / "share" / "pnpm"
 
-    v12_candidate = pnpm_home / "bin" / "cclsp"
-    if v12_candidate.is_file() and os.access(v12_candidate, os.X_OK):
+    v12_candidate = _normalize_path(pnpm_home / "bin" / "cclsp")
+    if _is_executable_file(v12_candidate):
         return str(v12_candidate)
 
-    path_candidate = shutil.which("cclsp", path=active_env.get("PATH"))
+    path_candidate = shutil.which("cclsp", path=path_env)
     if path_candidate:
-        return path_candidate
+        normalized_path_candidate = _normalize_path(path_candidate)
+        if _is_executable_file(normalized_path_candidate):
+            return str(normalized_path_candidate)
 
-    v10_candidate = pnpm_home / "cclsp"
-    if v10_candidate.is_file() and os.access(v10_candidate, os.X_OK):
+    v10_candidate = _normalize_path(pnpm_home / "cclsp")
+    if _is_executable_file(v10_candidate):
         return str(v10_candidate)
 
     print(
@@ -641,10 +669,13 @@ def sync_mcp_config(
         raise SystemExit(1)
 
     replacements = {f"${{{var}}}": os.environ.get(var, "") for var in TEMPLATE_ENV_VARS}
-    if not replacements["${CCLSP_BIN}"]:
-        home_raw = replacements["${HOME}"]
-        home_dir = Path(home_raw) if home_raw else Path.home()
+    home_raw = replacements["${HOME}"]
+    home_dir = Path(home_raw) if home_raw else Path.home()
+    try:
         replacements["${CCLSP_BIN}"] = resolve_cclsp_bin(home=home_dir, env=os.environ)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     hydrated_raw = hydrate_json_value(raw_template, replacements)
     hydrated_data = cast(dict[str, object], hydrated_raw)
     servers = extract_servers(hydrated_data)
