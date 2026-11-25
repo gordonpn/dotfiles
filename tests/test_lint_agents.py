@@ -604,7 +604,7 @@ class TestLintAgents(unittest.TestCase):
                     "name: demo-skill\n"
                     "description: 2026\n"
                     "  planning and forecasting assistance.\n"
-                    "metadata: {author: O'Reilly, team: 'ops''core'}\n"
+                    "metadata: {author: O'Reilly, team: 'ops''core', notes: [it's, say 'hi, fine]}\n"
                     "---\n"
                 ),
             )
@@ -664,6 +664,22 @@ class TestLintAgents(unittest.TestCase):
 
             self.assertEqual(len(issues), 1)
             self.assertEqual(issues[0].message, "no skill directories found")
+
+    def test_tracked_subdir_repo_dir_validates_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sub_repo = write_skill_repo(root / "nested" / "sub")
+            init_git_repo(
+                root,
+                [
+                    "nested/sub/dotfiles/gemini/GEMINI.md",
+                    "nested/sub/dotfiles/agent-skills/demo-skill/SKILL.md",
+                ],
+            )
+
+            issues = lint_agents.lint_repository(sub_repo)
+
+            self.assertEqual(issues, [])
 
 
 if __name__ == "__main__":

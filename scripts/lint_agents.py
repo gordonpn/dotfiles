@@ -303,6 +303,7 @@ def _is_balanced_flow_collection(value: str) -> bool:
     stack: list[str] = []
     in_single = False
     in_double = False
+    expecting_node_start = True
     idx = 0
     n = len(value)
     while idx < n:
@@ -313,6 +314,7 @@ def _is_balanced_flow_collection(value: str) -> bool:
                 continue
             if ch == '"':
                 in_double = False
+                expecting_node_start = False
             idx += 1
             continue
         if in_single:
@@ -321,25 +323,33 @@ def _is_balanced_flow_collection(value: str) -> bool:
                     idx += 2
                     continue
                 in_single = False
+                expecting_node_start = False
             idx += 1
             continue
         if ch in ('"', "'"):
-            # Quotes inside plain flow scalars (e.g. O'Reilly) stay literal unless
-            # preceded by whitespace or a YAML flow delimiter.
-            if idx == 0 or value[idx - 1].isspace() or value[idx - 1] in "[{,:":
+            # Quotes open a scalar only at flow node boundaries, not inside plain text.
+            if expecting_node_start:
                 if ch == '"':
                     in_double = True
                 else:
                     in_single = True
+            expecting_node_start = False
         elif ch == "[":
             stack.append("]")
+            expecting_node_start = True
         elif ch == "{":
             stack.append("}")
+            expecting_node_start = True
         elif ch in ("]", "}"):
             if not stack or stack.pop() != ch:
                 return False
             if not stack and idx != n - 1:
                 return False
+            expecting_node_start = False
+        elif ch in (",", ":"):
+            expecting_node_start = True
+        elif not ch.isspace():
+            expecting_node_start = False
         idx += 1
     return not in_single and not in_double and not stack
 
@@ -774,6 +784,7 @@ def _has_dot_segment(rel_path: Path) -> bool:
 
 
 def _git_tracked_files(repo_dir: Path) -> set[Path] | None:
+    # Without --full-name, git -C <repo_dir> ls-files emits paths relative to repo_dir.
     try:
         proc = subprocess.run(
             [
@@ -819,11 +830,11 @@ def _discover_skill_dirs(repo_dir: Path, tracked_files: set[Path] | None) -> lis
 
 
 def _decode_sniffed_text(file_path: Path) -> tuple[str | None, str | None]:
-    """Sniff up to ``MAX_SNIFF_BYTES`` bytes to skip binary assets without whole-file reads.
+    """Sniff up to ``MAX_SNIFF_BYTES`` bytes to skip binary assets before buffering text.
 
-    Returns ``(text, None)`` for valid UTF-8 text, ``(None, None)`` for binary
-    assets that should be skipped, or ``(None, error_message)`` for files with
-    a valid UTF-8 prefix and an invalid UTF-8 tail.
+    Returns ``(text, None)`` for valid UTF-8 text, ``(None, None)`` for assets
+    with NUL bytes or non-UTF-8 prefixes (treated as binary and skipped), or
+    ``(None, error_message)`` for valid-UTF-8-prefix files with an invalid tail.
     """
     with file_path.open("rb") as fh:
         head = fh.read(MAX_SNIFF_BYTES + 1)
