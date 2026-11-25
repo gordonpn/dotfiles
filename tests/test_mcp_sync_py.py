@@ -12,7 +12,7 @@ import sys
 import tempfile
 import tomllib
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import cast
 from unittest import mock
@@ -704,6 +704,255 @@ class TestMcpSyncHelpers(unittest.TestCase):
                 with self.assertRaises(ValueError) as mocked_ctx:
                     mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "cclsp", "PATH": str(path_dir)})
                 self.assertIn("CCLSP_BIN is not an executable file: cclsp", str(mocked_ctx.exception))
+
+    def _make_sync_fixture(
+        self, root: Path
+    ) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
+        cclsp_bin = root / "bin" / "cclsp"
+        cclsp_bin.parent.mkdir(parents=True, exist_ok=True)
+        cclsp_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        cclsp_bin.chmod(0o755)
+
+        template = root / "mcp_config.template.json"
+        template.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "cclsp": {"command": "${CCLSP_BIN}", "args": []},
+                        "fetch": {"command": "uvx", "args": ["mcp-server-fetch"]},
+                        "vault": {"command": "/bin/vault", "args": [], "disabled": True},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        agy_cfg = root / "agy" / "mcp_config.json"
+        codex_cfg = root / "codex" / "config.toml"
+        codex_tpl = root / "codex.template.toml"
+        opencode_cfg = root / "opencode" / "opencode.json"
+        copilot_cfg = root / "copilot" / "mcp-config.json"
+        return cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg
+
+    def test_sync_mcp_config_aborts_before_writes_on_later_client_parse_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "case_opencode"
+            root.mkdir()
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            codex_cfg.parent.mkdir(parents=True)
+            opencode_cfg.parent.mkdir(parents=True)
+            agy_sentinel = b'{"mcpServers": {"cclsp": {"command": "/old/cclsp"}}}\n'
+            codex_sentinel = b'[tui]\ncopy_on_select = "always"\n'
+            opencode_sentinel = b"{ invalid json\n"
+            agy_cfg.write_bytes(agy_sentinel)
+            codex_cfg.write_bytes(codex_sentinel)
+            opencode_cfg.write_bytes(opencode_sentinel)
+
+            stdout_buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                redirect_stdout(stdout_buf),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertEqual(stdout_buf.getvalue(), "")
+            self.assertIn("Could not parse existing", stderr_buf.getvalue())
+            self.assertEqual(agy_cfg.read_bytes(), agy_sentinel)
+            self.assertEqual(codex_cfg.read_bytes(), codex_sentinel)
+            self.assertEqual(opencode_cfg.read_bytes(), opencode_sentinel)
+            self.assertFalse(copilot_cfg.exists())
+            self.assertFalse(copilot_cfg.parent.exists())
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "case_codex"
+            root.mkdir()
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            codex_cfg.parent.mkdir(parents=True)
+            agy_sentinel = b'{"mcpServers": {"cclsp": {"command": "/old/cclsp"}}}\n'
+            codex_sentinel = b"[broken_toml\n"
+            agy_cfg.write_bytes(agy_sentinel)
+            codex_cfg.write_bytes(codex_sentinel)
+
+            stdout_buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                redirect_stdout(stdout_buf),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertEqual(stdout_buf.getvalue(), "")
+            self.assertIn("Rendered Codex TOML", stderr_buf.getvalue())
+            self.assertEqual(agy_cfg.read_bytes(), agy_sentinel)
+            self.assertEqual(codex_cfg.read_bytes(), codex_sentinel)
+            self.assertFalse(opencode_cfg.exists())
+            self.assertFalse(copilot_cfg.exists())
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+    def test_sync_mcp_config_rolls_back_and_cleans_temp_files_on_replace_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            codex_cfg.parent.mkdir(parents=True)
+            agy_sentinel = b'{"mcpServers": {"cclsp": {"command": "/old/cclsp"}}}\n'
+            codex_sentinel = b'[tui]\ncopy_on_select = "always"\n'
+            agy_cfg.write_bytes(agy_sentinel)
+            agy_cfg.chmod(0o640)
+            codex_cfg.write_bytes(codex_sentinel)
+            codex_cfg.chmod(0o600)
+
+            real_replace = os.replace
+            replace_calls = 0
+
+            def failing_third_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+                nonlocal replace_calls
+                replace_calls += 1
+                if replace_calls == 3:
+                    raise OSError("injected replace failure")
+                real_replace(src, dst)
+
+            stdout_buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch("mcp_sync.os.replace", side_effect=failing_third_replace),
+                redirect_stdout(stdout_buf),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertEqual(stdout_buf.getvalue(), "")
+            self.assertIn("Failed to commit MCP config updates", stderr_buf.getvalue())
+            self.assertEqual(agy_cfg.read_bytes(), agy_sentinel)
+            self.assertEqual(stat.S_IMODE(agy_cfg.stat().st_mode), 0o640)
+            self.assertEqual(codex_cfg.read_bytes(), codex_sentinel)
+            self.assertEqual(stat.S_IMODE(codex_cfg.stat().st_mode), 0o600)
+            self.assertFalse(opencode_cfg.exists())
+            self.assertFalse(copilot_cfg.exists())
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            codex_cfg.parent.mkdir(parents=True)
+            codex_sentinel = b'[tui]\ncopy_on_select = "always"\n'
+            codex_cfg.write_bytes(codex_sentinel)
+
+            real_replace = os.replace
+            replace_calls = 0
+
+            def failing_third_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+                nonlocal replace_calls
+                replace_calls += 1
+                if replace_calls == 3:
+                    raise OSError("injected replace failure")
+                real_replace(src, dst)
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch("mcp_sync.os.replace", side_effect=failing_third_replace),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertFalse(os.path.lexists(agy_cfg))
+            self.assertEqual(codex_cfg.read_bytes(), codex_sentinel)
+            self.assertFalse(os.path.lexists(opencode_cfg))
+            self.assertFalse(os.path.lexists(copilot_cfg))
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+    def test_sync_mcp_config_cleans_staged_temp_files_on_stage_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            agy_sentinel = b'{"sentinel": true}\n'
+            agy_cfg.write_bytes(agy_sentinel)
+
+            real_stage = mcp_sync._stage_config_file
+            stage_calls = 0
+
+            def failing_third_stage(target: Path, content: str) -> Path:
+                nonlocal stage_calls
+                stage_calls += 1
+                if stage_calls == 3:
+                    raise OSError("injected stage failure")
+                return real_stage(target, content)
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch("mcp_sync._stage_config_file", side_effect=failing_third_stage),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertIn("Failed to stage MCP config update", stderr_buf.getvalue())
+            self.assertEqual(agy_cfg.read_bytes(), agy_sentinel)
+            self.assertFalse(codex_cfg.exists())
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
+    def test_sync_mcp_config_updates_all_clients_with_cclsp_and_0600_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            stdout_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                redirect_stdout(stdout_buf),
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            for cfg_path in (agy_cfg, codex_cfg, opencode_cfg, copilot_cfg):
+                self.assertTrue(cfg_path.is_file(), f"Missing {cfg_path}")
+                self.assertEqual(stat.S_IMODE(cfg_path.stat().st_mode), 0o600)
+
+            agy_data = cast(dict[str, dict[str, dict[str, object]]], json.loads(agy_cfg.read_text(encoding="utf-8")))
+            self.assertEqual(agy_data["mcpServers"]["cclsp"]["command"], str(cclsp_bin))
+
+            codex_data = cast(dict[str, dict[str, dict[str, object]]], tomllib.loads(codex_cfg.read_text(encoding="utf-8")))
+            self.assertEqual(codex_data["mcp_servers"]["cclsp"]["command"], str(cclsp_bin))
+
+            opencode_data = cast(dict[str, dict[str, dict[str, object]]], json.loads(opencode_cfg.read_text(encoding="utf-8")))
+            self.assertEqual(opencode_data["mcp"]["cclsp"]["command"], [str(cclsp_bin)])
+            self.assertTrue(opencode_data["mcp"]["cclsp"]["enabled"])
+
+            copilot_data = cast(dict[str, dict[str, dict[str, object]]], json.loads(copilot_cfg.read_text(encoding="utf-8")))
+            self.assertEqual(copilot_data["mcpServers"]["cclsp"]["command"], str(cclsp_bin))
+
+            out = stdout_buf.getvalue()
+            for cfg_path in (agy_cfg, codex_cfg, opencode_cfg, copilot_cfg):
+                self.assertIn(f"to {cfg_path}", out)
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
 
 
 if __name__ == "__main__":
