@@ -59,7 +59,7 @@ project-local minimal profile. See [MCP setup](docs/mcp-setup.md#ecc) for detail
 Codex CLI copies transcript selections on mouse release with
 `tui.copy_on_select = "always"`. Restart the CLI after changing this setting.
 
-Codex's `project_doc_max_bytes = 65536` allows up to 64 KiB of combined global
+Codex's `project_doc_max_bytes = 131072` allows up to 128 KiB of combined global
 and repository instructions, accommodating the shared cross-agent handoff policy.
 
 Antigravity CLI (`agy`) runs inline without alternate screen switching

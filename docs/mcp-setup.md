@@ -83,11 +83,13 @@ selections, including in Ghostty. Existing Codex configs retain their non-MCP
 settings during sync; set this value under `[tui]` in `~/.codex/config.toml` and
 restart the CLI when applying it to an existing installation.
 
-The base template also sets top-level `project_doc_max_bytes = 131072` (128 KiB)
-so combined global `GEMINI.md` and repository `AGENTS.md` instructions fit
-above Codex's 64 KiB default. For existing installations, update it manually
-before any TOML table in `~/.codex/config.toml` and restart Codex;
-synchronization preserves existing non-MCP settings.
+The base template also sets top-level `project_doc_max_bytes = 131072`, which
+raises Codex's project-doc size cap from the 64 KiB default to 128 KiB so
+combined global (`~/.codex/AGENTS.md`, symlinked from `dotfiles/gemini/GEMINI.md`)
+and repository `AGENTS.md` instructions are not truncated at 64 KiB. For
+existing installations, update it manually before any TOML table in
+`~/.codex/config.toml` and restart Codex; synchronization preserves existing
+non-MCP settings.
 
 ### Execution
 ```bash
