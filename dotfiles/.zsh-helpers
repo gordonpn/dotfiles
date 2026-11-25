@@ -34,14 +34,34 @@ printc() {
   echo -E ${(qqqq)${(%)color}}
 }
 
+_zsh_helpers_branch_in_worktree() {
+  local ref=$1 worktrees
+  worktrees=$(git worktree list --porcelain) || return 2
+  [[ $'\n'$worktrees$'\n' == *$'\n'"branch $ref"$'\n'* ]]
+}
+
+_zsh_helpers_print_remote_recovery() {
+  local branch=$1 remote_tip=$2
+  [[ -n $remote_tip ]] || return 0
+  local recovery_refspec="${remote_tip}:refs/heads/${branch}"
+  print -ru2 -- "Remote branch origin/$branch was already deleted (was $remote_tip). Restore it with: git push origin ${(q-)recovery_refspec}"
+}
+
 # Check linked worktrees before changing either ref, and require origin to
 # still point at the selected commit. Keep the local ref if origin rejects it.
 _zsh_helpers_delete_branch() {
   local branch=$1 remote_tip=$2 local_tip=$3
-  local ref="refs/heads/$branch" worktrees
-  worktrees=$(git worktree list --porcelain) || return 1
-  if [[ $'\n'$worktrees$'\n' == *$'\n'"branch $ref"$'\n'* ]]; then
+  local ref="refs/heads/$branch" wt_status=0
+  if git symbolic-ref --quiet "$ref" >/dev/null 2>&1; then
+    echo "Refusing to delete symbolic branch ref $branch." >&2
+    return 1
+  fi
+  _zsh_helpers_branch_in_worktree "$ref" || wt_status=$?
+  if (( wt_status == 0 )); then
     echo "Could not delete local branch $branch (checked out in a worktree)." >&2
+    return 1
+  elif (( wt_status != 1 )); then
+    echo "Could not verify linked worktrees for $branch." >&2
     return 1
   fi
   if [[ $(git show-ref --verify --hash "$ref" 2>/dev/null) != "$local_tip" ]]; then
@@ -54,7 +74,18 @@ _zsh_helpers_delete_branch() {
     return 1
   fi
   if [[ -n $local_tip ]]; then
-    if ! git update-ref -d "$ref" "$local_tip"; then
+    wt_status=0
+    _zsh_helpers_branch_in_worktree "$ref" || wt_status=$?
+    if (( wt_status != 1 )); then
+      if (( wt_status == 0 )); then
+        echo "Could not delete local branch $branch (checked out in a worktree); local branch was kept." >&2
+      else
+        echo "Could not verify linked worktrees for $branch; local branch was kept." >&2
+      fi
+      _zsh_helpers_print_remote_recovery "$branch" "$remote_tip"
+      return 1
+    fi
+    if ! git update-ref --no-deref -d "$ref" "$local_tip"; then
       local current_local_tip
       current_local_tip=$(git show-ref --verify --hash "$ref" 2>/dev/null) || current_local_tip=""
       if [[ "$current_local_tip" != "$local_tip" ]]; then
@@ -62,12 +93,12 @@ _zsh_helpers_delete_branch() {
       else
         echo "Could not delete local branch $branch at $local_tip; local branch was kept." >&2
       fi
-      if [[ -n $remote_tip ]]; then
-        echo "Remote branch origin/$branch was already deleted (was $remote_tip). Restore it with: git push origin ${remote_tip}:refs/heads/${branch}" >&2
-      fi
+      _zsh_helpers_print_remote_recovery "$branch" "$remote_tip"
       return 1
     fi
-    git config --remove-section "branch.$branch" 2>/dev/null || true
+    if ! git show-ref --verify --quiet "$ref"; then
+      git config --remove-section "branch.$branch" 2>/dev/null || true
+    fi
   fi
 }
 

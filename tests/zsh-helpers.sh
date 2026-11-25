@@ -357,6 +357,99 @@ g -C "${tmp}/clone" push -q origin "${old_tip}:refs/heads/old"
   fail "branch-delete local deletion failure recovery restores origin/old" "${actual}"
 pass "branch-delete preserves unchanged local tip on local deletion failure"
 
+# Concurrent checkout in main worktree during push keeps local branch and HEAD intact.
+make_stub "${tmp}/origin.git/hooks/pre-receive" \
+  "env -u GIT_DIR -u GIT_WORK_TREE git -C \"${tmp}/clone\" checkout -q old"
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
+assert_contains "branch-delete detects checkout during push" "checked out in a worktree); local branch was kept." "${actual}"
+assert_contains "branch-delete detects checkout during push" "Remote branch origin/old was already deleted" "${actual}"
+assert_contains "branch-delete detects checkout during push" "git push origin ${old_tip}:refs/heads/old" "${actual}"
+assert_contains "branch-delete detects checkout during push" "status=1" "${actual}"
+[[ -z $(g -C "${tmp}/origin.git" branch --list old) &&
+   $(g -C "${tmp}/clone" symbolic-ref HEAD) == "refs/heads/old" &&
+   $(g -C "${tmp}/clone" rev-parse --verify HEAD) == "${old_tip}" ]] ||
+  fail "branch-delete preserves checked-out branch and HEAD during push" "${actual}"
+rm "${tmp}/origin.git/hooks/pre-receive"
+g -C "${tmp}/clone" checkout -q current
+g -C "${tmp}/clone" push -q origin "${old_tip}:refs/heads/old"
+pass "branch-delete preserves checked-out branch and HEAD during push"
+
+# Concurrent linked worktree addition during push keeps local branch intact.
+make_stub "${tmp}/origin.git/hooks/pre-receive" \
+  "env -u GIT_DIR -u GIT_WORK_TREE git -C \"${tmp}/clone\" worktree add -q \"${tmp}/wt-race\" old"
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
+assert_contains "branch-delete detects linked worktree added during push" "checked out in a worktree); local branch was kept." "${actual}"
+assert_contains "branch-delete detects linked worktree added during push" "git push origin ${old_tip}:refs/heads/old" "${actual}"
+assert_contains "branch-delete detects linked worktree added during push" "status=1" "${actual}"
+[[ -z $(g -C "${tmp}/origin.git" branch --list old) &&
+   $(g -C "${tmp}/clone" rev-parse --verify refs/heads/old) == "${old_tip}" &&
+   $(g -C "${tmp}/wt-race" rev-parse --verify HEAD) == "${old_tip}" ]] ||
+  fail "branch-delete preserves branch checked out in concurrent linked worktree" "${actual}"
+rm "${tmp}/origin.git/hooks/pre-receive"
+g -C "${tmp}/clone" worktree remove --force "${tmp}/wt-race"
+g -C "${tmp}/clone" push -q origin "${old_tip}:refs/heads/old"
+pass "branch-delete preserves branch checked out in concurrent linked worktree"
+
+# Symbolic branch refs are refused without deleting the target or pushing.
+g -C "${tmp}/clone" symbolic-ref refs/heads/alias refs/heads/master
+master_tip=$(g -C "${tmp}/clone" rev-parse refs/heads/master)
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete alias; print -- "status=$?"')
+assert_contains "branch-delete refuses symbolic branch refs" "Refusing to delete symbolic branch ref alias." "${actual}"
+assert_contains "branch-delete refuses symbolic branch refs" "status=1" "${actual}"
+[[ $(g -C "${tmp}/clone" symbolic-ref refs/heads/alias) == "refs/heads/master" &&
+   $(g -C "${tmp}/clone" rev-parse refs/heads/master) == "${master_tip}" ]] ||
+  fail "branch-delete keeps symbolic branch ref and target intact" "${actual}"
+g -C "${tmp}/clone" update-ref --no-deref -d refs/heads/alias
+pass "branch-delete refuses symbolic branch refs"
+
+# Recovery command shell-quotes branch names containing shell metacharacters.
+meta_branch='feature/a;false'
+g -C "${tmp}/clone" branch "${meta_branch}" "${old_tip}"
+g -C "${tmp}/clone" push -q origin "${meta_branch}"
+mkdir -p "${tmp}/clone/.git/refs/heads/feature"
+make_stub "${tmp}/origin.git/hooks/pre-receive" \
+  ": >\"${tmp}/clone/.git/refs/heads/${meta_branch}.lock\""
+actual=$(run_zsh "${base_path}" "${tmp}/clone" 'branch-delete "feature/a;false"; print -- "status=$?"')
+assert_contains "branch-delete shell-quotes recovery command" "Restore it with: git push origin '${old_tip}:refs/heads/${meta_branch}'" "${actual}"
+assert_contains "branch-delete shell-quotes recovery command" "status=1" "${actual}"
+rm -f "${tmp}/clone/.git/refs/heads/${meta_branch}.lock" "${tmp}/origin.git/hooks/pre-receive"
+recovery_cmd="${actual#*Restore it with: }"
+recovery_cmd="${recovery_cmd%%$'\n'*}"
+(cd "${tmp}/clone" && eval "${recovery_cmd}" >/dev/null 2>&1) ||
+  fail "branch-delete recovery command executes cleanly with metacharacters" "${recovery_cmd}"
+[[ $(g -C "${tmp}/origin.git" rev-parse "refs/heads/${meta_branch}") == "${old_tip}" ]] ||
+  fail "branch-delete recovery command restores metacharacter branch on origin" "${actual}"
+g -C "${tmp}/clone" branch -D "${meta_branch}" >/dev/null
+g -C "${tmp}/origin.git" branch -D "${meta_branch}" >/dev/null
+pass "branch-delete shell-quotes recovery command"
+
+# Post-deletion tracking config cleanup is skipped if the branch was recreated concurrently.
+g -C "${tmp}/clone" config "branch.old.remote" origin
+g -C "${tmp}/clone" config "branch.old.merge" refs/heads/old
+mkdir -p "${tmp}/recreate-git-bin"
+cat >"${tmp}/recreate-git-bin/git" <<EOF
+#!/bin/sh
+real_git="$(command -v git)"
+if [ "\$1" = "update-ref" ] && [ "\$2" = "--no-deref" ] && [ "\$3" = "-d" ]; then
+  "\$real_git" "\$@" || exit \$?
+  "\$real_git" update-ref "\$4" "${recent_tip}"
+  "\$real_git" config "branch.old.remote" origin
+  "\$real_git" config "branch.old.merge" refs/heads/old
+  exit 0
+fi
+exec "\$real_git" "\$@"
+EOF
+chmod +x "${tmp}/recreate-git-bin/git"
+actual=$(run_zsh "${tmp}/recreate-git-bin:${base_path}" "${tmp}/clone" 'branch-delete old; print -- "status=$?"')
+assert_contains "branch-delete preserves recreated branch tracking config" "status=0" "${actual}"
+[[ $(g -C "${tmp}/clone" config --get "branch.old.remote") == "origin" &&
+   $(g -C "${tmp}/clone" config --get "branch.old.merge") == "refs/heads/old" ]] ||
+  fail "branch-delete preserves recreated branch tracking config" "${actual}"
+g -C "${tmp}/clone" update-ref refs/heads/old "${old_tip}" "${recent_tip}"
+g -C "${tmp}/clone" config --remove-section "branch.old"
+g -C "${tmp}/clone" push -q origin "${old_tip}:refs/heads/old"
+pass "branch-delete preserves recreated branch tracking config"
+
 
 
 for arg in --help --dryrun; do
