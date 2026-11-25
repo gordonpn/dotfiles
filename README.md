@@ -59,8 +59,11 @@ project-local minimal profile. See [MCP setup](docs/mcp-setup.md#ecc) for detail
 Codex CLI copies transcript selections on mouse release with
 `tui.copy_on_select = "always"`. Restart the CLI after changing this setting.
 
-Codex's `project_doc_max_bytes = 65536` allows up to 64 KiB of combined global
-and repository instructions, accommodating the shared cross-agent handoff policy.
+Codex's base template sets `project_doc_max_bytes = 131072` (128 KiB) for
+combined global and repository instructions, accommodating the shared
+cross-agent handoff policy. Existing `~/.codex/config.toml` files retain `65536`
+during sync; see [MCP setup](docs/mcp-setup.md#the-synchronization-script-binmcp-sync)
+for manual update steps.
 
 Antigravity CLI (`agy`) runs inline without alternate screen switching
 (`altScreenMode = "never"`), copies transcript selections on mouse release
