@@ -651,6 +651,60 @@ class TestMcpSyncHelpers(unittest.TestCase):
                 mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "my-cclsp", "PATH": ""})
             self.assertIn("CCLSP_BIN command not found on PATH: my-cclsp", str(ctx.exception))
 
+    def test_resolve_cclsp_bin_omitted_path_does_not_leak_host_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            host_bin_dir = root / "host-bin"
+            host_bin_dir.mkdir(parents=True)
+            for name in ("my-cclsp", "cclsp"):
+                binary = host_bin_dir / name
+                binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                binary.chmod(0o755)
+
+            with mock.patch.dict(os.environ, {"PATH": str(host_bin_dir)}, clear=False):
+                with self.assertRaises(ValueError) as ctx:
+                    mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "my-cclsp"})
+                self.assertIn("CCLSP_BIN command not found on PATH: my-cclsp", str(ctx.exception))
+
+                stderr_buf = io.StringIO()
+                with redirect_stderr(stderr_buf):
+                    fallback = mcp_sync.resolve_cclsp_bin(home, {})
+                self.assertEqual(fallback, str(home / ".local" / "share" / "pnpm" / "bin" / "cclsp"))
+                self.assertIn("Warning: cclsp executable not found; falling back to", stderr_buf.getvalue())
+
+    def test_resolve_cclsp_bin_rejects_and_skips_executable_directory_from_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            pnpm_home = root / "pnpm"
+            v10_bin = pnpm_home / "cclsp"
+            v10_bin.parent.mkdir(parents=True)
+            v10_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            v10_bin.chmod(0o755)
+
+            path_dir = root / "path-bin"
+            exec_dir = path_dir / "cclsp"
+            exec_dir.mkdir(parents=True)
+            exec_dir.chmod(0o755)
+
+            self.assertEqual(
+                mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
+                str(v10_bin),
+            )
+            with self.assertRaises(ValueError) as real_ctx:
+                mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "cclsp", "PATH": str(path_dir)})
+            self.assertIn("CCLSP_BIN command not found on PATH: cclsp", str(real_ctx.exception))
+
+            with mock.patch("shutil.which", return_value=str(exec_dir)):
+                self.assertEqual(
+                    mcp_sync.resolve_cclsp_bin(home, {"PNPM_HOME": str(pnpm_home), "PATH": str(path_dir)}),
+                    str(v10_bin),
+                )
+                with self.assertRaises(ValueError) as mocked_ctx:
+                    mcp_sync.resolve_cclsp_bin(home, {"CCLSP_BIN": "cclsp", "PATH": str(path_dir)})
+                self.assertIn("CCLSP_BIN is not an executable file: cclsp", str(mocked_ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

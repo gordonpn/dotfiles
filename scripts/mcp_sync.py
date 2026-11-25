@@ -604,18 +604,22 @@ def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = 
     non-empty ``CCLSP_BIN`` override is not an executable file or PATH command.
     """
     active_env = os.environ if env is None else env
+    path_env = active_env.get("PATH", "")
     explicit = active_env.get("CCLSP_BIN", "").strip()
     if explicit:
-        if "/" in explicit or os.sep in explicit or explicit.startswith((".", "~")):
+        if "/" in explicit or os.sep in explicit or explicit.startswith((".", "~")) or bool(Path(explicit).drive):
             candidate = _normalize_path(explicit)
             if not _is_executable_file(candidate):
                 raise ValueError(f"CCLSP_BIN is not an executable file: {explicit} (resolved to {candidate})")
             return str(candidate)
 
-        found = shutil.which(explicit, path=active_env.get("PATH"))
+        found = shutil.which(explicit, path=path_env)
         if not found:
             raise ValueError(f"CCLSP_BIN command not found on PATH: {explicit}")
-        return str(_normalize_path(found))
+        found_path = _normalize_path(found)
+        if not _is_executable_file(found_path):
+            raise ValueError(f"CCLSP_BIN is not an executable file: {explicit} (resolved to {found_path})")
+        return str(found_path)
 
     base_home = _normalize_path(Path.home() if home is None else home)
     pnpm_home_raw = active_env.get("PNPM_HOME", "").strip()
@@ -625,9 +629,11 @@ def resolve_cclsp_bin(home: Path | None = None, env: Mapping[str, str] | None = 
     if _is_executable_file(v12_candidate):
         return str(v12_candidate)
 
-    path_candidate = shutil.which("cclsp", path=active_env.get("PATH"))
+    path_candidate = shutil.which("cclsp", path=path_env)
     if path_candidate:
-        return str(_normalize_path(path_candidate))
+        normalized_path_candidate = _normalize_path(path_candidate)
+        if _is_executable_file(normalized_path_candidate):
+            return str(normalized_path_candidate)
 
     v10_candidate = _normalize_path(pnpm_home / "cclsp")
     if _is_executable_file(v10_candidate):
