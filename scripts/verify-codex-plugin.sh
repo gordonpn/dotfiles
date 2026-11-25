@@ -94,7 +94,7 @@ required_subcommands=(
 missing=0
 for cmd in "${required_subcommands[@]}"; do
   cmd_pattern="(['\"]${cmd}['\"]|[|<]${cmd}[|>])"
-  if ! printf '%s\n' "${source_body}" | grep -Eq "${cmd_pattern}"; then
+  if ! grep -Eq "${cmd_pattern}" <<<"${source_body}"; then
     printf 'Error: missing required subcommand in %s: %s\n' "${runner_path}" "${cmd}" >&2
     missing=1
   fi
@@ -110,7 +110,7 @@ required_flags=(
 for flag in "${required_flags[@]}"; do
   flag_name="${flag#--}"
   flag_pattern="(--${flag_name}([^[:alnum:]_-]|$)|flags\\.${flag_name}([^[:alnum:]_-]|$)|flags\\[['\"]${flag_name}['\"]\\]|parseFlags\\([^)]*['\"]${flag_name}['\"])"
-  if ! printf '%s\n' "${source_body}" | grep -Eq "${flag_pattern}"; then
+  if ! grep -Eq "${flag_pattern}" <<<"${source_body}"; then
     printf 'Error: missing required flag in %s: %s\n' "${runner_path}" "${flag}" >&2
     missing=1
   fi

@@ -91,7 +91,8 @@ plugin (`codex-runner.mjs`), while implementation builds default to
 `delegate.sh` in an isolated Git worktree. Run `just verify-codex-plugin` to
 validate the installed Codex plugin runner syntax and CLI contract (or pass
 `--allow-missing` to `scripts/verify-codex-plugin.sh` when relying on
-`delegate.sh` fallback). On classified Codex provider, quota,
+`delegate.sh` fallback; `--allow-missing` tolerates an absent runner only, and
+present runners still require `node` and a valid contract). On classified Codex provider, quota,
 rate-limit, or model-availability failures, `delegate.sh` automatically falls
 back to OpenCode zero-cost models (`opencode/deepseek-v4.1-flash-free` with high
 variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and
