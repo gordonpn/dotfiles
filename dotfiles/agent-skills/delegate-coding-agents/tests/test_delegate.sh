@@ -5,8 +5,14 @@ SCRIPT="$SCRIPT_DIR/delegate.sh"
 ANALYZE_SCRIPT="$SCRIPT_DIR/delegate-analyze.sh"
 IMPLEMENT_SCRIPT="$SCRIPT_DIR/delegate-implement.sh"
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+cleanup() {
+  git -C "$TMP/repo" config --local --unset agents.delegationAllowed 2>/dev/null || true
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 mkdir -p "$TMP/bin" "$TMP/repo"
+: > "$TMP/empty-global.gitconfig"
+export GIT_CONFIG_GLOBAL="$TMP/empty-global.gitconfig" GIT_CONFIG_NOSYSTEM=1
 
 cat > "$TMP/bin/opencode" <<'MOCK'
 #!/usr/bin/env bash
@@ -430,13 +436,118 @@ if OPENCODE_DELEGATE_MODELS=',  , ' "$SCRIPT" --agent copilot --mode plan --id e
 fi
 grep -q 'No usable OpenCode fallback models' "$TMP/empty-fallback.out"
 
-# Automatic delegation runs without requiring repository opt-in in git config.
+# Automatic delegation runs without requiring repository opt-in in git config and records delegation_policy=default.
 git config --local --unset agents.delegationAllowed 2>/dev/null || true
 "$SCRIPT" --agent opencode --mode plan --orchestrator codex --automatic --id no-opt-in-needed --task 'Allowed without opt-in' >"$TMP/no-opt-in.out" 2>&1
 grep -q 'Exit: 0' "$TMP/no-opt-in.out"
 if grep -q 'agents.delegationAllowed true' "$TMP/no-opt-in.out"; then
   echo 'Unexpected opt-in gate error' >&2; exit 1
 fi
+no_opt_in_log=$(sed -n 's/^  Logs: //p' "$TMP/no-opt-in.out" | head -n 1)
+grep -q '^delegation_policy=default$' "$no_opt_in_log/manifest.txt"
+
+# Per-repo opt-out (false, 0, no, off, Off, whitespace-padded, empty) blocks delegation with or without --automatic before worktree/log/provider execution.
+for opt_out_val in false 0 no off Off ' off ' ''; do
+  git config --local agents.delegationAllowed "$opt_out_val"
+  for auto_flag in '' '--automatic'; do
+    : >"$OPENCODE_MOCK_CALL_LOG"
+    : >"$CODEX_MOCK_CALL_LOG"
+    : >"$COPILOT_MOCK_CALL_LOG"
+    before_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+    before_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+    args=(--agent opencode --mode plan --id "opt-out-${opt_out_val:-empty}" --task 'Blocked by repo opt-out')
+    if [[ -n $auto_flag ]]; then args+=("$auto_flag"); fi
+    if "$SCRIPT" "${args[@]}" >"$TMP/opt-out.out" 2>"$TMP/opt-out.err"; then
+      echo "Expected agents.delegationAllowed='$opt_out_val' (${auto_flag:-no --automatic}) to block delegation" >&2; exit 1
+    fi
+    grep -q "External delegation is disabled for this repository (agents.delegationAllowed=$opt_out_val)" "$TMP/opt-out.err"
+    after_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+    after_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+    [[ $before_wt_count -eq $after_wt_count ]]
+    [[ $before_log_count -eq $after_log_count ]]
+    [[ ! -s $OPENCODE_MOCK_CALL_LOG && ! -s $CODEX_MOCK_CALL_LOG && ! -s $COPILOT_MOCK_CALL_LOG ]]
+  done
+done
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+
+# Global opt-out via isolated GIT_CONFIG_GLOBAL blocks delegation, and local true/1/yes/on/TRUE overrides it.
+: > "$TMP/global-opt-out.gitconfig"
+GIT_CONFIG_GLOBAL="$TMP/global-opt-out.gitconfig" git config --global agents.delegationAllowed false
+: >"$OPENCODE_MOCK_CALL_LOG"
+: >"$CODEX_MOCK_CALL_LOG"
+: >"$COPILOT_MOCK_CALL_LOG"
+before_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+before_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+if GIT_CONFIG_GLOBAL="$TMP/global-opt-out.gitconfig" "$SCRIPT" --orchestrator agy --agent codex --mode plan --id global-opt-out --task 'Blocked by global opt-out' >"$TMP/global-opt-out.out" 2>"$TMP/global-opt-out.err"; then
+  echo 'Expected global agents.delegationAllowed=false to block delegation' >&2; exit 1
+fi
+grep -q 'External delegation is disabled for this repository (agents.delegationAllowed=false, scope=global)' "$TMP/global-opt-out.err"
+after_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+after_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+[[ $before_wt_count -eq $after_wt_count ]]
+[[ $before_log_count -eq $after_log_count ]]
+[[ ! -s $OPENCODE_MOCK_CALL_LOG && ! -s $CODEX_MOCK_CALL_LOG && ! -s $COPILOT_MOCK_CALL_LOG ]]
+
+for allow_val in true 1 yes on TRUE; do
+  git config --local agents.delegationAllowed "$allow_val"
+  GIT_CONFIG_GLOBAL="$TMP/global-opt-out.gitconfig" "$SCRIPT" --agent opencode --mode plan --id "local-override-$allow_val" --task 'Local override of global opt-out' >"$TMP/local-override.out" 2>"$TMP/local-override.err"
+  grep -q 'Exit: 0' "$TMP/local-override.out"
+  override_log_dir=$(sed -n 's/^  Logs: //p' "$TMP/local-override.out" | head -n 1)
+  grep -q '^delegation_policy=explicit_allow$' "$override_log_dir/manifest.txt"
+done
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+
+# Missing --show-scope support (Git < 2.26) falls back to an explicit scope-unknown message.
+mkdir -p "$TMP/bin-git-no-scope"
+REAL_GIT=$(command -v git)
+cat > "$TMP/bin-git-no-scope/git" <<'MOCK'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ $arg == --show-scope ]]; then
+    echo 'error: unknown option --show-scope' >&2
+    exit 129
+  fi
+done
+exec "$REAL_GIT_BIN" "$@"
+MOCK
+chmod +x "$TMP/bin-git-no-scope/git"
+git config --local agents.delegationAllowed false
+if REAL_GIT_BIN="$REAL_GIT" PATH="$TMP/bin-git-no-scope:$PATH" "$SCRIPT" --agent opencode --mode plan --id no-show-scope --task 'Fallback scope unknown message' >"$TMP/no-show-scope.out" 2>"$TMP/no-show-scope.err"; then
+  echo 'Expected opt-out without --show-scope to block delegation' >&2; exit 1
+fi
+grep -q 'External delegation is disabled for this repository (agents.delegationAllowed=false, scope unknown). Check local, global, or system Git config' "$TMP/no-show-scope.err"
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+
+# Invalid agents.delegationAllowed value and malformed Git config fail closed before worktree/log/provider execution.
+git config --local agents.delegationAllowed maybe
+: >"$OPENCODE_MOCK_CALL_LOG"
+: >"$CODEX_MOCK_CALL_LOG"
+: >"$COPILOT_MOCK_CALL_LOG"
+before_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+before_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+if "$SCRIPT" --agent opencode --mode plan --id invalid-policy --task 'Reject invalid policy value' >"$TMP/invalid-policy.out" 2>"$TMP/invalid-policy.err"; then
+  echo 'Expected invalid agents.delegationAllowed=maybe to fail closed' >&2; exit 1
+fi
+grep -q "Invalid git config value for agents.delegationAllowed: 'maybe' (expected true/false/1/0/yes/no/on/off)" "$TMP/invalid-policy.err"
+after_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+after_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+[[ $before_wt_count -eq $after_wt_count ]]
+[[ $before_log_count -eq $after_log_count ]]
+[[ ! -s $OPENCODE_MOCK_CALL_LOG && ! -s $CODEX_MOCK_CALL_LOG && ! -s $COPILOT_MOCK_CALL_LOG ]]
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+
+printf '[broken\n' > "$TMP/malformed-global.gitconfig"
+before_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+before_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+if GIT_CONFIG_GLOBAL="$TMP/malformed-global.gitconfig" "$SCRIPT" --agent opencode --mode plan --id malformed-cfg --task 'Fail closed on malformed git config' >"$TMP/malformed-cfg.out" 2>"$TMP/malformed-cfg.err"; then
+  echo 'Expected malformed git config to fail closed' >&2; exit 1
+fi
+grep -Eq 'Run inside a Git repository|Failed reading agents.delegationAllowed from Git config' "$TMP/malformed-cfg.err"
+after_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 ! -name logs | wc -l)
+after_log_count=$(find "$DELEGATE_WORKTREE_ROOT/logs" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+[[ $before_wt_count -eq $after_wt_count ]]
+[[ $before_log_count -eq $after_log_count ]]
+[[ ! -s $OPENCODE_MOCK_CALL_LOG && ! -s $CODEX_MOCK_CALL_LOG && ! -s $COPILOT_MOCK_CALL_LOG ]]
 
 # Orchestrator route tests
 "$SCRIPT" --agent opencode --mode plan --orchestrator agy --automatic --task 'Plan a change' > "$TMP/agy-to-opencode.out"
