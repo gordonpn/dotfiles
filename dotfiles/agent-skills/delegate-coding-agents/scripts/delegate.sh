@@ -1019,7 +1019,7 @@ run_verify_cmd() {
   timeout_bin=$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)
   if [[ -n $timeout_bin ]]; then
     local rc=0
-    (cd "$worktree" && "$timeout_bin" "$timeout_sec" bash -c "$cmd") </dev/null >"$log_file" 2>&1 || rc=$?
+    (cd "$worktree" && "$timeout_bin" -k 2 "$timeout_sec" bash -c "$cmd") </dev/null >"$log_file" 2>&1 || rc=$?
     if (( rc == 124 )); then
       printf '\nVerification timed out after %ss\n' "$timeout_sec" >>"$log_file"
     fi
@@ -1027,27 +1027,41 @@ run_verify_cmd() {
   fi
 
   local timed_out_flag="$log_file.timeout"
-  rm -f "$timed_out_flag"
+  local done_flag="$log_file.done"
+  rm -f "$timed_out_flag" "$done_flag"
+
+  local had_monitor=0
+  if [[ -o monitor ]]; then
+    had_monitor=1
+  fi
+  set -m
   (cd "$worktree" && exec bash -c "$cmd") </dev/null >"$log_file" 2>&1 &
   local cmd_pid=$!
+  if (( ! had_monitor )); then
+    set +m
+  fi
+
   (
     sleep "$timeout_sec" &
     sleep_pid=$!
     trap 'kill "$sleep_pid" 2>/dev/null || true; exit 0' TERM INT
     wait "$sleep_pid" 2>/dev/null || true
-    if kill -0 "$cmd_pid" 2>/dev/null; then
+    if [[ ! -f $done_flag ]] && kill -0 "$cmd_pid" 2>/dev/null; then
+      trap '' TERM INT
       : >"$timed_out_flag"
-      kill -TERM "$cmd_pid" 2>/dev/null || true
+      kill -TERM -- "-$cmd_pid" 2>/dev/null || kill -TERM "$cmd_pid" 2>/dev/null || true
       sleep 1
-      kill -KILL "$cmd_pid" 2>/dev/null || true
+      kill -KILL -- "-$cmd_pid" 2>/dev/null || kill -KILL "$cmd_pid" 2>/dev/null || true
     fi
   ) </dev/null >/dev/null 2>&1 &
   local watchdog_pid=$!
 
   local rc=0
   wait "$cmd_pid" || rc=$?
+  : >"$done_flag"
   kill -TERM "$watchdog_pid" 2>/dev/null || true
   wait "$watchdog_pid" 2>/dev/null || true
+  rm -f "$done_flag"
   if [[ -f $timed_out_flag ]]; then
     rm -f "$timed_out_flag"
     printf '\nVerification timed out after %ss\n' "$timeout_sec" >>"$log_file"

@@ -58,6 +58,9 @@ if [[ ${OPENCODE_MOCK_RENAME_FILE:-} == 1 && $mode == build && -f rename-src.txt
   git mv rename-src.txt rename-dst.txt
 elif [[ $mode == build ]]; then
   printf 'implemented by opencode\n' > agent-change.txt
+  if [[ ${OPENCODE_MOCK_TRAILING_WS:-} == 1 ]]; then
+    printf 'trailing whitespace   \n' >> source.txt
+  fi
   if [[ -n ${OPENCODE_MOCK_TOUCH_FILES:-} ]]; then
     IFS=',' read -ra touch_paths <<< "$OPENCODE_MOCK_TOUCH_FILES"
     for tp in "${touch_paths[@]}"; do
@@ -1523,6 +1526,73 @@ grep -q '  Failure category: verification_error' "$TMP/verify-timeout.out"
 grep -q '  Verification: failed' "$TMP/verify-timeout.out"
 grep -q '  Verification exit: 124' "$TMP/verify-timeout.out"
 grep -q 'Verification timed out after 1s' "$TMP/verify-timeout.out"
+
+# --verify fallback watchdog kills grandchild processes on timeout
+# shellcheck disable=SC2016
+if PATH="$TMP/bin-only-opencode:$SYS_BIN" "$SCRIPT" --agent opencode --mode build --verify-timeout 1 --verify 'sh -c "sleep 30 & echo \$! > pidfile; wait"' --id verify-grandchild-timeout --task 'Verify watchdog kills grandchild processes' >"$TMP/verify-grandchild.out" 2>"$TMP/verify-grandchild.err"; then
+  echo 'Expected timed-out --verify grandchild command to return non-zero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/verify-grandchild.out"
+grep -q '  Failure category: verification_error' "$TMP/verify-grandchild.out"
+grep -q '  Verification: failed' "$TMP/verify-grandchild.out"
+grep -q '  Verification exit: 124' "$TMP/verify-grandchild.out"
+WT_GRANDCHILD=$(sed -n 's/^  Worktree: //p' "$TMP/verify-grandchild.out" | head -n 1)
+[[ -s $WT_GRANDCHILD/pidfile ]]
+grandchild_pid=$(tr -d '[:space:]' <"$WT_GRANDCHILD/pidfile")
+[[ $grandchild_pid =~ ^[0-9]+$ ]]
+if kill -0 "$grandchild_pid" 2>/dev/null; then
+  kill -KILL "$grandchild_pid" 2>/dev/null || true
+  echo "Expected fallback watchdog to kill grandchild PID $grandchild_pid" >&2; exit 1
+fi
+
+# Primary timeout/gtimeout path passes -k 2 and records exit 124 on timeout
+mkdir -p "$TMP/bin-timeout-shim"
+cat > "$TMP/bin-timeout-shim/timeout" <<'SHIM'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$TIMEOUT_SHIM_LOG"
+if [[ ${TIMEOUT_SHIM_FORCE_TIMEOUT:-0} == 1 ]]; then
+  exit 124
+fi
+while (($#)); do
+  case "$1" in
+    -k) shift 2 ;;
+    *) shift; break ;;
+  esac
+done
+exec "$@"
+SHIM
+chmod +x "$TMP/bin-timeout-shim/timeout"
+: >"$TMP/timeout-shim.log"
+TIMEOUT_SHIM_LOG="$TMP/timeout-shim.log" PATH="$TMP/bin-only-opencode:$TMP/bin-timeout-shim:$SYS_BIN" "$SCRIPT" --agent opencode --mode build --verify-timeout 5 --verify 'echo via-timeout-shim' --id verify-timeout-shim-pass --task 'Verify primary timeout shim passes' >"$TMP/verify-timeout-shim-pass.out"
+grep -q 'Exit: 0' "$TMP/verify-timeout-shim-pass.out"
+grep -q '  Verification: passed' "$TMP/verify-timeout-shim-pass.out"
+grep -q '^    via-timeout-shim$' "$TMP/verify-timeout-shim-pass.out"
+grep -qx -- '-k 2 5 bash -c echo via-timeout-shim' "$TMP/timeout-shim.log"
+
+: >"$TMP/timeout-shim.log"
+if TIMEOUT_SHIM_LOG="$TMP/timeout-shim.log" TIMEOUT_SHIM_FORCE_TIMEOUT=1 PATH="$TMP/bin-only-opencode:$TMP/bin-timeout-shim:$SYS_BIN" "$SCRIPT" --agent opencode --mode build --verify-timeout 5 --verify 'echo should-timeout' --id verify-timeout-shim-fail --task 'Verify primary timeout shim timeout' >"$TMP/verify-timeout-shim-fail.out" 2>"$TMP/verify-timeout-shim-fail.err"; then
+  echo 'Expected primary timeout shim timeout to return non-zero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/verify-timeout-shim-fail.out"
+grep -q '  Failure category: verification_error' "$TMP/verify-timeout-shim-fail.out"
+grep -q '  Verification: failed' "$TMP/verify-timeout-shim-fail.out"
+grep -q '  Verification exit: 124' "$TMP/verify-timeout-shim-fail.out"
+grep -q 'Verification timed out after 5s' "$TMP/verify-timeout-shim-fail.out"
+grep -qx -- '-k 2 5 bash -c echo should-timeout' "$TMP/timeout-shim.log"
+
+# Worker exiting 0 while git diff --check fails sets Verification: not_run and skips --verify
+if OPENCODE_MOCK_TRAILING_WS=1 "$SCRIPT" --agent opencode --mode build --verify "touch '$TMP/diff-check-should-not-run'" --id verify-diff-check-fail --task 'Worker exits 0 with whitespace error' >"$TMP/verify-diff-check.out" 2>"$TMP/verify-diff-check.err"; then
+  echo 'Expected git diff --check failure to exit non-zero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/verify-diff-check.out"
+grep -q '  Failure category: task_error' "$TMP/verify-diff-check.out"
+grep -q '  Verification: not_run' "$TMP/verify-diff-check.out"
+[[ ! -e $TMP/diff-check-should-not-run ]]
+diff_check_log=$(sed -n 's/^  Logs: //p' "$TMP/verify-diff-check.out" | head -n 1)
+[[ ! -e $diff_check_log/verify.log ]]
+[[ -s $diff_check_log/diff-check.txt ]]
+grep -q '^verification=not_run$' "$diff_check_log/manifest.txt"
+grep -q '^failure_category=task_error$' "$diff_check_log/manifest.txt"
 
 # --verify is not_run when worker fails before verification
 if OPENCODE_MOCK_TASK_ERROR=1 "$SCRIPT" --agent opencode --mode build --verify 'echo should-not-run' --id verify-not-run --task 'Worker fails before verify' >"$TMP/verify-not-run.out" 2>"$TMP/verify-not-run.err"; then
