@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Verify Antigravity Codex plugin runner syntax and CLI contract without executing codex.
+# Non-mutating heuristic contract smoke check for the Antigravity Codex plugin runner.
+# Verifies syntax with node --check and checks CLI symbols via grep (not a JS AST proof).
 
 set -euo pipefail
 
@@ -73,10 +74,11 @@ fi
 if command -v node >/dev/null 2>&1; then
   node --check "${runner_path}"
 else
-  printf 'Notice: node is not installed; skipping syntax check for %s.\n' "${runner_path}"
+  printf 'Error: node is required to verify %s but was not found on PATH.\n' "${runner_path}" >&2
+  exit 1
 fi
 
-# Strip single-line JS comments so removed commands/flags cannot pass via stale comments.
+# Strip full-line // comments only; trailing or block comments are outside this heuristic smoke check.
 source_body="$(grep -v '^[[:space:]]*//' "${runner_path}" || true)"
 
 required_subcommands=(

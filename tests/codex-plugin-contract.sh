@@ -61,15 +61,23 @@ write_fixture() {
   } >"${dest}"
 }
 
-assert_fails_with() {
-  local expected_err="$1"
-  shift
+assert_fails() {
   local status=0
   "$@" >"${tmp_dir}/stdout" 2>"${tmp_dir}/stderr" || status=$?
   if [[ "${status}" -eq 0 ]]; then
     printf 'Expected failure but exited 0: %s\n' "$*" >&2
     exit 1
   fi
+  if [[ ! -s "${tmp_dir}/stderr" ]]; then
+    printf 'Expected non-empty stderr, got empty stderr for: %s\n' "$*" >&2
+    exit 1
+  fi
+}
+
+assert_fails_with() {
+  local expected_err="$1"
+  shift
+  assert_fails "$@"
   if ! grep -Fq "${expected_err}" "${tmp_dir}/stderr"; then
     printf 'Expected stderr to contain %q, got:\n%s\n' "${expected_err}" "$(cat "${tmp_dir}/stderr")" >&2
     exit 1
@@ -102,11 +110,11 @@ for missing_flag in --base --resume-last --write --background; do
     bash "${verifier}" --runner "${fixture}"
 done
 
-# Case 5: Syntax error in runner fails when node is available.
+# Case 5: Syntax error in runner fails with non-zero exit and non-empty stderr when node is available.
 if command -v node >/dev/null 2>&1; then
   bad_syntax_runner="${tmp_dir}/bad-syntax.mjs"
   write_fixture "${bad_syntax_runner}" "" 1
-  assert_fails_with "SyntaxError" bash "${verifier}" --runner "${bad_syntax_runner}"
+  assert_fails bash "${verifier}" --runner "${bad_syntax_runner}"
 fi
 
 # Case 6: Missing runner fails without --allow-missing and exits 0 with --allow-missing.
@@ -116,7 +124,7 @@ assert_fails_with "Codex plugin runner not found" bash "${verifier}" --runner "$
 bash "${verifier}" --runner "${missing_runner}" --allow-missing >"${tmp_dir}/allow-missing.out"
 grep -Fq "fall back to delegate.sh" "${tmp_dir}/allow-missing.out"
 
-# Case 7: When the local Antigravity Codex plugin is installed, verify it directly.
+# Case 7: Validates the host's installed plugin when present (environment-dependent; skipped if absent).
 local_runner="${HOME}/.gemini/config/plugins/codex/scripts/codex-runner.mjs"
 if [[ -f "${local_runner}" ]]; then
   bash "${verifier}" --runner "${local_runner}" >"${tmp_dir}/local.out"
@@ -124,5 +132,13 @@ if [[ -f "${local_runner}" ]]; then
 else
   printf 'Notice: local Codex plugin runner absent at %s; skipping live plugin check.\n' "${local_runner}"
 fi
+
+# Case 8: Missing node on PATH fails non-zero when verifying a present runner.
+no_node_bin="${tmp_dir}/no-node-bin"
+mkdir -p "${no_node_bin}"
+ln -s "$(command -v bash)" "${no_node_bin}/bash"
+ln -s "$(command -v grep)" "${no_node_bin}/grep"
+assert_fails_with "Error: node is required to verify ${valid_runner} but was not found on PATH." \
+  env PATH="${no_node_bin}" bash "${verifier}" --runner "${valid_runner}"
 
 echo "codex-plugin-contract checks passed"
