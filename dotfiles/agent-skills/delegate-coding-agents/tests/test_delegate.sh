@@ -58,6 +58,13 @@ if [[ ${OPENCODE_MOCK_RENAME_FILE:-} == 1 && $mode == build && -f rename-src.txt
   git mv rename-src.txt rename-dst.txt
 elif [[ $mode == build ]]; then
   printf 'implemented by opencode\n' > agent-change.txt
+  if [[ -n ${OPENCODE_MOCK_TOUCH_FILES:-} ]]; then
+    IFS=',' read -ra touch_paths <<< "$OPENCODE_MOCK_TOUCH_FILES"
+    for tp in "${touch_paths[@]}"; do
+      mkdir -p "$(dirname "$tp")"
+      printf 'mock change\n' > "$tp"
+    done
+  fi
 fi
 printf 'opencode %s %s complete\n' "$mode" "${variant:-default-variant}"
 MOCK
@@ -1430,5 +1437,141 @@ PATH="$TMP/bin-only-opencode:$SYS_BIN" OPENCODE_DELEGATE_MODEL='   ' "$SCRIPT" -
 grep -q 'Worker: opencode' "$TMP/whitespace-env.out"
 grep -q 'Model: opencode/glm-5.3-flash-free' "$TMP/whitespace-env.out"
 grep -q 'Exit: 0' "$TMP/whitespace-env.out"
+
+# --mode plan --verify is rejected before creating a worktree
+before_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 | wc -l)
+if "$SCRIPT" --agent opencode --mode plan --verify 'true' --id plan-verify-reject --task 'Reject verify in plan mode' >"$TMP/plan-verify.out" 2>"$TMP/plan-verify.err"; then
+  echo 'Expected --mode plan --verify to be rejected' >&2; exit 1
+fi
+grep -q -- '--verify is only supported with --mode build' "$TMP/plan-verify.err"
+after_wt_count=$(find "$DELEGATE_WORKTREE_ROOT" -mindepth 1 -maxdepth 1 | wc -l)
+[[ $before_wt_count -eq $after_wt_count ]]
+
+# --verify-timeout rejects invalid values and --verify rejects empty command
+for bad_timeout in 0 -5 abc; do
+  if "$SCRIPT" --agent opencode --mode build --verify 'true' --verify-timeout "$bad_timeout" --id bad-timeout --task 'Reject bad timeout' >"$TMP/bad-timeout.out" 2>"$TMP/bad-timeout.err"; then
+    echo "Expected --verify-timeout '$bad_timeout' to fail" >&2; exit 1
+  fi
+  grep -q -- '--verify-timeout must be a positive integer' "$TMP/bad-timeout.err"
+done
+if "$SCRIPT" --agent opencode --mode build --verify '   ' --id empty-verify --task 'Reject empty verify' >"$TMP/empty-verify.out" 2>"$TMP/empty-verify.err"; then
+  echo 'Expected empty --verify command to fail' >&2; exit 1
+fi
+grep -q 'Verification command is empty' "$TMP/empty-verify.err"
+
+# Omitted --verify on --mode build records Verification: none_configured and Failure category: none
+"$SCRIPT" --agent opencode --mode build --id build-no-verify --task 'Build without verify' >"$TMP/build-no-verify.out"
+grep -q 'Exit: 0' "$TMP/build-no-verify.out"
+grep -q '  Failure category: none' "$TMP/build-no-verify.out"
+grep -q '  Verification: none_configured' "$TMP/build-no-verify.out"
+if grep -q '  Verification exit:' "$TMP/build-no-verify.out"; then
+  echo 'Unexpected Verification exit line when --verify omitted' >&2; exit 1
+fi
+grep -q '^    (none)$' <(sed -n '/^  Modified test files:/,/^  Git changes:/p' "$TMP/build-no-verify.out")
+no_verify_log=$(sed -n 's/^  Logs: //p' "$TMP/build-no-verify.out" | head -n 1)
+grep -q '^verification=none_configured$' "$no_verify_log/manifest.txt"
+grep -q '^verification_exit=(none)$' "$no_verify_log/manifest.txt"
+grep -q '^failure_category=none$' "$no_verify_log/manifest.txt"
+
+# --verify passing check runs inside worktree outside worker session and records passed status
+# shellcheck disable=SC2016
+"$SCRIPT" --agent opencode --mode build --verify 'test -f agent-change.txt && test -z "${CODING_DELEGATE_ACTIVE:-}" && echo verify-ok' --id verify-pass --task 'Verify passing build' >"$TMP/verify-pass.out"
+grep -q 'Exit: 0' "$TMP/verify-pass.out"
+grep -q '  Failure category: none' "$TMP/verify-pass.out"
+grep -q '  Verification: passed' "$TMP/verify-pass.out"
+grep -q '  Verification exit: 0' "$TMP/verify-pass.out"
+grep -q '^    verify-ok$' "$TMP/verify-pass.out"
+verify_pass_log=$(sed -n 's/^  Logs: //p' "$TMP/verify-pass.out" | head -n 1)
+[[ -s $verify_pass_log/verify.log ]]
+grep -q '^verification=passed$' "$verify_pass_log/manifest.txt"
+grep -q '^verification_exit=0$' "$verify_pass_log/manifest.txt"
+grep -q '^failure_category=none$' "$verify_pass_log/manifest.txt"
+
+# --verify failing check sets EXIT_CODE=1, verification_error, and caps output at last 40 lines
+# shellcheck disable=SC2016
+if "$SCRIPT" --agent opencode --mode build --verify 'for i in $(seq 1 60); do echo "verify-line-$i"; done; exit 7' --id verify-fail --task 'Verify failing build' >"$TMP/verify-fail.out" 2>"$TMP/verify-fail.err"; then
+  echo 'Expected failing --verify command to return non-zero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/verify-fail.out"
+grep -q '  Failure category: verification_error' "$TMP/verify-fail.out"
+grep -q '  Verification: failed' "$TMP/verify-fail.out"
+grep -q '  Verification exit: 7' "$TMP/verify-fail.out"
+grep -q '^    verify-line-21$' "$TMP/verify-fail.out"
+grep -q '^    verify-line-60$' "$TMP/verify-fail.out"
+if grep -q '^    verify-line-20$' "$TMP/verify-fail.out"; then
+  echo 'Expected DELEGATION_RESULT verification output to be capped to last 40 lines' >&2; exit 1
+fi
+verify_fail_log=$(sed -n 's/^  Logs: //p' "$TMP/verify-fail.out" | head -n 1)
+grep -q '^verify-line-1$' "$verify_fail_log/verify.log"
+grep -q '^verification=failed$' "$verify_fail_log/manifest.txt"
+grep -q '^verification_exit=7$' "$verify_fail_log/manifest.txt"
+grep -q '^failure_category=verification_error$' "$verify_fail_log/manifest.txt"
+grep -q '^exit_code=1$' "$verify_fail_log/manifest.txt"
+
+# --verify timeout triggers failure via pure-Bash watchdog when timeout/gtimeout are absent from PATH
+for tool in sleep kill; do
+  tool_path=$(command -v "$tool" 2>/dev/null || true)
+  if [[ -n $tool_path ]]; then
+    ln -sf "$tool_path" "$SYS_BIN/$tool"
+  fi
+done
+if PATH="$TMP/bin-only-opencode:$SYS_BIN" "$SCRIPT" --agent opencode --mode build --verify-timeout 1 --verify 'echo before-timeout; sleep 5' --id verify-bash-timeout --task 'Verify bash timeout watchdog' >"$TMP/verify-timeout.out" 2>"$TMP/verify-timeout.err"; then
+  echo 'Expected timed-out --verify command to return non-zero' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/verify-timeout.out"
+grep -q '  Failure category: verification_error' "$TMP/verify-timeout.out"
+grep -q '  Verification: failed' "$TMP/verify-timeout.out"
+grep -q '  Verification exit: 124' "$TMP/verify-timeout.out"
+grep -q 'Verification timed out after 1s' "$TMP/verify-timeout.out"
+
+# --verify is not_run when worker fails before verification
+if OPENCODE_MOCK_TASK_ERROR=1 "$SCRIPT" --agent opencode --mode build --verify 'echo should-not-run' --id verify-not-run --task 'Worker fails before verify' >"$TMP/verify-not-run.out" 2>"$TMP/verify-not-run.err"; then
+  echo 'Expected worker task error to fail before verification' >&2; exit 1
+fi
+grep -q 'Exit: 1' "$TMP/verify-not-run.out"
+grep -q '  Failure category: task_error' "$TMP/verify-not-run.out"
+grep -q '  Verification: not_run' "$TMP/verify-not-run.out"
+verify_not_run_log=$(sed -n 's/^  Logs: //p' "$TMP/verify-not-run.out" | head -n 1)
+[[ ! -e $verify_not_run_log/verify.log ]]
+grep -q '^verification=not_run$' "$verify_not_run_log/manifest.txt"
+grep -q '^failure_category=task_error$' "$verify_not_run_log/manifest.txt"
+
+# Auth and quota exhaustion map to auth_error and env_error failure categories
+if CODEX_MOCK_AUTH_FAIL=1 "$SCRIPT" --orchestrator agy --agent codex --mode build --verify 'true' --id auth-cat --task 'Auth failure category' >"$TMP/auth-cat.out" 2>"$TMP/auth-cat.err"; then
+  echo 'Expected auth failure to exit non-zero' >&2; exit 1
+fi
+grep -q '  Failure category: auth_error' "$TMP/auth-cat.out"
+grep -q '  Verification: not_run' "$TMP/auth-cat.out"
+
+if PATH="$TMP/bin-only-opencode:$SYS_BIN" OPENCODE_MOCK_FAIL_ALL=1 "$SCRIPT" --agent opencode --mode build --verify 'true' --id env-cat --task 'Quota failure category' >"$TMP/env-cat.out" 2>"$TMP/env-cat.err"; then
+  echo 'Expected quota exhaustion to exit non-zero' >&2; exit 1
+fi
+grep -q '  Failure category: env_error' "$TMP/env-cat.out"
+grep -q '  Verification: not_run' "$TMP/env-cat.out"
+
+# Modified test files flags test paths separately from non-test changed files
+OPENCODE_MOCK_TOUCH_FILES='tests/unit_case.sh,pkg/tests/sub.py,scripts/test_helper.py,pkg/handler_test.go,web/app.test.ts,web/app.spec.tsx,src/main.sh' \
+  "$SCRIPT" --agent opencode --mode build --id test-files-flag --task 'Touch test and non-test files' >"$TMP/test-files-flag.out"
+grep -q 'Exit: 0' "$TMP/test-files-flag.out"
+changed_section=$(sed -n '/^  Changed files:/,/^  Modified test files:/p' "$TMP/test-files-flag.out")
+modified_test_section=$(sed -n '/^  Modified test files:/,/^  Git changes:/p' "$TMP/test-files-flag.out")
+for expected_test in \
+  '    tests/unit_case.sh' \
+  '    pkg/tests/sub.py' \
+  '    scripts/test_helper.py' \
+  '    pkg/handler_test.go' \
+  '    web/app.test.ts' \
+  '    web/app.spec.tsx'; do
+  grep -qx "$expected_test" <<< "$changed_section"
+  grep -qx "$expected_test" <<< "$modified_test_section"
+done
+grep -qx '    src/main.sh' <<< "$changed_section"
+grep -qx '    agent-change.txt' <<< "$changed_section"
+if grep -qx '    src/main.sh' <<< "$modified_test_section" || grep -qx '    agent-change.txt' <<< "$modified_test_section"; then
+  echo 'Expected non-test files not to appear under Modified test files' >&2; exit 1
+fi
+test_files_log=$(sed -n 's/^  Logs: //p' "$TMP/test-files-flag.out" | head -n 1)
+grep -q '^changed_files_count=8$' "$test_files_log/manifest.txt"
+grep -q '^modified_test_files_count=6$' "$test_files_log/manifest.txt"
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'
