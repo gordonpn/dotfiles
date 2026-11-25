@@ -124,6 +124,7 @@ class _TargetSnapshot:
     content: bytes
     mode: int
     symlink_target: str | None = None
+    written_content: bytes = b""
 
 
 def _atomic_restore_bytes(target: Path, content: bytes, mode: int) -> None:
@@ -156,7 +157,10 @@ def _stage_config_file(target: Path, content: str) -> Path:
         return tmp_path
     except Exception:
         if os.path.lexists(tmp_path):
-            tmp_path.unlink()
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
         raise
 
 
@@ -172,7 +176,7 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
     snapshots: list[_TargetSnapshot] = []
     committed: list[_TargetSnapshot] = []
     try:
-        for target, _ in staged_configs:
+        for target, tmp_path in staged_configs:
             if target.is_symlink():
                 snapshots.append(
                     _TargetSnapshot(
@@ -192,8 +196,18 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
                         mode=stat.S_IMODE(target.stat().st_mode),
                     )
                 )
+            elif os.path.lexists(target):
+                raise OSError(f"Refusing to overwrite non-regular config target: {target}")
             else:
-                snapshots.append(_TargetSnapshot(target=target, existed=False, content=b"", mode=0o600))
+                snapshots.append(
+                    _TargetSnapshot(
+                        target=target,
+                        existed=False,
+                        content=b"",
+                        mode=0o600,
+                        written_content=tmp_path.read_bytes(),
+                    )
+                )
 
         for snapshot, (target, tmp_path) in zip(snapshots, staged_configs, strict=True):
             os.replace(tmp_path, target)
@@ -205,8 +219,16 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
                     atomic_symlink(Path(snapshot.symlink_target), snapshot.target)
                 elif snapshot.existed:
                     _atomic_restore_bytes(snapshot.target, snapshot.content, snapshot.mode)
-                elif os.path.lexists(snapshot.target):
-                    snapshot.target.unlink()
+                elif os.path.lexists(snapshot.target) and not snapshot.target.is_symlink():
+                    try:
+                        matches_written = (
+                            snapshot.target.is_file()
+                            and snapshot.target.read_bytes() == snapshot.written_content
+                        )
+                    except OSError:
+                        matches_written = False
+                    if matches_written:
+                        snapshot.target.unlink()
             except OSError as rollback_exc:
                 print(
                     f"Warning: Failed to roll back {snapshot.target} ({rollback_exc}).",
