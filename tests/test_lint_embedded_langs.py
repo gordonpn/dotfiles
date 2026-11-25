@@ -233,9 +233,133 @@ class TestLintEmbeddedLangs(unittest.TestCase):
             self.assertEqual(issues, [])
 
     def test_live_repository_passes_cleanly(self) -> None:
-        issues = lint_embedded_langs.lint_repository(REPO_ROOT)
+        resolved_root = REPO_ROOT.resolve()
+        issues, wf_count, sh_count = lint_embedded_langs._lint_repository_with_counts(REPO_ROOT)
 
         self.assertEqual(issues, [])
+        self.assertGreaterEqual(wf_count, 4)
+        self.assertGreaterEqual(sh_count, 20)
+
+        tracked_files = lint_embedded_langs._git_tracked_files(resolved_root)
+        _, shell_scripts = lint_embedded_langs._discover_target_files(resolved_root, tracked_files)
+        self.assertIn((resolved_root / "dotfiles/gemini/antigravity-cli/title.sh"), shell_scripts)
+
+    def test_nested_skill_scripts_and_title_hook_are_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested_path = write_repo_file(
+                root,
+                "dotfiles/agent-skills/demo/scripts/sub/helper.sh",
+                "#!/usr/bin/env bash\npython3 - <<'PY'\nprint('nested')\nPY\n",
+            )
+            title_path = write_repo_file(
+                root,
+                "dotfiles/gemini/antigravity-cli/title.sh",
+                "#!/usr/bin/env bash\nnode - <<'NODE'\nconsole.log(1)\nNODE\n",
+            )
+
+            issues = lint_embedded_langs.lint_repository(root)
+
+            self.assertEqual(len(issues), 2)
+            self.assertEqual(
+                [(i.path, i.line) for i in issues],
+                [(nested_path.resolve(), 2), (title_path.resolve(), 2)],
+            )
+
+    def test_heredoc_variants_command_subst_and_wrapper_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sh_path = write_repo_file(
+                root,
+                "scripts/variants.sh",
+                (
+                    "#!/usr/bin/env bash\n"
+                    "cat <<EOF; python3 - <<'PY'\n"
+                    "plain text\n"
+                    "EOF\n"
+                    "print('fifo')\n"
+                    "PY\n"
+                    "python3 - <<-'PY'\n"
+                    "\tprint('tabs')\n"
+                    "\tPY\n"
+                    "out=$(python3 - <<'PY'\n"
+                    "print('subst')\n"
+                    "PY\n"
+                    ")\n"
+                    "env python3 - <<'PY'\n"
+                    "print('env')\n"
+                    "PY\n"
+                    "python3 - <<\"PY\"\n"
+                    "print('double-quoted-delim')\n"
+                    "PY\n"
+                ),
+            )
+
+            issues = lint_embedded_langs.lint_repository(root)
+
+            self.assertEqual([i.line for i in issues], [2, 7, 10, 14, 17])
+            self.assertTrue(all(i.path == sh_path.resolve() for i in issues))
+            self.assertIn("python3", issues[3].message)
+
+    def test_unterminated_foreign_heredoc_is_flagged_even_after_unterminated_fifo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            single_bad = write_repo_file(
+                root,
+                "scripts/unterminated_single.sh",
+                "#!/usr/bin/env bash\npython3 - <<'PY'\nprint(1)\n",
+            )
+            fifo_bad = write_repo_file(
+                root,
+                "scripts/unterminated_fifo.sh",
+                "#!/usr/bin/env bash\ncat <<EOF; python3 - <<'PY'\nplain\nprint(1)\nPY\n",
+            )
+
+            issues = lint_embedded_langs.lint_repository(root)
+
+            self.assertEqual(len(issues), 2)
+            self.assertEqual(
+                [(i.path, i.line) for i in issues],
+                [(fifo_bad.resolve(), 2), (single_bad.resolve(), 2)],
+            )
+            self.assertTrue(all("unterminated" in i.message for i in issues))
+
+    def test_nested_inline_eval_and_heredoc_deduplicates_per_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sh_path = write_repo_file(
+                root,
+                "scripts/nested_eval.sh",
+                (
+                    "#!/usr/bin/env bash\n"
+                    "python3 -c \"$(cat <<'PY'\n"
+                    "print('nested')\n"
+                    "PY\n"
+                    ")\"\n"
+                ),
+            )
+            delegate_rel = "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh"
+            write_repo_file(
+                root,
+                delegate_rel,
+                (
+                    "#!/usr/bin/env bash\n"
+                    "python3 -c \"$(cat <<'PY'\n"
+                    "print('one')\n"
+                    "PY\n"
+                    ")\"\n"
+                    "python3 -c \"$(cat <<'PY'\n"
+                    "print('two')\n"
+                    "PY\n"
+                    ")\"\n"
+                ),
+            )
+
+            issues = lint_embedded_langs.lint_repository(root)
+
+            self.assertEqual(len(issues), 1)
+            self.assertEqual(issues[0].path, sh_path.resolve())
+            self.assertEqual(issues[0].line, 2)
 
     def test_cli_main_returns_expected_exit_codes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

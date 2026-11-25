@@ -242,6 +242,58 @@ def _read_heredoc_delimiter(line: str, pos: int) -> tuple[str, bool, int] | None
     return delim, strip_tabs, pos
 
 
+def _consume_pending_heredocs(
+    path: Path,
+    lines: list[str],
+    line_idx: int,
+    pending_heredocs: list[_PendingHeredoc],
+    issues: list[LintIssue],
+) -> int:
+    total_lines = len(lines)
+    for heredoc in pending_heredocs:
+        body_lines = 0
+        terminated = False
+        while line_idx < total_lines:
+            candidate = lines[line_idx].rstrip("\r\n")
+            if heredoc.strip_tabs:
+                candidate = candidate.lstrip("\t")
+            line_idx += 1
+            if candidate == heredoc.delimiter:
+                terminated = True
+                break
+            body_lines += 1
+
+        exe, _ = _command_executable(heredoc.cmd_tokens)
+        is_foreign_cmd = exe is not None and bool(FOREIGN_INTERPRETER_RE.match(exe))
+        is_foreign_delim = heredoc.delimiter.upper() in FOREIGN_HEREDOC_DELIMS
+        if is_foreign_cmd or is_foreign_delim:
+            label = exe if is_foreign_cmd and exe is not None else heredoc.delimiter
+            if not terminated:
+                issues.append(
+                    LintIssue(
+                        path=path,
+                        line=heredoc.line,
+                        message=(
+                            f"unterminated embedded {label} heredoc (<<{heredoc.delimiter}) "
+                            "reaches end of file"
+                        ),
+                    )
+                )
+            elif body_lines >= 1:
+                issues.append(
+                    LintIssue(
+                        path=path,
+                        line=heredoc.line,
+                        message=(
+                            f"multi-line embedded {label} heredoc (<<{heredoc.delimiter}) "
+                            "should be externalized to a dedicated file"
+                        ),
+                    )
+                )
+    pending_heredocs.clear()
+    return line_idx
+
+
 def _scan_shell_blocks(path: Path, text: str) -> list[LintIssue]:
     issues: list[LintIssue] = []
     lines = text.splitlines(keepends=True)
@@ -455,40 +507,30 @@ def _scan_shell_blocks(path: Path, text: str) -> list[LintIssue]:
         line_idx += 1
 
         if pending_heredocs and not in_quote and not line_continued:
-            for heredoc in pending_heredocs:
-                body_lines = 0
-                while line_idx < total_lines:
-                    candidate = lines[line_idx].rstrip("\r\n")
-                    if heredoc.strip_tabs:
-                        candidate = candidate.lstrip("\t")
-                    line_idx += 1
-                    if candidate == heredoc.delimiter:
-                        break
-                    body_lines += 1
+            line_idx = _consume_pending_heredocs(
+                path, lines, line_idx, pending_heredocs, issues
+            )
 
-                exe, _ = _command_executable(heredoc.cmd_tokens)
-                is_foreign_cmd = exe is not None and bool(FOREIGN_INTERPRETER_RE.match(exe))
-                is_foreign_delim = heredoc.delimiter.upper() in FOREIGN_HEREDOC_DELIMS
-                if (is_foreign_cmd or is_foreign_delim) and body_lines >= 1:
-                    label = exe if is_foreign_cmd and exe is not None else heredoc.delimiter
-                    issues.append(
-                        LintIssue(
-                            path=path,
-                            line=heredoc.line,
-                            message=(
-                                f"multi-line embedded {label} heredoc (<<{heredoc.delimiter}) "
-                                "should be externalized to a dedicated file"
-                            ),
-                        )
-                    )
-            pending_heredocs.clear()
+    if pending_heredocs:
+        _consume_pending_heredocs(path, lines, line_idx, pending_heredocs, issues)
 
     return issues
 
 
+def _deduplicate_shell_issues(issues: list[LintIssue]) -> list[LintIssue]:
+    seen: set[tuple[Path, int | None]] = set()
+    unique: list[LintIssue] = []
+    for issue in issues:
+        key = (issue.path, issue.line)
+        if key not in seen:
+            seen.add(key)
+            unique.append(issue)
+    return unique
+
+
 def check_shell_text(path: Path, rel_path: str, text: str) -> list[LintIssue]:
     """Return issues for unallowlisted multi-line foreign-language blocks in a shell script."""
-    detected = _scan_shell_blocks(path, text)
+    detected = _deduplicate_shell_issues(_scan_shell_blocks(path, text))
     allowed_max = SHELL_BLOCK_ALLOWLIST.get(rel_path)
     if allowed_max is not None:
         if len(detected) <= allowed_max:
@@ -550,7 +592,14 @@ def _is_target_shell_script(file_path: Path, rel_path: Path) -> bool:
     if len(parts) == 3 and parts[0] == ".github" and parts[1] == "scripts":
         return _is_shell_script_path(file_path, parts)
     if (
-        len(parts) == 5
+        len(parts) == 4
+        and parts[0] == "dotfiles"
+        and parts[1] == "gemini"
+        and parts[2] == "antigravity-cli"
+    ):
+        return _is_shell_script_path(file_path, parts)
+    if (
+        len(parts) >= 5
         and parts[0] == "dotfiles"
         and parts[1] == "agent-skills"
         and parts[3] in ("scripts", "tests")
@@ -577,6 +626,7 @@ def _discover_target_files(
             repo_dir / "scripts",
             repo_dir / "tests",
             repo_dir / "dotfiles" / "agent-skills",
+            repo_dir / "dotfiles" / "gemini" / "antigravity-cli",
         ):
             if root_sub.is_dir():
                 for candidate in sorted(root_sub.rglob("*")):
