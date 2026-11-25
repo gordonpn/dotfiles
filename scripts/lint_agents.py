@@ -109,6 +109,8 @@ ATX_HEADING_RE: re.Pattern[str] = re.compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]|$)")
 THEMATIC_BREAK_RE: re.Pattern[str] = re.compile(
     r"^[ \t]{0,3}(?:(\*[ \t]*){3,}|(-[ \t]*){3,}|(_[ \t]*){3,})$"
 )
+LIST_ITEM_RE: re.Pattern[str] = re.compile(r"^[ \t]{0,3}(?:[-+*]|\d{1,9}[.)])[ \t]+")
+TABLE_ROW_RE: re.Pattern[str] = re.compile(r"^[ \t]*\|")
 COMMONMARK_ESCAPE_RE: re.Pattern[str] = re.compile(
     r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])"
 )
@@ -137,6 +139,7 @@ REF_LINK_DEF_RE: re.Pattern[str] = re.compile(
     r"^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*(?:<([^>\r\n]+)>|([^\s\r\n]+))"
 )
 MAX_SNIFF_BYTES: int = 8192
+SNIFF_CHUNK_SIZE: int = 65536
 MARKDOWN_EXTENSIONS: frozenset[str] = frozenset({".md", ".markdown"})
 BINARY_EXTENSIONS: frozenset[str] = frozenset(
     {
@@ -295,6 +298,8 @@ def _parse_quoted_yaml_scalar(value: str) -> tuple[str | None, str | None]:
 
 
 def _is_balanced_flow_collection(value: str) -> bool:
+    if not value or value[0] not in "[{":
+        return False
     stack: list[str] = []
     in_single = False
     in_double = False
@@ -318,10 +323,14 @@ def _is_balanced_flow_collection(value: str) -> bool:
                 in_single = False
             idx += 1
             continue
-        if ch == '"':
-            in_double = True
-        elif ch == "'":
-            in_single = True
+        if ch in ('"', "'"):
+            # Quotes inside plain flow scalars (e.g. O'Reilly) stay literal unless
+            # preceded by whitespace or a YAML flow delimiter.
+            if idx == 0 or value[idx - 1].isspace() or value[idx - 1] in "[{,:":
+                if ch == '"':
+                    in_double = True
+                else:
+                    in_single = True
         elif ch == "[":
             stack.append("]")
         elif ch == "{":
@@ -394,19 +403,27 @@ def parse_frontmatter(text: str) -> tuple[dict[str, YamlValue] | None, str | Non
     block_mode = False
     current_is_quoted = False
     current_is_collection = False
-    current_allows_plain = False
+    current_plain_lines: list[str] | None = None
 
-    def flush_current() -> None:
+    def flush_current() -> str | None:
         nonlocal current_key, block_lines, block_mode
-        nonlocal current_is_quoted, current_is_collection, current_allows_plain
-        if current_key is not None and block_mode:
-            fields[current_key] = "\n".join(block_lines).strip()
+        nonlocal current_is_quoted, current_is_collection, current_plain_lines
+        if current_key is not None:
+            if block_mode:
+                fields[current_key] = "\n".join(block_lines).strip()
+            elif current_plain_lines is not None:
+                joined = " ".join(current_plain_lines)
+                scalar_val, _, scalar_err = _parse_yaml_scalar(joined)
+                if scalar_err is not None:
+                    return f"{scalar_err} for {current_key!r}"
+                fields[current_key] = scalar_val
         current_key = None
         block_lines = []
         block_mode = False
         current_is_quoted = False
         current_is_collection = False
-        current_allows_plain = False
+        current_plain_lines = None
+        return None
 
     for line in lines[1:closing_idx]:
         if not line.strip():
@@ -430,23 +447,25 @@ def parse_frontmatter(text: str) -> tuple[dict[str, YamlValue] | None, str | Non
             stripped = _strip_yaml_comment(line.strip())
             if not stripped:
                 continue
-            if not current_allows_plain:
+            if current_plain_lines is None:
                 return None, f"invalid indented continuation for {current_key!r}"
-            if stripped == "-" or stripped.startswith("- "):
+            if not current_plain_lines and (stripped == "-" or stripped.startswith("- ")):
                 fields[current_key] = _YamlCollection("sequence")
                 current_is_collection = True
+                current_plain_lines = None
                 continue
-            if YAML_NESTED_KEY_RE.match(stripped):
+            if not current_plain_lines and YAML_NESTED_KEY_RE.match(stripped):
                 fields[current_key] = _YamlCollection("mapping")
                 current_is_collection = True
+                current_plain_lines = None
                 continue
 
-            existing = fields.get(current_key)
-            existing_text = existing if isinstance(existing, str) else ""
-            fields[current_key] = f"{existing_text} {stripped}".strip()
+            current_plain_lines.append(stripped)
             continue
 
-        flush_current()
+        flush_err = flush_current()
+        if flush_err is not None:
+            return None, flush_err
         match = YAML_KEY_RE.match(line)
         if not match:
             return None, f"invalid YAML frontmatter line: {line!r}"
@@ -461,18 +480,28 @@ def parse_frontmatter(text: str) -> tuple[dict[str, YamlValue] | None, str | Non
             fields[key] = ""
             continue
 
-        scalar_val, is_quoted, scalar_err = _parse_yaml_scalar(raw_rest)
-        if scalar_err is not None:
-            return None, f"{scalar_err} for {key!r}"
+        if raw_rest == "":
+            fields[key] = None
+            current_plain_lines = []
+            continue
 
-        fields[key] = scalar_val
-        current_is_quoted = is_quoted
-        current_is_collection = isinstance(scalar_val, _YamlCollection)
-        current_allows_plain = (not is_quoted) and (
-            raw_rest == "" or isinstance(scalar_val, str)
-        )
+        if raw_rest[0] in ("'", '"', "[", "{", "]", "}"):
+            scalar_val, is_quoted, scalar_err = _parse_yaml_scalar(raw_rest)
+            if scalar_err is not None:
+                return None, f"{scalar_err} for {key!r}"
+            fields[key] = scalar_val
+            current_is_quoted = is_quoted
+            current_is_collection = isinstance(scalar_val, _YamlCollection)
+            current_plain_lines = None
+            continue
 
-    flush_current()
+        # Defer scalar typing until continuation lines are joined so multiline
+        # plain descriptions starting with numbers or booleans stay strings.
+        current_plain_lines = [raw_rest]
+
+    flush_err = flush_current()
+    if flush_err is not None:
+        return None, flush_err
     return fields, None
 
 
@@ -500,54 +529,32 @@ def _find_unescaped_open_bracket(line: str, floor: int, close_pos: int) -> int:
     return -1
 
 
-def _strip_inline_code_stateful(line: str, open_tick_len: int = 0) -> tuple[str, int]:
-    """Mask inline backtick code spans on ``line``, carrying ``open_tick_len`` across lines."""
+def _mask_inline_code_spans(text: str) -> str:
+    """Replace matched inline backtick code spans with spaces, preserving newlines."""
     out: list[str] = []
     i = 0
-    n = len(line)
-
-    if open_tick_len > 0:
-        search_idx = 0
-        close_pos = -1
-        while search_idx < n:
-            if line[search_idx] == "`":
-                run_len = 0
-                while search_idx + run_len < n and line[search_idx + run_len] == "`":
-                    run_len += 1
-                if run_len == open_tick_len:
-                    close_pos = search_idx
-                    break
-                search_idx += run_len
-            else:
-                search_idx += 1
-        if close_pos == -1:
-            return " " * n, open_tick_len
-        end_pos = close_pos + open_tick_len
-        out.append(" " * end_pos)
-        i = end_pos
-        open_tick_len = 0
-
+    n = len(text)
     while i < n:
-        if line[i] != "`":
-            out.append(line[i])
+        if text[i] != "`":
+            out.append(text[i])
             i += 1
             continue
 
-        if _is_escaped(line, i):
+        if _is_escaped(text, i):
             out.append("`")
             i += 1
             continue
 
         tick_len = 0
-        while i + tick_len < n and line[i + tick_len] == "`":
+        while i + tick_len < n and text[i + tick_len] == "`":
             tick_len += 1
 
         close_pos = -1
         search_idx = i + tick_len
         while search_idx < n:
-            if line[search_idx] == "`":
+            if text[search_idx] == "`":
                 run_len = 0
-                while search_idx + run_len < n and line[search_idx + run_len] == "`":
+                while search_idx + run_len < n and text[search_idx + run_len] == "`":
                     run_len += 1
                 if run_len == tick_len:
                     close_pos = search_idx
@@ -558,19 +565,19 @@ def _strip_inline_code_stateful(line: str, open_tick_len: int = 0) -> tuple[str,
 
         if close_pos != -1:
             end_pos = close_pos + tick_len
-            out.append(" " * (end_pos - i))
+            for ch in text[i:end_pos]:
+                out.append("\n" if ch == "\n" else " ")
             i = end_pos
         else:
-            out.append(" " * (n - i))
-            return "".join(out), tick_len
+            out.append(text[i : i + tick_len])
+            i += tick_len
 
-    return "".join(out), 0
+    return "".join(out)
 
 
 def strip_inline_code(line: str) -> str:
-    """Replace inline backtick code spans on a single line with spaces."""
-    masked, _ = _strip_inline_code_stateful(line, 0)
-    return masked
+    """Replace matched inline backtick code spans on a single line with spaces."""
+    return _mask_inline_code_spans(line)
 
 
 def _is_external_or_anchor(target: str) -> bool:
@@ -591,77 +598,19 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
 
     Supports inline ``[text](target)`` links and reference-style link definitions
     ``[id]: target``. Ignores fenced code blocks (including blockquoted fences),
-    multiline inline backtick spans, external URI schemes, protocol-relative
-    network-path URLs, and pure ``#anchor`` links. Returns ``(line_number, raw_target)``
-    pairs, preserving empty targets so broken ``[text]()`` links can be reported.
+    matched multiline inline backtick spans within a paragraph, external URI
+    schemes, protocol-relative network-path URLs, and pure ``#anchor`` links.
+    Returns ``(line_number, raw_target)`` pairs, preserving empty targets so
+    broken ``[text]()`` links can be reported.
     """
     links: list[tuple[int, str]] = []
     fence_char: str | None = None
     fence_len = 0
     fence_quote_depth = 0
-    open_tick_len = 0
     prev_quote_depth = 0
+    paragraph_lines: list[tuple[int, str]] = []
 
-    for line_no, raw_line in enumerate(text.splitlines(), start=1):
-        quote_match = QUOTE_PREFIX_RE.match(raw_line)
-        quote_prefix = quote_match.group(0) if quote_match else ""
-        line_quote_depth = quote_prefix.count(">")
-        content_after_quote = raw_line[len(quote_prefix) :]
-
-        if fence_char is not None and fence_quote_depth > 0 and line_quote_depth < fence_quote_depth:
-            fence_char = None
-            fence_len = 0
-            fence_quote_depth = 0
-
-        fence_match = FENCE_RE.match(raw_line)
-        if fence_match:
-            quote_depth = fence_match.group(1).count(">")
-            marker = fence_match.group(2)
-            trailing = raw_line[fence_match.end() :]
-            if fence_char is None:
-                if not (marker[0] == "`" and "`" in trailing):
-                    fence_char = marker[0]
-                    fence_len = len(marker)
-                    fence_quote_depth = quote_depth
-                    open_tick_len = 0
-                    prev_quote_depth = line_quote_depth
-                    continue
-            elif (
-                quote_depth == fence_quote_depth
-                and marker[0] == fence_char
-                and len(marker) >= fence_len
-                and trailing.strip() == ""
-            ):
-                fence_char = None
-                fence_len = 0
-                fence_quote_depth = 0
-                open_tick_len = 0
-                prev_quote_depth = line_quote_depth
-                continue
-
-        if fence_char is not None:
-            prev_quote_depth = line_quote_depth
-            continue
-
-        if (
-            not content_after_quote.strip()
-            or line_quote_depth != prev_quote_depth
-            or ATX_HEADING_RE.match(content_after_quote)
-            or THEMATIC_BREAK_RE.match(content_after_quote)
-        ):
-            open_tick_len = 0
-
-        prev_quote_depth = line_quote_depth
-
-        if open_tick_len == 0:
-            ref_match = REF_LINK_DEF_RE.match(raw_line)
-            if ref_match:
-                ref_target = (ref_match.group(1) or ref_match.group(2) or "").strip()
-                if not _is_external_or_anchor(ref_target):
-                    links.append((line_no, ref_target))
-                continue
-
-        line, open_tick_len = _strip_inline_code_stateful(raw_line, open_tick_len)
+    def _scan_inline_links(line_no: int, line: str) -> None:
         idx = 0
         search_floor = 0
         length = len(line)
@@ -705,6 +654,92 @@ def extract_relative_markdown_links(text: str) -> list[tuple[int, str]]:
                 continue
             links.append((line_no, target))
 
+    def flush_paragraph() -> None:
+        if not paragraph_lines:
+            return
+        masked_text = _mask_inline_code_spans("\n".join(line for _, line in paragraph_lines))
+        for (line_no, _), masked_line in zip(paragraph_lines, masked_text.split("\n"), strict=True):
+            _scan_inline_links(line_no, masked_line)
+        paragraph_lines.clear()
+
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        quote_match = QUOTE_PREFIX_RE.match(raw_line)
+        quote_prefix = quote_match.group(0) if quote_match else ""
+        line_quote_depth = quote_prefix.count(">")
+        content_after_quote = raw_line[len(quote_prefix) :]
+
+        if fence_char is not None and fence_quote_depth > 0 and line_quote_depth < fence_quote_depth:
+            fence_char = None
+            fence_len = 0
+            fence_quote_depth = 0
+            flush_paragraph()
+
+        fence_match = FENCE_RE.match(raw_line)
+        if fence_match:
+            quote_depth = fence_match.group(1).count(">")
+            marker = fence_match.group(2)
+            trailing = raw_line[fence_match.end() :]
+            if fence_char is None:
+                if not (marker[0] == "`" and "`" in trailing):
+                    flush_paragraph()
+                    fence_char = marker[0]
+                    fence_len = len(marker)
+                    fence_quote_depth = quote_depth
+                    prev_quote_depth = line_quote_depth
+                    continue
+            elif (
+                quote_depth == fence_quote_depth
+                and marker[0] == fence_char
+                and len(marker) >= fence_len
+                and trailing.strip() == ""
+            ):
+                fence_char = None
+                fence_len = 0
+                fence_quote_depth = 0
+                flush_paragraph()
+                prev_quote_depth = line_quote_depth
+                continue
+
+        if fence_char is not None:
+            prev_quote_depth = line_quote_depth
+            continue
+
+        if not content_after_quote.strip():
+            flush_paragraph()
+            prev_quote_depth = line_quote_depth
+            continue
+
+        if line_quote_depth != prev_quote_depth:
+            flush_paragraph()
+
+        prev_quote_depth = line_quote_depth
+
+        if THEMATIC_BREAK_RE.match(content_after_quote):
+            flush_paragraph()
+            continue
+
+        if ATX_HEADING_RE.match(content_after_quote) or TABLE_ROW_RE.match(content_after_quote):
+            flush_paragraph()
+            paragraph_lines.append((line_no, raw_line))
+            flush_paragraph()
+            continue
+
+        if LIST_ITEM_RE.match(content_after_quote):
+            flush_paragraph()
+            paragraph_lines.append((line_no, raw_line))
+            continue
+
+        ref_match = REF_LINK_DEF_RE.match(content_after_quote)
+        if ref_match:
+            flush_paragraph()
+            ref_target = (ref_match.group(1) or ref_match.group(2) or "").strip()
+            if not _is_external_or_anchor(ref_target):
+                links.append((line_no, ref_target))
+            continue
+
+        paragraph_lines.append((line_no, raw_line))
+
+    flush_paragraph()
     return links
 
 
@@ -783,34 +818,45 @@ def _discover_skill_dirs(repo_dir: Path, tracked_files: set[Path] | None) -> lis
     return sorted(discovered)
 
 
-def _decode_sniffed_text(file_path: Path) -> str | None:
-    """Sniff up to ``MAX_SNIFF_BYTES`` bytes to skip non-text assets without whole-file reads."""
+def _decode_sniffed_text(file_path: Path) -> tuple[str | None, str | None]:
+    """Sniff up to ``MAX_SNIFF_BYTES`` bytes to skip binary assets without whole-file reads.
+
+    Returns ``(text, None)`` for valid UTF-8 text, ``(None, None)`` for binary
+    assets that should be skipped, or ``(None, error_message)`` for files with
+    a valid UTF-8 prefix and an invalid UTF-8 tail.
+    """
     with file_path.open("rb") as fh:
         head = fh.read(MAX_SNIFF_BYTES + 1)
+        if b"\x00" in head:
+            return None, None
 
-    if b"\x00" in head:
-        return None
+        if len(head) <= MAX_SNIFF_BYTES:
+            try:
+                return head.decode("utf-8"), None
+            except UnicodeDecodeError:
+                return None, None
 
-    if len(head) <= MAX_SNIFF_BYTES:
+        prefix = head[:MAX_SNIFF_BYTES]
         try:
-            return head.decode("utf-8")
-        except UnicodeDecodeError:
-            return None
+            prefix.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            if exc.reason != "unexpected end of data" or exc.start < len(prefix) - 3:
+                return None, None
 
-    prefix = head[:MAX_SNIFF_BYTES]
+        chunks = [head]
+        while True:
+            chunk = fh.read(SNIFF_CHUNK_SIZE)
+            if not chunk:
+                break
+            if b"\x00" in chunk:
+                return None, None
+            chunks.append(chunk)
+
+    raw_bytes = b"".join(chunks)
     try:
-        prefix.decode("utf-8")
+        return raw_bytes.decode("utf-8"), None
     except UnicodeDecodeError as exc:
-        if exc.reason != "unexpected end of data" or exc.start < len(prefix) - 3:
-            return None
-
-    raw_bytes = file_path.read_bytes()
-    if b"\x00" in raw_bytes:
-        return None
-    try:
-        return raw_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
+        return None, f"file is not valid UTF-8: {exc}"
 
 
 def _validate_frontmatter_fields(
@@ -864,7 +910,14 @@ def validate_skill_dir(
     tracked_files: set[Path] | None = None,
     resolved_tracked: set[Path] | None = None,
 ) -> list[LintIssue]:
-    """Validate frontmatter, relative Markdown links, and text formatting for one skill."""
+    """Validate frontmatter, relative Markdown links, and text formatting for one skill.
+
+    When ``tracked_files`` is provided, it must contain canonical absolute paths
+    matching ``skill_dir``; only tracked files and tracked link targets are
+    validated. When ``tracked_files`` is ``None`` (non-Git fallback), all
+    non-dot-prefixed files under ``skill_dir`` are checked against the
+    filesystem without tracked-status enforcement.
+    """
     issues: list[LintIssue] = []
     skill_md = skill_dir / "SKILL.md"
     skill_md_tracked = tracked_files is None or skill_md in tracked_files
@@ -910,7 +963,10 @@ def validate_skill_dir(
                 issues.append(LintIssue(path=file_path, line=None, message=f"file is not valid UTF-8: {exc}"))
                 continue
         else:
-            sniffed_text = _decode_sniffed_text(file_path)
+            sniffed_text, sniff_error = _decode_sniffed_text(file_path)
+            if sniff_error is not None:
+                issues.append(LintIssue(path=file_path, line=None, message=sniff_error))
+                continue
             if sniffed_text is None:
                 continue
             text = sniffed_text
@@ -961,6 +1017,7 @@ def validate_skill_dir(
 
 
 def _lint_repository_with_count(repo_dir: Path) -> tuple[list[LintIssue], int]:
+    repo_dir = repo_dir.resolve()
     issues: list[LintIssue] = []
     tracked_files = _git_tracked_files(repo_dir)
     resolved_tracked = {p.resolve() for p in tracked_files} if tracked_files is not None else None
@@ -984,7 +1041,12 @@ def _lint_repository_with_count(repo_dir: Path) -> tuple[list[LintIssue], int]:
 
     skill_dirs = _discover_skill_dirs(repo_dir, tracked_files)
     if not skill_dirs:
-        issues.append(LintIssue(path=skills_dir, line=None, message="no tracked skill directories found"))
+        empty_msg = (
+            "no skill directories found"
+            if tracked_files is None
+            else "no tracked skill directories found"
+        )
+        issues.append(LintIssue(path=skills_dir, line=None, message=empty_msg))
         return issues, 0
 
     for skill_dir in skill_dirs:

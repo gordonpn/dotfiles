@@ -349,7 +349,10 @@ class TestLintAgents(unittest.TestCase):
             issues = lint_agents.lint_repository(repo)
 
             self.assertEqual(len(issues), 1)
-            self.assertEqual(issues[0].path, repo / "dotfiles" / "agent-skills" / "demo-skill" / ".hidden.md")
+            self.assertEqual(
+                issues[0].path,
+                (repo / "dotfiles" / "agent-skills" / "demo-skill" / ".hidden.md").resolve(),
+            )
             self.assertIn("references/missing-hidden.md", issues[0].message)
 
             # Fix the tracked hidden file and verify untracked files and dirs remain excluded.
@@ -553,8 +556,114 @@ class TestLintAgents(unittest.TestCase):
 
             issues = lint_agents.lint_repository(repo)
             self.assertEqual(len(issues), 1)
-            self.assertEqual(issues[0].path, utf8_split)
+            self.assertEqual(issues[0].path, utf8_split.resolve())
             self.assertIn("forbidden em dash (U+2014)", issues[0].message)
+
+    def test_unmatched_backticks_preserve_links_while_matched_multiline_spans_ignore_them(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_skill_repo(
+                Path(tmp),
+                skill_md=(
+                    "---\n"
+                    "name: demo-skill\n"
+                    "description: Valid description.\n"
+                    "---\n\n"
+                    "A literal unmatched ` marker before [guide](references/missing-inline.md).\n\n"
+                    "Some `unmatched\n"
+                    "- [broken](references/missing-list.md)\n\n"
+                    "Matched `multiline\n"
+                    "code [ignored](references/ignored.md)` span.\n\n"
+                    "> ```\n"
+                    "> `unclosed inside quoted fence\n"
+                    "[after-fence](references/missing-after-fence.md)\n"
+                ),
+            )
+
+            issues = lint_agents.lint_repository(repo)
+
+            messages = [issue.message for issue in issues]
+            self.assertEqual(
+                messages,
+                [
+                    "broken relative link target: references/missing-inline.md",
+                    "broken relative link target: references/missing-list.md",
+                    "broken relative link target: references/missing-after-fence.md",
+                ],
+            )
+            self.assertEqual(
+                lint_agents.strip_inline_code("A literal unmatched ` before [guide](missing.md)."),
+                "A literal unmatched ` before [guide](missing.md).",
+            )
+
+    def test_yaml_flow_apostrophes_and_multiline_numeric_plain_descriptions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_skill_repo(
+                Path(tmp),
+                skill_md=(
+                    "---\n"
+                    "name: demo-skill\n"
+                    "description: 2026\n"
+                    "  planning and forecasting assistance.\n"
+                    "metadata: {author: O'Reilly, team: 'ops''core'}\n"
+                    "---\n"
+                ),
+            )
+            self.assertEqual(lint_agents.lint_repository(repo), [])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            single_int = write_skill_repo(
+                Path(tmp),
+                skill_md="---\nname: demo-skill\ndescription: 2026\n---\n",
+            )
+            issues = lint_agents.lint_repository(single_int)
+            self.assertEqual(len(issues), 1)
+            self.assertIn("must be a non-empty string", issues[0].message)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bad_flow = write_skill_repo(
+                Path(tmp),
+                skill_md="---\nname: demo-skill\ndescription: Valid.\nmetadata: {a: 'unclosed}\n---\n",
+            )
+            issues = lint_agents.lint_repository(bad_flow)
+            self.assertEqual(len(issues), 1)
+            self.assertIn("malformed YAML flow collection", issues[0].message)
+
+        self.assertFalse(lint_agents._is_balanced_flow_collection("x[a]"))
+        fields, fm_err = lint_agents.parse_frontmatter("---\nname: demo-skill\ndescription: x[a]\n---\n")
+        self.assertIsNone(fm_err)
+        assert fields is not None
+        self.assertEqual(fields["description"], "x[a]")
+
+    def test_large_unlisted_file_distinguishes_invalid_utf8_tail_from_nul_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_skill_repo(Path(tmp))
+            skill_dir = repo / "dotfiles" / "agent-skills" / "demo-skill"
+            assets_dir = skill_dir / "assets"
+            assets_dir.mkdir(parents=True)
+
+            bad_tail = assets_dir / "corrupt.unknown"
+            bad_tail.write_bytes((b"a" * 9000) + b"\xff\xfe")
+
+            nul_tail = assets_dir / "late-binary.unknown"
+            nul_tail.write_bytes((b"a" * 9000) + b"\x00" + (b"b" * 1000))
+
+            issues = lint_agents.lint_repository(repo)
+
+            self.assertEqual(len(issues), 1)
+            self.assertEqual(issues[0].path, bad_tail.resolve())
+            self.assertIn("file is not valid UTF-8", issues[0].message)
+
+    def test_non_git_empty_skills_dir_reports_no_skill_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dotfiles" / "gemini").mkdir(parents=True)
+            (root / "dotfiles" / "gemini" / "GEMINI.md").write_text("# Clean\n", encoding="utf-8")
+            (root / "dotfiles" / "agent-skills").mkdir(parents=True)
+
+            issues = lint_agents.lint_repository(root)
+
+            self.assertEqual(len(issues), 1)
+            self.assertEqual(issues[0].message, "no skill directories found")
 
 
 if __name__ == "__main__":
