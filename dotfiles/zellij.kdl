@@ -171,6 +171,12 @@ keybinds clear-defaults=true {
         bind "Alt i" { MoveTab "left"; }
         bind "Alt o" { MoveTab "right"; }
 
+        // Agents. The inbox lists the panes that need you, and Alt Shift a
+        // jumps to the next one, in any session. Both actions need Zellij 0.46
+        // or later, and an older Zellij rejects the whole config over them.
+        bind "Alt a" { ToggleSessionCard; }
+        bind "Alt Shift a" { GoToNextAttention; }
+
         // Panes
         bind "Alt left" { MoveFocusOrTab "left"; }
         bind "Alt down" { MoveFocus "down"; }
