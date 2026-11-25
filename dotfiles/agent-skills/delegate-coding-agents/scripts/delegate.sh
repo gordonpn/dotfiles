@@ -314,11 +314,13 @@ case "$policy_status" in
     normalized_policy=$(printf '%s' "$(trim_ws "$raw_policy")" | tr '[:upper:]' '[:lower:]')
     case "$normalized_policy" in
       ''|false|0|no|off)
-        policy_scope=$(git -C "$ROOT" config --show-scope --get agents.delegationAllowed 2>/dev/null | awk 'NR==1 {print $1}')
-        if [[ -z $policy_scope || $policy_scope == local ]]; then
+        policy_scope=$(git -C "$ROOT" config --show-scope --get agents.delegationAllowed 2>/dev/null | awk 'NR==1 {print $1}') || policy_scope=''
+        if [[ $policy_scope == local ]]; then
           die "External delegation is disabled for this repository (agents.delegationAllowed=$raw_policy). Unset or run 'git config --local agents.delegationAllowed true' to enable."
-        else
+        elif [[ -n $policy_scope ]]; then
           die "External delegation is disabled for this repository (agents.delegationAllowed=$raw_policy, scope=$policy_scope). Unset it in $policy_scope config or run 'git config --local agents.delegationAllowed true' when overriding is intended."
+        else
+          die "External delegation is disabled for this repository (agents.delegationAllowed=$raw_policy, scope unknown). Check local, global, or system Git config, or run 'git config --local agents.delegationAllowed true' when overriding is intended."
         fi
         ;;
       true|1|yes|on)

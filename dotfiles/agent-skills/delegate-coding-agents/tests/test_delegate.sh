@@ -497,6 +497,27 @@ for allow_val in true 1 yes on TRUE; do
 done
 git config --local --unset agents.delegationAllowed 2>/dev/null || true
 
+# Missing --show-scope support (Git < 2.26) falls back to an explicit scope-unknown message.
+mkdir -p "$TMP/bin-git-no-scope"
+REAL_GIT=$(command -v git)
+cat > "$TMP/bin-git-no-scope/git" <<'MOCK'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ $arg == --show-scope ]]; then
+    echo 'error: unknown option --show-scope' >&2
+    exit 129
+  fi
+done
+exec "$REAL_GIT_BIN" "$@"
+MOCK
+chmod +x "$TMP/bin-git-no-scope/git"
+git config --local agents.delegationAllowed false
+if REAL_GIT_BIN="$REAL_GIT" PATH="$TMP/bin-git-no-scope:$PATH" "$SCRIPT" --agent opencode --mode plan --id no-show-scope --task 'Fallback scope unknown message' >"$TMP/no-show-scope.out" 2>"$TMP/no-show-scope.err"; then
+  echo 'Expected opt-out without --show-scope to block delegation' >&2; exit 1
+fi
+grep -q 'External delegation is disabled for this repository (agents.delegationAllowed=false, scope unknown). Check local, global, or system Git config' "$TMP/no-show-scope.err"
+git config --local --unset agents.delegationAllowed 2>/dev/null || true
+
 # Invalid agents.delegationAllowed value and malformed Git config fail closed before worktree/log/provider execution.
 git config --local agents.delegationAllowed maybe
 : >"$OPENCODE_MOCK_CALL_LOG"
