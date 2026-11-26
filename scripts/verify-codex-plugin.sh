@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Non-mutating heuristic contract smoke check for the Antigravity Codex plugin runner.
+# Non-mutating syntax and source-symbol smoke check for the Antigravity Codex plugin runner.
 # Verifies syntax with node --check and checks CLI symbols via grep (not a JS AST proof).
 
 set -euo pipefail
@@ -11,8 +11,9 @@ usage() {
   cat <<'EOF'
 Usage: verify-codex-plugin.sh [--runner <path>] [--allow-missing]
 
-Verify the Antigravity Codex plugin runner syntax and CLI contract without
-executing codex or modifying background jobs.
+Check Antigravity Codex plugin runner syntax and look for expected command
+and flag names in the source. The check does not execute the runner or verify
+command dispatch or flag handling.
 
 Options:
   --runner <path>   Path to codex-runner.mjs
@@ -120,4 +121,5 @@ if [[ "${missing}" -ne 0 ]]; then
   exit 1
 fi
 
-printf 'Verified Codex plugin runner contract: %s\n' "${runner_path}"
+printf 'Codex plugin runner syntax is valid and expected source symbols were found: %s\n' "${runner_path}"
+printf '%s\n' 'CLI behavior was not verified.'

@@ -88,11 +88,20 @@ assert_fails_with() {
 valid_runner="${tmp_dir}/valid-runner.mjs"
 write_fixture "${valid_runner}"
 bash "${verifier}" --runner "${valid_runner}" >"${tmp_dir}/valid.out"
-grep -Fq "Verified Codex plugin runner contract" "${tmp_dir}/valid.out"
+grep -Fq "Codex plugin runner syntax is valid and expected source symbols were found" "${tmp_dir}/valid.out"
+
+# A source-only fixture can contain every expected name without exposing a CLI.
+symbol_only_runner="${tmp_dir}/symbol-only.mjs"
+cat >"${symbol_only_runner}" <<'EOF'
+const names = ["setup", "review", "adversarial-review", "task", "status", "result", "cancel",
+               "--base", "--resume-last", "--write", "--background"];
+EOF
+bash "${verifier}" --runner "${symbol_only_runner}" >"${tmp_dir}/symbol-only.out"
+grep -Fxq "CLI behavior was not verified." "${tmp_dir}/symbol-only.out"
 
 # Case 2: CODEX_PLUGIN_RUNNER environment override is honored.
 CODEX_PLUGIN_RUNNER="${valid_runner}" bash "${verifier}" >"${tmp_dir}/env.out"
-grep -Fq "Verified Codex plugin runner contract" "${tmp_dir}/env.out"
+grep -Fq "Codex plugin runner syntax is valid and expected source symbols were found" "${tmp_dir}/env.out"
 
 # Case 3: Missing any required subcommand fails (including review when adversarial-review exists).
 for missing_cmd in setup review adversarial-review task status result cancel; do
@@ -128,7 +137,7 @@ grep -Fq "fall back to delegate.sh" "${tmp_dir}/allow-missing.out"
 local_runner="${HOME}/.gemini/config/plugins/codex/scripts/codex-runner.mjs"
 if [[ -f "${local_runner}" ]]; then
   bash "${verifier}" --runner "${local_runner}" >"${tmp_dir}/local.out"
-  grep -Fq "Verified Codex plugin runner contract" "${tmp_dir}/local.out"
+  grep -Fq "Codex plugin runner syntax is valid and expected source symbols were found" "${tmp_dir}/local.out"
 else
   printf 'Notice: local Codex plugin runner absent at %s; skipping live plugin check.\n' "${local_runner}"
 fi
