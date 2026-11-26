@@ -321,16 +321,25 @@ runtime build and cache root to share the coordination daemon.
 ### Everything Claude Code (ECC)
 
 ECC provides reusable skills, workflows, rules, agents, and a Codex session-start
-hook. The Codex plugin is pinned to `v2.2.3`; Antigravity's minimal profile is
-installed project-locally into `.agents/` with the pinned `ecc-universal@2.2.3`
-package. Run `just setup-ecc` to install both integrations. The generated
-`.agents/` directory is ignored by Git; the pinned recipe recreates it.
+hook. The Codex plugin is pinned to `v2.2.3` and is installed by `just setup-ecc`.
+Project-local Antigravity installation into `.agents/` is disabled by default
+because `ecc-universal@2.2.3 install --profile minimal --target antigravity`
+writes 388 files (including 68 agents and 48 skills), overflowing Antigravity
+CLI's `<skills>` and `<subagents>` context budgets and evicting global skills
+(`ponytail`, `git-workflow`, `ai-memory-*`, `open-code-review`) and the
+built-in `research` subagent. `just setup-ecc` removes any legacy `.agents/` ECC
+install when `.agents/ecc-install-state.json` is present.
+
+Note that `workflow-quality` skills resolve as a 47-skill bundle, whereas
+individual standalone skills can still be installed opt-in per project when
+needed (for example:
+`npx --yes ecc-universal@2.2.3 install --target antigravity --skills error-handling`).
 
 ECC also bundles a Chrome DevTools MCP server. It is disabled in the Codex
 template because this setup already has browser and Chrome plugins. Enable it
 in the Codex plugin settings if you specifically want that additional server.
-Start new Codex and Antigravity sessions after setup; Codex may ask you to trust
-the plugin's session-start hook.
+Start new Codex sessions after setup; Codex may ask you to trust the plugin's
+session-start hook.
 
 See the [ECC repository](https://github.com/affaan-m/ECC) and its
 [Antigravity guide](https://github.com/affaan-m/ECC/blob/v2.2.3/docs/ANTIGRAVITY-GUIDE.md)

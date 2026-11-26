@@ -61,7 +61,7 @@ update-skills:
 setup-ecc:
     if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "ecc")' >/dev/null; then codex plugin marketplace add affaan-m/ECC --ref v2.2.3; fi
     if ! codex plugin list --json | jq -e '.installed[] | select(.name == "ecc" and .marketplaceName == "ecc")' >/dev/null; then codex plugin add ecc@ecc; fi
-    npx --yes ecc-universal@2.2.3 install --profile minimal --target antigravity
+    if [ -f .agents/ecc-install-state.json ]; then npx --yes ecc-universal@2.2.3 uninstall --target antigravity; fi
 
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py
