@@ -124,7 +124,6 @@ class _TargetSnapshot:
     content: bytes
     mode: int
     symlink_target: str | None = None
-    written_content: bytes = b""
 
 
 def _atomic_restore_bytes(target: Path, content: bytes, mode: int) -> None:
@@ -170,13 +169,14 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
     Commits each staged file individually with ``os.replace``. On handled errors or
     interrupts, rolls back already-committed targets atomically per file (restoring
     symlinks, replacing regular files via temporary files, or unlinking newly created
-    targets). This is not crash-atomic across power loss or ``SIGKILL`` and does not
-    provide single-transaction isolation to concurrent readers across all four targets.
+    targets). Rollback skips files that no longer match the staged file. This
+    best-effort check can race a writer. The sequence is not crash-atomic across
+    power loss or ``SIGKILL`` and does not isolate readers across all four targets.
     """
     snapshots: list[_TargetSnapshot] = []
-    committed: list[_TargetSnapshot] = []
+    committed: list[tuple[_TargetSnapshot, os.stat_result, bytes]] = []
     try:
-        for target, tmp_path in staged_configs:
+        for target, _ in staged_configs:
             if target.is_symlink():
                 snapshots.append(
                     _TargetSnapshot(
@@ -205,30 +205,32 @@ def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
                         existed=False,
                         content=b"",
                         mode=0o600,
-                        written_content=tmp_path.read_bytes(),
                     )
                 )
 
         for snapshot, (target, tmp_path) in zip(snapshots, staged_configs, strict=True):
+            staged_stat = tmp_path.stat()
+            staged_content = tmp_path.read_bytes()
             os.replace(tmp_path, target)
-            committed.append(snapshot)
+            committed.append((snapshot, staged_stat, staged_content))
     except BaseException:
-        for snapshot in reversed(committed):
+        for snapshot, staged_stat, staged_content in reversed(committed):
             try:
+                current_stat = snapshot.target.lstat()
+                if (
+                    not os.path.samestat(current_stat, staged_stat)
+                    or current_stat.st_mode != staged_stat.st_mode
+                    or snapshot.target.read_bytes() != staged_content
+                ):
+                    print(f"Warning: Config changed concurrently; skipped rollback of {snapshot.target}.", file=sys.stderr)
+                    continue
+
                 if snapshot.symlink_target is not None:
                     atomic_symlink(Path(snapshot.symlink_target), snapshot.target)
                 elif snapshot.existed:
                     _atomic_restore_bytes(snapshot.target, snapshot.content, snapshot.mode)
-                elif os.path.lexists(snapshot.target) and not snapshot.target.is_symlink():
-                    try:
-                        matches_written = (
-                            snapshot.target.is_file()
-                            and snapshot.target.read_bytes() == snapshot.written_content
-                        )
-                    except OSError:
-                        matches_written = False
-                    if matches_written:
-                        snapshot.target.unlink()
+                else:
+                    snapshot.target.unlink()
             except OSError as rollback_exc:
                 print(
                     f"Warning: Failed to roll back {snapshot.target} ({rollback_exc}).",

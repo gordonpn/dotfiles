@@ -1071,6 +1071,47 @@ class TestMcpSyncHelpers(unittest.TestCase):
             self.assertFalse(os.path.lexists(copilot_cfg))
             self.assertEqual(list(root.rglob("*.tmp.*")), [])
 
+    def test_sync_mcp_config_rollback_preserves_concurrently_rewritten_existing_target(self) -> None:
+        for original_is_symlink in (False, True):
+            with self.subTest(original_is_symlink=original_is_symlink):
+                self._assert_rollback_preserves_concurrent_edit(original_is_symlink)
+
+    def _assert_rollback_preserves_concurrent_edit(self, original_is_symlink: bool) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cclsp_bin, template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg = self._make_sync_fixture(
+                root
+            )
+            agy_cfg.parent.mkdir(parents=True)
+            original_target = root / "original-agy.json" if original_is_symlink else agy_cfg
+            original_target.write_bytes(b"{}")
+            if original_is_symlink:
+                agy_cfg.symlink_to(original_target)
+
+            foreign_content = b'{"mcpServers": {"foreign": {"command": "/bin/foreign"}}}'
+            real_replace = os.replace
+
+            def fail_after_concurrent_edit(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+                if Path(dst) == codex_cfg:
+                    agy_cfg.write_bytes(foreign_content)
+                    raise OSError("injected later-client failure")
+                real_replace(src, dst)
+
+            stderr_buf = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(root), "CCLSP_BIN": str(cclsp_bin)}, clear=True),
+                mock.patch("mcp_sync.os.replace", side_effect=fail_after_concurrent_edit),
+                redirect_stderr(stderr_buf),
+                self.assertRaises(SystemExit) as exit_ctx,
+            ):
+                mcp_sync.sync_mcp_config(template, agy_cfg, codex_cfg, codex_tpl, opencode_cfg, copilot_cfg)
+
+            self.assertEqual(exit_ctx.exception.code, 1)
+            self.assertFalse(agy_cfg.is_symlink())
+            self.assertEqual(agy_cfg.read_bytes(), foreign_content)
+            self.assertIn("skipped rollback", stderr_buf.getvalue())
+            self.assertEqual(list(root.rglob("*.tmp.*")), [])
+
     def test_sync_mcp_config_refuses_non_regular_target_and_cleans_staged_temps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
