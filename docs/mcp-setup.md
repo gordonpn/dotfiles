@@ -327,8 +327,12 @@ because `ecc-universal@2.2.3 install --profile minimal --target antigravity`
 writes 388 files (including 68 agents and 48 skills), overflowing Antigravity
 CLI's `<skills>` and `<subagents>` context budgets and evicting global skills
 (`ponytail`, `git-workflow`, `ai-memory-*`, `open-code-review`) and the
-built-in `research` subagent. `just setup-ecc` removes any legacy `.agents/` ECC
-install when `.agents/ecc-install-state.json` is present.
+built-in `research` subagent. `just setup-ecc` uses ECC's uninstaller only
+when `.agents/ecc-install-state.json` identifies the pinned 2.2.3 default
+minimal profile installed by the old recipe in the current checkout.
+Explicit opt-in installations and unrecognized state are left in place.
+If the manifest is missing or the install predates this layout, review the
+remaining Antigravity files manually before removing anything.
 
 Note that `workflow-quality` skills resolve as a 47-skill bundle, whereas
 individual standalone skills can still be installed opt-in per project when
