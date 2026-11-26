@@ -10,7 +10,7 @@ These rules apply across coding agents, including Antigravity CLI and Codex CLI,
 ## Task State Rules
 
 - **One Checkpoint:** For multi-step implementations, maintain `.agent/HANDOFF.md` in the relevant worktree unless the project already defines a handoff location. Reuse that location rather than creating a competing record. Trivial, single-step edits need no handoff document.
-- **Local Only:** Keep `.agent/HANDOFF.md` local and untracked. Never stage, commit, or force-add it.
+- **Local Only:** Keep `.agent/HANDOFF.md` local and untracked. Never stage, commit, or force-add it. Verify `.agent/` is listed in `.gitignore` (or the repository's ignore mechanism) before creating the checkpoint so broad staging commands cannot capture it.
 - **Update Timing:** Update the checkpoint at meaningful milestones and before ending an unfinished session or transferring the task. Keep it concise, factual, and current, not a transcript or growing activity log.
 - **Required Context:** Record:
   - Objective and acceptance criteria

@@ -200,9 +200,9 @@ Do not combine unrelated backlog tasks into one implementation unless explicitly
 ### 6. Keep GitHub Issues Updated
 
 - **When Starting Work:** Mark in progress, respect existing assignee/ownership, reference the issue in branch/PR, and record material scope clarifications.
-- **Discovering Missing Work:** If a finding falls outside current acceptance criteria, search existing issues to avoid duplicates, create a new scoped GitHub Issue (`P0`-`P3`, `<type>(<scope>): <summary>`, lean template) without asking approval, cross-reference the origin issue/PR, update `NEXT.md` (`LATER` or `NEXT`), and reassess the queue only for a `P0` blocker invalidating current work.
+- **Discovering Missing Work:** If a finding falls outside current acceptance criteria, search existing issues to avoid duplicates, create a new scoped GitHub Issue (`P0`-`P3`, `<type>(<scope>): <summary>`, lean template) without asking approval during authorized coding work in `gordonpn/*` repos (falling back to `NEXT.md` under `LATER` elsewhere), cross-reference the origin issue/PR, update `NEXT.md` (`LATER` or `NEXT`), and reassess the queue only for a `P0` blocker invalidating current work. Never mutate GitHub during read-only reviews or informational questions.
 - **When Blocked:** Identify the blocker, update the issue/project status, record a resolution path and prerequisite links, and move to another task only when continued work is authorized.
-- **When Completing Work:** Verify acceptance criteria, run tests/checks, confirm scope, link commits/PRs, record remaining work, and close only when complete and merged (never report an unmerged PR as fully closed). Never claim unexecuted verification.
+- **When Completing Work:** Verify acceptance criteria, run tests/checks, confirm scope, link commits/PRs, and record remaining work. Close issues only when explicitly authorized and after acceptance criteria are verified and the PR is merged (never report an unmerged PR as fully closed). Never claim unexecuted verification.
 
 ### 7. Avoid Unnecessary Replanning
 

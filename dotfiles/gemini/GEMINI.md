@@ -3,7 +3,7 @@
 ## Git & PR Delivery
 
 - **Branch-Only Commits:** Before the first commit in any repository, create or switch to a dedicated task branch from the latest default branch. Never commit on, push to, or fast-forward `main`, `master`, or any shared default branch.
-- **Mandatory PR Delivery:** Deliver every change (code, tests, config, docs, scripts, rules) through a ready-for-review pull request targeting `main` or `master`, linking any root issue. If remote pushes or PR creation are forbidden, leave commits on the task branch and never substitute a commit on the default branch.
+- **Mandatory PR Delivery:** Deliver every change (code, tests, config, docs, scripts, rules) through a ready-for-review pull request targeting the repository's default branch (`main` or `master` in most repositories), linking any root issue. If remote pushes or PR creation are forbidden, leave commits on the task branch and never substitute a commit on the default branch.
 - **User-Only PR Merging:** Never call `merge_pull_request` or run `gh pr merge`. Only human maintainers merge pull requests.
 - **No Stacked PRs & Merge Isolation:** Never stack or chain PR branches from another unmerged PR. Cut each PR from its own dedicated branch based on the latest default branch so merging or deleting one PR never breaks another.
 - **Cognitively Small PRs:** Keep PRs single-concern and small enough to review easily. Decompose multi-concern work into sequential, independent PRs merged incrementally into the default branch; if a PR title needs "and", split it.
