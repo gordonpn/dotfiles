@@ -1511,6 +1511,14 @@ grep -q '^verification_exit=7$' "$verify_fail_log/manifest.txt"
 grep -q '^failure_category=verification_error$' "$verify_fail_log/manifest.txt"
 grep -q '^exit_code=1$' "$verify_fail_log/manifest.txt"
 
+# A single very long output line is also bounded in the result.
+"$SCRIPT" --agent opencode --mode build --id verify-long-line \
+  --verify 'printf "%020000d%s\n" 0 VERIFY-END' --task 'Verify large output' >"$TMP/verify-long.out"
+verify_excerpt=$(sed -n '/VERIFY-END/p' "$TMP/verify-long.out")
+[[ ${#verify_excerpt} -le 8196 && $verify_excerpt == *VERIFY-END ]]
+verify_long_log=$(sed -n 's/^  Logs: //p' "$TMP/verify-long.out" | head -n 1)
+test "$(wc -c < "$verify_long_log/verify.log")" -gt 8192
+
 # --verify timeout triggers failure via pure-Bash watchdog when timeout/gtimeout are absent from PATH
 for tool in sleep kill; do
   tool_path=$(command -v "$tool" 2>/dev/null || true)
@@ -1540,7 +1548,11 @@ WT_GRANDCHILD=$(sed -n 's/^  Worktree: //p' "$TMP/verify-grandchild.out" | head 
 [[ -s $WT_GRANDCHILD/pidfile ]]
 grandchild_pid=$(tr -d '[:space:]' <"$WT_GRANDCHILD/pidfile")
 [[ $grandchild_pid =~ ^[0-9]+$ ]]
-if kill -0 "$grandchild_pid" 2>/dev/null; then
+# Some container PID 1 processes leave terminated children as zombies.
+# A zombie cannot execute. Fail if the grandchild is still running.
+grandchild_state=$(ps -o stat= -p "$grandchild_pid" 2>/dev/null || true)
+grandchild_state=${grandchild_state//[[:space:]]/}
+if [[ -n $grandchild_state && $grandchild_state != Z* ]]; then
   kill -KILL "$grandchild_pid" 2>/dev/null || true
   echo "Expected fallback watchdog to kill grandchild PID $grandchild_pid" >&2; exit 1
 fi

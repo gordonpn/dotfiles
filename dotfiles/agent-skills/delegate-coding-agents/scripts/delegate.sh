@@ -1344,7 +1344,7 @@ if [[ $VERIFICATION_STATUS == passed || $VERIFICATION_STATUS == failed ]]; then
   printf '  Verification exit: %s\n' "$VERIFICATION_EXIT"
   printf '  Verification output (last 40 lines):\n'
   if [[ -s $LOG_DIR/verify.log ]]; then
-    tail -n 40 "$LOG_DIR/verify.log" | sed 's/^/    /'
+    tail -n 40 "$LOG_DIR/verify.log" | tail -c 8192 | sed 's/^/    /'
   else
     printf '    (no output)\n'
   fi
