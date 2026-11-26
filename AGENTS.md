@@ -1,13 +1,11 @@
 # Dotfiles Project Instructions
 
-These instructions apply specifically to this repository. Global engineering standards are managed in the global `AGENTS.md` (which is symlinked to `dotfiles/gemini/GEMINI.md` or `dotfiles/gemini/AGENTS.md`).
+Repository-specific rules only. Global standards live in `dotfiles/gemini/GEMINI.md`.
 
 ## Repo-Specific Context
-- **Personal Agent Client Parity:** When installing MCP servers or skills for personal projects, configure Antigravity CLI (`agy`) and Codex unless explicitly requested otherwise. Keep shared configuration and skill synchronization authoritative.
-- **Dotfiles Delivery:** GitHub issues and issue hierarchies are optional for this repository, but changes must be committed on a dedicated task branch and delivered through a pull request ready for review targeting the default branch. Never commit directly to `main` or `master`. Keep staged diff review and the automated review gate before pushing.
-- **Shell Configuration:** This repository contains the source of truth for shell exports, aliases, and setup scripts for both macOS and Ubuntu systems.
-- **Cross-Platform:** This repository is shared between macOS and Linux. Always verify changes against both Darwin and Linux logic blocks in `.zshrc_new`, `.zprofile`, and related files, ensuring OS checks wrap platform-specific commands and paths.
-- **Skill Discovery & Parity:** Use `bin/mcp-sync` to synchronize agent skills and MCP configurations across Antigravity CLI, Codex, OpenCode, and GitHub Copilot CLI.
-- **Dynamic Clipboard:** Use `bin/cbcopy` for clipboard tasks. It detects macOS (`pbcopy`), Wayland (`wl-copy`), X11 (`xclip`/`xsel`), and remote SSH sessions (OSC 52 escape sequence to local client terminal).
-- **Syntax Themes:** CLI diffs and previews (`delta` and `bat`) use `flexoki-dark` and `--theme="ansi"`, directly inheriting Ghostty's Flexoki ANSI 16 palette registers without requiring custom TextMate cache builds.
-- **Codebase Memory MCP:** Keep client registrations in `dotfiles/gemini/mcp_config.template.json`. Use the pinned, checksum-verified release binary instead of the upstream installer, which edits shell startup files even with `--skip-config`. See `docs/mcp-setup.md#codebase-memory-mcp`.
+- **Personal Agent Client Parity:** Configure Antigravity CLI (`agy`) and Codex by default for personal MCP servers and skills, synchronized via `bin/mcp-sync`.
+- **Dotfiles Delivery:** GitHub issues and issue hierarchies are optional in this repository; PR-only delivery to `master` still applies.
+- **Cross-Platform:** Verify Darwin and Linux `uname` guards in `dotfiles/.zshrc_new`, `dotfiles/.zprofile`, and `bin/` scripts before changing platform-specific paths or commands.
+- **Dynamic Clipboard:** Use `bin/cbcopy` for clipboard tasks (macOS `pbcopy`, Wayland `wl-copy`, X11 `xclip`/`xsel`, and SSH OSC 52) rather than hardcoding `pbcopy`.
+- **Syntax Themes:** Keep `bat` on `--theme="ansi"` (`dotfiles/.batconfig`) and `delta` on `features = flexoki-dark` with `syntax-theme = none` (`dotfiles/.gitconfig-common`) so previews inherit terminal ANSI registers without custom TextMate caches.
+- **Codebase Memory MCP:** Keep client registrations in `dotfiles/gemini/mcp_config.template.json` and use the pinned, checksum-verified release binary instead of the upstream installer (which edits shell startup files even with `--skip-config`; see `docs/mcp-setup.md#codebase-memory-mcp`).
