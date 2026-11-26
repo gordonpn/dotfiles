@@ -121,6 +121,32 @@ class TestLintEmbeddedLangs(unittest.TestCase):
             self.assertEqual(issues[2].line, 16)
             self.assertIn("run", issues[2].message)
 
+    def test_same_workflow_key_does_not_exempt_another_block(self) -> None:
+        rel_path = ".github/workflows/deepseek-review.yml"
+        path = REPO_ROOT / rel_path
+        existing = path.read_text(encoding="utf-8")
+        issues = lint_embedded_langs.check_workflow_text(
+            path, rel_path, existing + "  another-job:\n    if: |\n      true\n      && false\n"
+        )
+        self.assertEqual(len(issues), 1)
+        self.assertIn("'if'", issues[0].message)
+
+    def test_inline_eval_requires_an_interpreter_option(self) -> None:
+        path = Path("scripts/example.sh")
+        cases = (
+            ("if python3 -c 'print(1)\nprint(2)'; then :; fi", True),
+            ("python3 -c $'print(1)\nprint(2)'", True),
+            ("python3 -W ignore -c 'print(1)\nprint(2)'", True),
+            ("python3 -Xtracemalloc -c 'print(1)\nprint(2)'", True),
+            ("python3 -m module -c 'one\ntwo'", False),
+            ("python3 script.py -c 'one\ntwo'", False),
+            ("node script.js -e 'one\ntwo'", False),
+        )
+        for command, should_report in cases:
+            with self.subTest(command=command):
+                issues = lint_embedded_langs.check_shell_text(path, path.as_posix(), command)
+                self.assertEqual(bool(issues), should_report)
+
     def test_unallowlisted_python_heredoc_and_multiline_node_or_python_eval_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

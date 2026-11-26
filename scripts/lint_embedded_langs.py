@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,14 +35,15 @@ WRAPPER_COMMANDS: frozenset[str] = frozenset(
     {"env", "command", "exec", "nice", "nohup", "sudo", "time", "xargs"}
 )
 
-# Audited workflow block scalars that cannot be externalized in GitHub Actions syntax.
-WORKFLOW_BLOCK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        (".github/workflows/deepseek-review.yml", "if"),
-        (".github/workflows/pr-agent.yml", "if"),
-        (".github/workflows/reviewdog.yml", "exclude"),
-    }
-)
+# Fingerprint the audited scalars so another block with the same key is checked.
+WORKFLOW_BLOCK_ALLOWLIST: dict[tuple[str, str], str] = {
+    (".github/workflows/deepseek-review.yml", "if"):
+        "bdfaa003c15543257e782fc3c2454c05edf49efcd44ea06387b6e8f4da255d7b",
+    (".github/workflows/pr-agent.yml", "if"):
+        "59cb32f5a292d66e35316f0502d154c5c189283a31ff668ff2f2b39e1a143b6f",
+    (".github/workflows/reviewdog.yml", "exclude"):
+        "8d8439b4f78cf56753694869e687b02b66c7e4cb1839fc3e5c63be859940f455",
+}
 
 # Audited skill-portability files mapped to their maximum allowed foreign-language blocks.
 SHELL_BLOCK_ALLOWLIST: dict[str, int] = {
@@ -94,6 +97,7 @@ def check_workflow_text(path: Path, rel_path: str, text: str) -> list[LintIssue]
     lines = text.splitlines()
     idx = 0
     total = len(lines)
+    allowed_blocks = WORKFLOW_BLOCK_ALLOWLIST.copy()
 
     while idx < total:
         line = lines[idx]
@@ -131,7 +135,14 @@ def check_workflow_text(path: Path, rel_path: str, text: str) -> list[LintIssue]
             if first_nonblank is not None and last_nonblank is not None
             else 0
         )
-        if body_line_count > 1 and (rel_path, key) not in WORKFLOW_BLOCK_ALLOWLIST:
+        if body_line_count > 1:
+            signature = hashlib.sha256(
+                textwrap.dedent("\n".join(lines[idx + 1 : cursor])).rstrip().encode("utf-8")
+            ).hexdigest()
+            if allowed_blocks.get((rel_path, key)) == signature:
+                del allowed_blocks[(rel_path, key)]
+                idx = cursor
+                continue
             issues.append(
                 LintIssue(
                     path=path,
@@ -156,10 +167,12 @@ def _strip_shell_quotes(token: str) -> str:
 
 def _command_executable(cmd_tokens: tuple[str, ...]) -> tuple[str | None, list[str]]:
     idx = 0
+    # These reserved words can precede a command in a compound statement.
+    command_prefixes = {"if", "elif", "then", "else", "while", "until", "do", "!"}
     n = len(cmd_tokens)
     while idx < n:
         tok = _strip_shell_quotes(cmd_tokens[idx])
-        if ENV_ASSIGN_RE.match(tok) or tok in WRAPPER_COMMANDS:
+        if cmd_tokens[idx] in command_prefixes or ENV_ASSIGN_RE.match(tok) or tok in WRAPPER_COMMANDS:
             idx += 1
             continue
         return Path(tok).name.lower(), [_strip_shell_quotes(t) for t in cmd_tokens[idx + 1 :]]
@@ -170,7 +183,7 @@ def _is_inline_eval_flag(exe: str, flag: str) -> bool:
     if PYTHON_INTERPRETER_RE.match(exe):
         if flag in ("-c", "--command"):
             return True
-        return flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]
+        return bool(re.match(r"^-[bBdEiIOPqRsSuvVx]*c", flag))
     if NODE_INTERPRETER_RE.match(exe):
         if flag in ("-e", "--eval", "-p", "--print"):
             return True
@@ -191,11 +204,22 @@ def _match_inline_eval_target(
     exe, args = _command_executable(cmd_tokens)
     if exe is None or not FOREIGN_INTERPRETER_RE.match(exe):
         return None
-    if current_prefix and _is_inline_eval_flag(exe, current_prefix):
-        return exe
-    if not current_prefix and args and _is_inline_eval_flag(exe, args[-1]):
-        return exe
-    return None
+    # Once a script/module, stdin, or an earlier eval is selected, later flags
+    # belong to that program instead of to the interpreter.
+    candidate = current_prefix or (args[-1] if args else "")
+    previous_args = args if current_prefix else args[:-1]
+    takes_value = False
+    for arg in previous_args:
+        if takes_value:
+            takes_value = False
+            continue
+        if arg in ("-", "--") or not arg.startswith("-") or _is_inline_eval_flag(exe, arg):
+            return None
+        if PYTHON_INTERPRETER_RE.match(exe):
+            if arg.startswith("-m"):
+                return None
+            takes_value = arg in ("-W", "-X")
+    return exe if not takes_value and _is_inline_eval_flag(exe, candidate) else None
 
 
 def _read_heredoc_delimiter(line: str, pos: int) -> tuple[str, bool, int] | None:
@@ -371,7 +395,11 @@ def _scan_shell_blocks(path: Path, text: str) -> list[LintIssue]:
             ch = line_body[col]
             top_state = state_stack[-1][0] if state_stack else "unquoted"
 
-            if top_state == "single":
+            if top_state in ("single", "ansi_c"):
+                if top_state == "ansi_c" and ch == "\\" and col + 1 < n:
+                    current_token.append(line_body[col : col + 2])
+                    col += 2
+                    continue
                 if ch == "'":
                     _, start_line, eval_exe = state_stack.pop()
                     if eval_exe is not None and line_no > start_line:
@@ -385,17 +413,6 @@ def _scan_shell_blocks(path: Path, text: str) -> list[LintIssue]:
                                 ),
                             )
                         )
-                current_token.append(ch)
-                col += 1
-                continue
-
-            if top_state == "ansi_c":
-                if ch == "\\" and col + 1 < n:
-                    current_token.append(line_body[col : col + 2])
-                    col += 2
-                    continue
-                if ch == "'":
-                    state_stack.pop()
                 current_token.append(ch)
                 col += 1
                 continue
@@ -461,7 +478,11 @@ def _scan_shell_blocks(path: Path, text: str) -> list[LintIssue]:
                 continue
 
             if ch == "$" and col + 1 < n and line_body[col + 1] == "'":
-                state_stack.append(("ansi_c", line_no, None))
+                eval_exe = _match_inline_eval_target(
+                    tuple(cmd_tokens_stack[-1]),
+                    "".join(current_token),
+                )
+                state_stack.append(("ansi_c", line_no, eval_exe))
                 current_token.append("$'")
                 col += 2
                 continue
