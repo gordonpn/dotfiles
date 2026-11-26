@@ -655,6 +655,8 @@ codex_agent_backups=("${CODEX_DIR}/AGENTS.md.bak."*)
 [[ "$(readlink "${CODEX_DIR}/skills/thinking-model-router")" == "${HOME}/.agents/skills/thinking-model-router" ]]
 [[ "$(readlink "${HOME}/.agents/skills/engineering-standards")" == "${repo_dir}/dotfiles/agent-skills/engineering-standards" ]]
 [[ "$(readlink "${HOME}/.agents/skills/delegate-coding-agents")" == "${repo_dir}/dotfiles/agent-skills/delegate-coding-agents" ]]
+[[ "$(readlink "${HOME}/.agents/skills/github-backlog-workflow")" == "${repo_dir}/dotfiles/agent-skills/github-backlog-workflow" ]]
+[[ "$(readlink "${HOME}/.agents/skills/task-handoff")" == "${repo_dir}/dotfiles/agent-skills/task-handoff" ]]
 [[ "$(readlink "${HOME}/.agents/skills/semgrep")" == "${repo_dir}/dotfiles/agent-skills/semgrep" ]]
 [[ "$(readlink "${HOME}/.agents/skills/repomix")" == "${repo_dir}/dotfiles/agent-skills/repomix" ]]
 [[ "$(readlink "${HOME}/.agents/skills/local-db-cli")" == "${repo_dir}/dotfiles/agent-skills/local-db-cli" ]]
