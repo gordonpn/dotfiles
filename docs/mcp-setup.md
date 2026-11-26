@@ -242,7 +242,7 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 | **`prometheus`** | stdio | `npx -y prometheus-mcp@latest stdio` | Metrics discovery and PromQL instant/range queries |
 | **`loki`** | stdio | `loki-mcp-server` | Grafana Loki log search, labels/series discovery, and LogQL queries |
 | **`docker`** | stdio | `npx -y @hypnosis/docker-mcp-server` | Local daemon & remote Swarm containers, logs, and Compose |
-| **`kubernetes`** | stdio | `npx -y mcp-server-kubernetes` | Cluster management across `docker-desktop` and `k3s-master` |
+| **`kubernetes`** | stdio | `npx -y mcp-server-kubernetes` | Cluster management for contexts configured in kubeconfig, including `k3s-master` |
 | **`terraform`** | stdio | `terraform-mcp-server stdio` | Terraform Registry provider/module schemas, documentation, and IaC generation |
 | **`ssh`** | stdio | `npx -y @hypnosis/ssh-mcp-server` | Remote command execution, log search, and server audits |
 | **`tailscale`** | stdio | `npx -y @yawlabs/tailscale-mcp` | Tailnet management: devices, ACLs, routes, and DNS |
@@ -259,6 +259,20 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 | **`semgrep`** | stdio | `semgrep mcp` | Local AST static analysis, SAST security scans, and custom rule matching |
 | **`postman`** (disabled) | stdio | `@postman/postman-mcp-server` | Postman workspaces, collections, environments, and mock server management |
 | **`sonarqube`** (disabled) | stdio | Standalone JAR (`java -jar`) | SonarQube Cloud and Server code quality metrics, quality gates, and hotspots |
+
+### Local Docker and Kubernetes on macOS
+
+The Brewfile installs OrbStack on macOS Sonoma or later. Open OrbStack to
+finish setup and verify the active Docker context before using Docker clients.
+
+Removing Docker Desktop from the Brewfile does not uninstall an existing copy.
+Review any local containers, volumes, and Kubernetes workloads before retiring
+Docker Desktop. The Brewfile save script records installed casks, so leaving
+Docker Desktop installed can add it back to a generated Brewfile.
+
+A local Kubernetes cluster requires configuring Kubernetes in OrbStack and
+selecting its context in kubeconfig. MCP sync adds the homelab `k3s-master`
+context and does not migrate workloads or the old `docker-desktop` context.
 
 ### codebase-memory-mcp
 
