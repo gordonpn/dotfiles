@@ -1478,7 +1478,7 @@ grep -q '^failure_category=none$' "$no_verify_log/manifest.txt"
 
 # --verify passing check runs inside worktree outside worker session and records passed status
 # shellcheck disable=SC2016
-"$SCRIPT" --agent opencode --mode build --verify 'test -f agent-change.txt && test -z "${CODING_DELEGATE_ACTIVE:-}" && echo verify-ok' --id verify-pass --task 'Verify passing build' >"$TMP/verify-pass.out"
+"$SCRIPT" --agent opencode --mode build --verify 'test -f agent-change.txt && test -z "${CODING_DELEGATE_ACTIVE:-}" && mkdir -p tests && touch tests/generated.snap && echo verify-ok' --id verify-pass --task 'Verify passing build' >"$TMP/verify-pass.out"
 grep -q 'Exit: 0' "$TMP/verify-pass.out"
 grep -q '  Failure category: none' "$TMP/verify-pass.out"
 grep -q '  Verification: passed' "$TMP/verify-pass.out"
@@ -1489,12 +1489,20 @@ verify_pass_log=$(sed -n 's/^  Logs: //p' "$TMP/verify-pass.out" | head -n 1)
 grep -q '^verification=passed$' "$verify_pass_log/manifest.txt"
 grep -q '^verification_exit=0$' "$verify_pass_log/manifest.txt"
 grep -q '^failure_category=none$' "$verify_pass_log/manifest.txt"
+grep -Fx 'tests/generated.snap' "$verify_pass_log/worktree-changed-files.txt"
+grep -Fx 'tests/generated.snap' "$verify_pass_log/modified-test-files.txt"
+grep -Fx 'tests/generated.snap' "$verify_pass_log/untracked-files.txt"
+grep -Fx 'changed_files_count=2' "$verify_pass_log/manifest.txt"
+grep -Fx 'modified_test_files_count=1' "$verify_pass_log/manifest.txt"
 
 # --verify failing check sets EXIT_CODE=1, verification_error, and caps output at last 40 lines
+mkdir -p tests
+touch tests/failed.snap
 # shellcheck disable=SC2016
-if "$SCRIPT" --agent opencode --mode build --verify 'for i in $(seq 1 60); do echo "verify-line-$i"; done; exit 7' --id verify-fail --task 'Verify failing build' >"$TMP/verify-fail.out" 2>"$TMP/verify-fail.err"; then
+if "$SCRIPT" --agent opencode --mode build --verify 'mkdir -p tests && touch tests/failed.snap; for i in $(seq 1 60); do echo "verify-line-$i"; done; exit 7' --id verify-fail --task 'Verify failing build' >"$TMP/verify-fail.out" 2>"$TMP/verify-fail.err"; then
   echo 'Expected failing --verify command to return non-zero' >&2; exit 1
 fi
+rm tests/failed.snap
 grep -q 'Exit: 1' "$TMP/verify-fail.out"
 grep -q '  Failure category: verification_error' "$TMP/verify-fail.out"
 grep -q '  Verification: failed' "$TMP/verify-fail.out"
@@ -1510,6 +1518,10 @@ grep -q '^verification=failed$' "$verify_fail_log/manifest.txt"
 grep -q '^verification_exit=7$' "$verify_fail_log/manifest.txt"
 grep -q '^failure_category=verification_error$' "$verify_fail_log/manifest.txt"
 grep -q '^exit_code=1$' "$verify_fail_log/manifest.txt"
+grep -Fx '?? tests/' "$verify_fail_log/git-status.txt"
+grep -Fx 'tests/failed.snap' "$verify_fail_log/modified-test-files.txt"
+grep -Fx 'tests/failed.snap' "$verify_fail_log/overlapping-base-files.txt"
+grep -Fx 'dirty_base_overlap=1' "$verify_fail_log/manifest.txt"
 
 # A single very long output line is also bounded in the result.
 "$SCRIPT" --agent opencode --mode build --id verify-long-line \
@@ -1632,7 +1644,8 @@ grep -q '  Failure category: env_error' "$TMP/env-cat.out"
 grep -q '  Verification: not_run' "$TMP/env-cat.out"
 
 # Modified test files flags test paths separately from non-test changed files
-OPENCODE_MOCK_TOUCH_FILES='tests/unit_case.sh,pkg/tests/sub.py,scripts/test_helper.py,pkg/handler_test.go,web/app.test.ts,web/app.spec.tsx,src/main.sh' \
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.quotePath GIT_CONFIG_VALUE_0=true \
+OPENCODE_MOCK_TOUCH_FILES='tests/unit_case.sh,pkg/tests/sub.py,scripts/test_helper.py,pkg/handler_test.go,web/app.test.ts,web/app.spec.tsx,src/main.sh,tests/café.py' \
   "$SCRIPT" --agent opencode --mode build --id test-files-flag --task 'Touch test and non-test files' >"$TMP/test-files-flag.out"
 grep -q 'Exit: 0' "$TMP/test-files-flag.out"
 changed_section=$(sed -n '/^  Changed files:/,/^  Modified test files:/p' "$TMP/test-files-flag.out")
@@ -1653,7 +1666,7 @@ if grep -qx '    src/main.sh' <<< "$modified_test_section" || grep -qx '    agen
   echo 'Expected non-test files not to appear under Modified test files' >&2; exit 1
 fi
 test_files_log=$(sed -n 's/^  Logs: //p' "$TMP/test-files-flag.out" | head -n 1)
-grep -q '^changed_files_count=8$' "$test_files_log/manifest.txt"
-grep -q '^modified_test_files_count=6$' "$test_files_log/manifest.txt"
+grep -q '^changed_files_count=9$' "$test_files_log/manifest.txt"
+grep -q '^modified_test_files_count=7$' "$test_files_log/manifest.txt"
 
 echo 'PASS: All delegation tests passed across Codex, OpenCode, and Copilot'

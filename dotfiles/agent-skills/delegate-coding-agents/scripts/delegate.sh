@@ -938,13 +938,20 @@ resolve_active_profile_path() {
 }
 
 list_dirty_paths() {
-  local repo_dir="$1"
+  local repo_dir="$1" test_paths="${2:-}" path display_path LC_ALL=C
   {
-    git -C "$repo_dir" diff --no-renames --name-only "$BASE_SHA"
-    git -C "$repo_dir" diff --no-renames --name-only
-    git -C "$repo_dir" diff --no-renames --name-only --cached
-    git -C "$repo_dir" ls-files --others --exclude-standard
-  } | LC_ALL=C sort -u
+    git -C "$repo_dir" diff --no-renames --name-only -z "$BASE_SHA" &&
+      git -C "$repo_dir" diff --no-renames --name-only -z &&
+      git -C "$repo_dir" diff --no-renames --name-only -z --cached &&
+      git -C "$repo_dir" ls-files --others --exclude-standard -z
+  } | while IFS= read -r -d '' path; do
+    # Use the same single-line representation for both sides of the overlap check.
+    printf -v display_path '%q' "$path"
+    if [[ -n $test_paths ]] && is_test_file_path "$path"; then
+      printf '%s\n' "$display_path" >>"$test_paths"
+    fi
+    printf '%s\n' "$display_path"
+  done | LC_ALL=C sort -u
 }
 
 BASE_STATUS=$(git -C "$ROOT" status --porcelain --untracked-files=normal) || die 'Failed inspecting base working tree status'
@@ -1242,38 +1249,8 @@ done
 AGENT=${SUCCESSFUL_AGENT:-${LAST_ATTEMPTED_AGENT:-$AGENT}}
 MODEL=${SUCCESSFUL_MODEL:-${LAST_ATTEMPTED_MODEL:-}}
 
-# Review both tracked and untracked changes: git diff alone omits new files.
 git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
 git -C "$WORKTREE" diff --check >"$LOG_DIR/diff-check.txt" 2>&1 || EXIT_CODE=1
-git -C "$WORKTREE" diff --stat "$BASE_SHA" >"$LOG_DIR/diff-stat.txt"
-git -C "$WORKTREE" ls-files --others --exclude-standard >"$LOG_DIR/untracked-files.txt"
-list_dirty_paths "$WORKTREE" >"$LOG_DIR/worktree-changed-files.txt"
-: >"$LOG_DIR/modified-test-files.txt"
-if [[ -s $LOG_DIR/worktree-changed-files.txt ]]; then
-  while IFS= read -r changed_path; do
-    [[ -n $changed_path ]] || continue
-    if is_test_file_path "$changed_path"; then
-      printf '%s\n' "$changed_path" >>"$LOG_DIR/modified-test-files.txt"
-    fi
-  done <"$LOG_DIR/worktree-changed-files.txt"
-fi
-CHANGED_FILES_COUNT=$(wc -l <"$LOG_DIR/worktree-changed-files.txt" | tr -d '[:space:]')
-MODIFIED_TEST_FILES_COUNT=$(wc -l <"$LOG_DIR/modified-test-files.txt" | tr -d '[:space:]')
-{
-  cat "$LOG_DIR/base-dirty-files.txt"
-  list_dirty_paths "$ROOT"
-} | LC_ALL=C sort -u >"$LOG_DIR/base-dirty-files.tmp"
-mv "$LOG_DIR/base-dirty-files.tmp" "$LOG_DIR/base-dirty-files.txt"
-DIRTY_BASE_OVERLAP=0
-OVERLAPPING_BASE_FILES="$LOG_DIR/overlapping-base-files.txt"
-: >"$OVERLAPPING_BASE_FILES"
-if [[ -s $LOG_DIR/base-dirty-files.txt && -s $LOG_DIR/worktree-changed-files.txt ]]; then
-  LC_ALL=C comm -12 "$LOG_DIR/base-dirty-files.txt" "$LOG_DIR/worktree-changed-files.txt" >"$OVERLAPPING_BASE_FILES"
-  if [[ -s $OVERLAPPING_BASE_FILES ]]; then
-    DIRTY_BASE_OVERLAP=1
-    printf 'WARNING: Delegate modified files that also have uncommitted or untracked changes in base working tree; reconcile hunks manually and do not overwrite base files directly.\n' >&2
-  fi
-fi
 FINAL_HEAD=$(git -C "$WORKTREE" rev-parse HEAD)
 if [[ "$FINAL_HEAD" != "$BASE_SHA" ]]; then
   printf 'WARNING: Delegate changed HEAD (commit/reset/rebase). Review Git history before integration.\n' >&2
@@ -1299,6 +1276,7 @@ if (( VERIFY_SET )); then
     run_verify_cmd "$WORKTREE" "$VERIFY_TIMEOUT" "$VERIFY_CMD" "$LOG_DIR/verify.log"
     VERIFICATION_EXIT=$?
     set -e
+    git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
     if [[ $VERIFICATION_EXIT -eq 0 ]]; then
       VERIFICATION_STATUS='passed'
     else
@@ -1307,6 +1285,30 @@ if (( VERIFY_SET )); then
     fi
   else
     VERIFICATION_STATUS='not_run'
+  fi
+fi
+
+# Review both tracked and untracked changes: git diff alone omits new files.
+git -C "$WORKTREE" diff --stat "$BASE_SHA" >"$LOG_DIR/diff-stat.txt"
+git -C "$WORKTREE" ls-files --others --exclude-standard >"$LOG_DIR/untracked-files.txt"
+: >"$LOG_DIR/modified-test-files.txt"
+list_dirty_paths "$WORKTREE" "$LOG_DIR/modified-test-files.txt" >"$LOG_DIR/worktree-changed-files.txt"
+LC_ALL=C sort -u -o "$LOG_DIR/modified-test-files.txt" "$LOG_DIR/modified-test-files.txt"
+CHANGED_FILES_COUNT=$(wc -l <"$LOG_DIR/worktree-changed-files.txt" | tr -d '[:space:]')
+MODIFIED_TEST_FILES_COUNT=$(wc -l <"$LOG_DIR/modified-test-files.txt" | tr -d '[:space:]')
+{
+  cat "$LOG_DIR/base-dirty-files.txt"
+  list_dirty_paths "$ROOT"
+} | LC_ALL=C sort -u >"$LOG_DIR/base-dirty-files.tmp"
+mv "$LOG_DIR/base-dirty-files.tmp" "$LOG_DIR/base-dirty-files.txt"
+DIRTY_BASE_OVERLAP=0
+OVERLAPPING_BASE_FILES="$LOG_DIR/overlapping-base-files.txt"
+: >"$OVERLAPPING_BASE_FILES"
+if [[ -s $LOG_DIR/base-dirty-files.txt && -s $LOG_DIR/worktree-changed-files.txt ]]; then
+  LC_ALL=C comm -12 "$LOG_DIR/base-dirty-files.txt" "$LOG_DIR/worktree-changed-files.txt" >"$OVERLAPPING_BASE_FILES"
+  if [[ -s $OVERLAPPING_BASE_FILES ]]; then
+    DIRTY_BASE_OVERLAP=1
+    printf 'WARNING: Delegate modified files that also have uncommitted or untracked changes in base working tree; reconcile hunks manually and do not overwrite base files directly.\n' >&2
   fi
 fi
 
