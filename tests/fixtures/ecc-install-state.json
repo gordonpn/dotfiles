@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "ecc.install.v1",
+  "source": {"repoVersion": "2.2.3"},
+  "target": {
+    "id": "antigravity-project",
+    "root": "FIXTURE_ROOT/.agents",
+    "installStatePath": "FIXTURE_ROOT/.agents/ecc-install-state.json"
+  },
+  "request": {
+    "profile": "minimal",
+    "modules": [],
+    "includeComponents": [],
+    "excludeComponents": [],
+    "legacyLanguages": [],
+    "legacyMode": false,
+    "hookConsent": null
+  }
+}

@@ -51,9 +51,8 @@ self-learning loop. Configure Kiro steering links or Claude Code `@` imports
 to load these files from this checkout.
 
 Codex CLI uses ECC for reusable engineering workflows via a pinned plugin. Run
-`just setup-ecc` to install the Codex plugin and remove the former
-default ECC minimal profile from Antigravity's project-local `.agents/`.
-Explicit opt-in installs are preserved. See
+`just setup-ecc` to install the Codex plugin. It does not install or remove
+ECC in Antigravity's project-local `.agents/`. See
 [MCP setup](docs/mcp-setup.md#everything-claude-code-ecc) for details.
 
 ## Getting started

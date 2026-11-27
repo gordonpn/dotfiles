@@ -2,6 +2,13 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-26: Keep Antigravity ECC cleanup manual
+
+- Decision: Keep `just setup-ecc` Codex-only and leave existing Antigravity installs in place.
+- Rationale: The old recipe and an intentional install with the same options produce indistinguishable manifests.
+- Rejected alternatives: Matching more manifest fields cannot establish who initiated the install. Rechecking the manifest still leaves a race before target-wide uninstall.
+- Source: [ECC setup review](https://github.com/gordonpn/dotfiles/pull/166).
+
 ## 2026-11-24: Enforce agents.delegationAllowed opt-out guard in delegate.sh
 
 - Decision: Check `git -C "$ROOT" config --get agents.delegationAllowed` in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` immediately after resolving the repository root and before creating `$LOG_DIR`, worktrees, or MCP profiles or invoking external providers; treat `false`/`0`/`no`/`off` and an explicitly configured empty string (`agents.delegationAllowed=""`, where `git config --get` exits `0` with empty stdout) as fail-closed opt-outs, treat unrecognized values and non-1 `git config` read errors as hard failures, leave unconfigured repositories allowed (`delegation_policy=default`), treat `true`/`1`/`yes`/`on` as `delegation_policy=explicit_allow`, and record `delegation_policy` in `manifest.txt` only on allowed runs so denied invocations abort cleanly with zero orphaned log or worktree artifacts (while keeping `--automatic` as a compatibility flag).

@@ -1,4 +1,5 @@
 test:
+    bash tests/setup-ecc.sh
     bash tests/mcp-sync.sh
     python3 -m unittest discover -s tests -p "test_*.py" -v
     bash tests/update-skills.sh
@@ -23,6 +24,7 @@ lint:
         "tests/agy-title.sh"
         "tests/zsh-helpers.sh"
         "tests/mcp-sync.sh"
+        "tests/setup-ecc.sh"
         "tests/deepseek-analyze.sh"
         "tests/deepseek-review-prompt.sh"
         "scripts/deepseek-analyze.sh"
@@ -61,18 +63,6 @@ update-skills:
 setup-ecc:
     if ! codex plugin marketplace list --json | jq -e '.marketplaces[] | select(.name == "ecc")' >/dev/null; then codex plugin marketplace add affaan-m/ECC --ref v2.2.3; fi
     if ! codex plugin list --json | jq -e '.installed[] | select(.name == "ecc" and .marketplaceName == "ecc")' >/dev/null; then codex plugin add ecc@ecc; fi
-    if [ -f .agents/ecc-install-state.json ]; then \
-        if [ ! -L .agents ] && jq -e --arg root "$(pwd -P)/.agents" '\
-            .schemaVersion == "ecc.install.v1" and .source.repoVersion == "2.2.3" and \
-            .target.id == "antigravity-project" and .target.root == $root and \
-            .target.installStatePath == ($root + "/ecc-install-state.json") and \
-            .request == {profile: "minimal", modules: [], includeComponents: [], excludeComponents: [], legacyLanguages: [], legacyMode: false, hookConsent: null}' \
-            .agents/ecc-install-state.json >/dev/null; then \
-            npx --yes ecc-universal@2.2.3 uninstall --target antigravity; \
-        else \
-            printf '%s\n' 'Leaving the project-local Antigravity ECC installation unchanged (not the former default minimal profile).' >&2; \
-        fi; \
-    fi
 
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py
