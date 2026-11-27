@@ -267,8 +267,8 @@ finish setup and verify the active Docker context before using Docker clients.
 
 Removing Docker Desktop from the Brewfile does not uninstall an existing copy.
 Review any local containers, volumes, and Kubernetes workloads before retiring
-Docker Desktop. The Brewfile save script records installed casks, so leaving
-Docker Desktop installed can add it back to a generated Brewfile.
+Docker Desktop. The Brewfile save script excludes the `docker-desktop` cask
+and its old `docker` name without uninstalling either runtime.
 
 A local Kubernetes cluster requires configuring Kubernetes in OrbStack and
 selecting its context in kubeconfig. MCP sync adds the homelab `k3s-master`

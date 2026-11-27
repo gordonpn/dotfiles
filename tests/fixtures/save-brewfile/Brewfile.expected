@@ -1,0 +1,3 @@
+brew "docker"
+cask "orbstack"
+cask "docker-toolbox"

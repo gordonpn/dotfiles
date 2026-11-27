@@ -1,4 +1,5 @@
 test:
+    bash tests/save-brewfile.sh
     bash tests/mcp-sync.sh
     python3 -m unittest discover -s tests -p "test_*.py" -v
     bash tests/update-skills.sh
@@ -18,6 +19,8 @@ lint:
         ".github/scripts/write-deepseek-review-prompt.sh"
         "bin/agy-statusline"
         "bin/mcp-sync"
+        "lists/save.sh"
+        "tests/save-brewfile.sh"
         "dotfiles/gemini/antigravity-cli/title.sh"
         "tests/agy-statusline.sh"
         "tests/agy-title.sh"
