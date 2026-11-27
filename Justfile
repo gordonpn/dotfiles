@@ -1,11 +1,11 @@
 test:
-    bash tests/save-brewfile.sh
     bash tests/mcp-sync.sh
     python3 -m unittest discover -s tests -p "test_*.py" -v
     bash tests/update-skills.sh
     bash tests/deepseek-analyze.sh
     bash tests/deepseek-review-prompt.sh
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
+    bash tests/save-brewfile.sh
     bash tests/agy-statusline.sh
     bash tests/agy-title.sh
     bash tests/zsh-helpers.sh
