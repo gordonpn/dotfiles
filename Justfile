@@ -5,6 +5,7 @@ test:
     bash tests/deepseek-analyze.sh
     bash tests/deepseek-review-prompt.sh
     bash dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh
+    bash tests/save-brewfile.sh
     bash tests/agy-statusline.sh
     bash tests/agy-title.sh
     bash tests/zsh-helpers.sh
@@ -18,6 +19,8 @@ lint:
         ".github/scripts/write-deepseek-review-prompt.sh"
         "bin/agy-statusline"
         "bin/mcp-sync"
+        "lists/save.sh"
+        "tests/save-brewfile.sh"
         "dotfiles/gemini/antigravity-cli/title.sh"
         "tests/agy-statusline.sh"
         "tests/agy-title.sh"

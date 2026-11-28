@@ -1,0 +1,6 @@
+brew "docker"
+cask "docker"
+cask "docker-desktop", args: { appdir: "/Applications" }
+cask "homebrew/cask/docker-desktop"
+cask "orbstack"
+cask "docker-toolbox"
