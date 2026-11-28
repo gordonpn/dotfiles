@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -114,14 +115,141 @@ class SyncSkillsConfig:
     copilot_enabled: bool
 
 
-def safe_write_config(path: Path, text: str) -> None:
-    """Write text atomically to path using a fresh private 0600 temporary file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.tmp.", dir=path.parent)
+@dataclass(frozen=True)
+class _TargetSnapshot:
+    """Pre-commit state of a target file or symlink for best-effort rollback."""
+
+    target: Path
+    existed: bool
+    content: bytes
+    mode: int
+    symlink_target: str | None = None
+
+
+def _atomic_restore_bytes(target: Path, content: bytes, mode: int) -> None:
+    """Atomically write raw bytes and mode to target via a temporary file."""
+    fd, rb_name = tempfile.mkstemp(prefix=f".{target.name}.tmp.", dir=target.parent)
+    rb_tmp = Path(rb_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
+        os.chmod(rb_tmp, mode)
+        os.replace(rb_tmp, target)
+    except BaseException:
+        if os.path.lexists(rb_tmp):
+            try:
+                rb_tmp.unlink()
+            except OSError:
+                pass
+        raise
+
+
+def _stage_config_file(target: Path, content: str) -> Path:
+    """Write content to a private 0600 temporary file in target.parent."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.tmp.", dir=target.parent)
     tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
+            handle.write(content)
+        os.chmod(tmp_path, 0o600)
+        return tmp_path
+    except Exception:
+        if os.path.lexists(tmp_path):
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise
+
+
+def _commit_staged_configs(staged_configs: list[tuple[Path, Path]]) -> None:
+    """Commit staged files via per-file atomic replace with best-effort atomic rollback.
+
+    Commits each staged file individually with ``os.replace``. On handled errors or
+    interrupts, rolls back already-committed targets atomically per file (restoring
+    symlinks, replacing regular files via temporary files, or unlinking newly created
+    targets). Rollback skips files that no longer match the staged file. This
+    best-effort check can race a writer. The sequence is not crash-atomic across
+    power loss or ``SIGKILL`` and does not isolate readers across all four targets.
+    """
+    snapshots: list[_TargetSnapshot] = []
+    committed: list[tuple[_TargetSnapshot, os.stat_result, bytes]] = []
+    try:
+        for target, _ in staged_configs:
+            if target.is_symlink():
+                snapshots.append(
+                    _TargetSnapshot(
+                        target=target,
+                        existed=True,
+                        content=b"",
+                        mode=0o600,
+                        symlink_target=os.readlink(target),
+                    )
+                )
+            elif target.is_file():
+                snapshots.append(
+                    _TargetSnapshot(
+                        target=target,
+                        existed=True,
+                        content=target.read_bytes(),
+                        mode=stat.S_IMODE(target.stat().st_mode),
+                    )
+                )
+            elif os.path.lexists(target):
+                raise OSError(f"Refusing to overwrite non-regular config target: {target}")
+            else:
+                snapshots.append(
+                    _TargetSnapshot(
+                        target=target,
+                        existed=False,
+                        content=b"",
+                        mode=0o600,
+                    )
+                )
+
+        for snapshot, (target, tmp_path) in zip(snapshots, staged_configs, strict=True):
+            staged_stat = tmp_path.stat()
+            staged_content = tmp_path.read_bytes()
+            os.replace(tmp_path, target)
+            committed.append((snapshot, staged_stat, staged_content))
+    except BaseException:
+        for snapshot, staged_stat, staged_content in reversed(committed):
+            try:
+                current_stat = snapshot.target.lstat()
+                if (
+                    not os.path.samestat(current_stat, staged_stat)
+                    or current_stat.st_mode != staged_stat.st_mode
+                    or snapshot.target.read_bytes() != staged_content
+                ):
+                    print(f"Warning: Config changed concurrently; skipped rollback of {snapshot.target}.", file=sys.stderr)
+                    continue
+
+                if snapshot.symlink_target is not None:
+                    atomic_symlink(Path(snapshot.symlink_target), snapshot.target)
+                elif snapshot.existed:
+                    _atomic_restore_bytes(snapshot.target, snapshot.content, snapshot.mode)
+                else:
+                    snapshot.target.unlink()
+            except OSError as rollback_exc:
+                print(
+                    f"Warning: Failed to roll back {snapshot.target} ({rollback_exc}).",
+                    file=sys.stderr,
+                )
+        raise
+    finally:
+        for _, tmp_path in staged_configs:
+            if os.path.lexists(tmp_path):
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+
+
+def safe_write_config(path: Path, text: str) -> None:
+    """Write text atomically to path using a fresh private 0600 temporary file."""
+    tmp_path = _stage_config_file(path, text)
+    try:
         os.replace(tmp_path, path)
     except Exception:
         if os.path.lexists(tmp_path):
@@ -655,6 +783,7 @@ def sync_mcp_config(
     copilot_config: Path,
 ) -> None:
     """Hydrate mcp_config template and synchronize all configured MCP clients."""
+    # Phase 1: Validate and render all client configs in memory before any disk write.
     if not template_file.is_file():
         print(f"Error: Template {template_file} not found.", file=sys.stderr)
         raise SystemExit(1)
@@ -681,8 +810,7 @@ def sync_mcp_config(
     servers = extract_servers(hydrated_data)
 
     # 1. Antigravity MCP config
-    safe_write_config(antigravity_target, json.dumps(hydrated_data, indent=2))
-    print(f"Synchronized {len(servers)} MCP servers to {antigravity_target}")
+    antigravity_content = json.dumps(hydrated_data, indent=2)
 
     # 2. Codex MCP config (~/.codex/config.toml)
     codex_existing = ""
@@ -697,8 +825,6 @@ def sync_mcp_config(
     except tomllib.TOMLDecodeError as exc:
         print(f"Error: Rendered Codex TOML for {codex_config} is invalid ({exc}).", file=sys.stderr)
         raise SystemExit(1) from exc
-    safe_write_config(codex_config, new_codex)
-    print(f"Synchronized {len(servers)} MCP servers to {codex_config} ({codex_enabled_count} enabled, profile: {codex_label})")
 
     # 3. OpenCode MCP config (~/.config/opencode/opencode.json)
     allowed_opencode, opencode_label = resolve_allowed_servers(
@@ -706,11 +832,7 @@ def sync_mcp_config(
     )
     opencode_existing = load_json_dict(opencode_config, allow_jsonc=True)
     new_opencode, opencode_enabled_count = render_opencode_config(opencode_existing, servers, allowed_opencode)
-    safe_write_config(opencode_config, json.dumps(new_opencode, indent=2) + "\n")
-    print(
-        f"Synchronized {len(servers)} MCP servers to {opencode_config} "
-        f"({opencode_enabled_count} enabled, profile: {opencode_label})"
-    )
+    opencode_content = json.dumps(new_opencode, indent=2) + "\n"
 
     # 4. GitHub Copilot CLI MCP config (~/.copilot/mcp-config.json)
     allowed_copilot, copilot_label = resolve_allowed_servers(
@@ -718,7 +840,44 @@ def sync_mcp_config(
     )
     copilot_existing = load_json_dict(copilot_config)
     new_copilot, copilot_enabled_count = render_copilot_config(copilot_existing, servers, allowed_copilot)
-    safe_write_config(copilot_config, json.dumps(new_copilot, indent=2) + "\n")
+    copilot_content = json.dumps(new_copilot, indent=2) + "\n"
+
+    # Phase 2: Stage all 4 rendered configurations to private 0600 temporary files.
+    planned_writes: list[tuple[Path, str]] = [
+        (antigravity_target, antigravity_content),
+        (codex_config, new_codex),
+        (opencode_config, opencode_content),
+        (copilot_config, copilot_content),
+    ]
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for target, content in planned_writes:
+            staged.append((target, _stage_config_file(target, content)))
+    except BaseException as exc:
+        for _, tmp_path in staged:
+            if os.path.lexists(tmp_path):
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+        if isinstance(exc, OSError):
+            print(f"Error: Failed to stage MCP config update ({exc}).", file=sys.stderr)
+            raise SystemExit(1) from exc
+        raise
+
+    # Phase 3: Commit all staged files atomically with best-effort rollback on failure.
+    try:
+        _commit_staged_configs(staged)
+    except OSError as exc:
+        print(f"Error: Failed to commit MCP config updates ({exc}).", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    print(f"Synchronized {len(servers)} MCP servers to {antigravity_target}")
+    print(f"Synchronized {len(servers)} MCP servers to {codex_config} ({codex_enabled_count} enabled, profile: {codex_label})")
+    print(
+        f"Synchronized {len(servers)} MCP servers to {opencode_config} "
+        f"({opencode_enabled_count} enabled, profile: {opencode_label})"
+    )
     print(f"Synchronized {copilot_enabled_count} enabled MCP servers to {copilot_config} (profile: {copilot_label})")
 
 
