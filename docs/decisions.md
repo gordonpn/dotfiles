@@ -2,6 +2,13 @@
 
 This document records non-obvious engineering and implementation decisions made in Dotfiles, ordered newest first.
 
+## 2026-11-25: Show coding-agent status with Zellij's native tab markers and inbox
+
+- Decision: Keep the stock layout and bind `Alt a` to `ToggleSessionCard` (the inbox) and `Alt Shift a` to `GoToNextAttention` in `dotfiles/zellij.kdl`. Zellij 0.46's tab bar already marks each tab with the status its agent reports.
+- Rationale: Claude Code and other agents report working, blocked, done, idle and error with OSC 7501, but only once the terminal answers their probe, which Zellij does from 0.46. The tab bar then shows a marker per tab and a count of tabs that need you, and the inbox lists them across every running session, so the status comes from the agent itself with no hooks, plugins or extra panes. `keybinds clear-defaults=true` drops Zellij's default `Ctrl o` bindings for both actions, so they need keys of their own.
+- Rejected alternatives: multiplexer-sidebar in every tab (a terminal pane cannot be made unselectable, so `Alt h`/`Alt l` stopped in it, closing a tab's shell left a tab holding only the sidebar, and a stray `q` quit it), zj-radar (its status comes from its own Claude Code plugin hooks in every agent session, installed with `curl | sh`, which puts third-party code in each agent's hook path), and custom hooks that rename tabs (duplicates the native markers and puts agent state in tab names).
+- Known limits: a running session keeps the Zellij server it started on, so a session started on 0.45 or older shows no markers until it is restarted; Zellij 0.45 and older reject the new bindings and with them the whole config.
+
 ## 2026-11-24: Enforce agents.delegationAllowed opt-out guard in delegate.sh
 
 - Decision: Check `git -C "$ROOT" config --get agents.delegationAllowed` in `dotfiles/agent-skills/delegate-coding-agents/scripts/delegate.sh` immediately after resolving the repository root and before creating `$LOG_DIR`, worktrees, or MCP profiles or invoking external providers; treat `false`/`0`/`no`/`off` and an explicitly configured empty string (`agents.delegationAllowed=""`, where `git config --get` exits `0` with empty stdout) as fail-closed opt-outs, treat unrecognized values and non-1 `git config` read errors as hard failures, leave unconfigured repositories allowed (`delegation_policy=default`), treat `true`/`1`/`yes`/`on` as `delegation_policy=explicit_allow`, and record `delegation_policy` in `manifest.txt` only on allowed runs so denied invocations abort cleanly with zero orphaned log or worktree artifacts (while keeping `--automatic` as a compatibility flag).

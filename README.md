@@ -113,6 +113,16 @@ Domain-specific engineering standards profiles (HTTP APIs, events, observability
 - cd into the repository
 - Run `./setup.sh`
 
+## Zellij agent status
+
+Zellij 0.46 marks each tab with the status its coding agent reports: `●` needs
+you, `◐` working, `✓` done, `✗` failed, and nothing when idle. `Alt a` opens the
+inbox, which lists the panes that need you across every running session, and
+`Alt Shift a` jumps to the next one. Both keys need Zellij 0.46 or later, and an
+older Zellij rejects the whole `zellij.kdl`, so upgrade Zellij before pulling
+this on another machine. A session started on an older Zellij keeps working but
+shows no markers until it is restarted on 0.46.
+
 ## License
 
 [MIT License](./LICENSE)
