@@ -46,10 +46,13 @@ lint:
         "tests/test_mcp_sync_py.py"
         "scripts/lint_agents.py"
         "tests/test_lint_agents.py"
+        "scripts/lint_embedded_langs.py"
+        "tests/test_lint_embedded_langs.py"
     )
     uvx ruff check --target-version py311 "${py_files[@]}"
     uvx --with mcp==1.1.2 mypy --strict "${py_files[@]}"
     python3 scripts/lint_agents.py
+    python3 scripts/lint_embedded_langs.py
     git diff --check
 
 setup-codebase-memory:
