@@ -88,7 +88,12 @@ Antigravity CLI acts as the main terminal coding harness using Codex-first
 routing: read-only questions, debugging, planning, architecture discussions,
 reviews, and follow-ups with session continuity default to the installed Codex
 plugin (`codex-runner.mjs`), while implementation builds default to
-`delegate.sh` in an isolated Git worktree. On classified Codex provider, quota,
+`delegate.sh` in an isolated Git worktree. Run `just verify-codex-plugin` to
+check the installed Codex plugin runner's syntax and look for expected command
+and flag names in its source. The check does not execute the runner or verify
+CLI behavior. When relying on `delegate.sh` fallback, pass `--allow-missing` to
+`scripts/verify-codex-plugin.sh` to tolerate a missing runner. A present runner
+requires `node`. On classified Codex provider, quota,
 rate-limit, or model-availability failures, `delegate.sh` automatically falls
 back to OpenCode zero-cost models (`opencode/deepseek-v4.1-flash-free` with high
 variant, `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, and

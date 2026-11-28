@@ -8,6 +8,7 @@ test:
     bash tests/agy-statusline.sh
     bash tests/agy-title.sh
     bash tests/zsh-helpers.sh
+    bash tests/codex-plugin-contract.sh
 
 lint:
     #!/usr/bin/env bash
@@ -32,6 +33,8 @@ lint:
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-analyze.sh"
         "dotfiles/agent-skills/delegate-coding-agents/scripts/delegate-implement.sh"
         "dotfiles/agent-skills/delegate-coding-agents/tests/test_delegate.sh"
+        "scripts/verify-codex-plugin.sh"
+        "tests/codex-plugin-contract.sh"
     )
     for f in "${scripts[@]}"; do
         bash -n "$f"
@@ -65,3 +68,6 @@ setup-ecc:
 
 verify-codebase-memory:
     uv run --no-project --with mcp==1.1.2 python tests/verify_mcp.py
+
+verify-codex-plugin:
+    bash scripts/verify-codex-plugin.sh
