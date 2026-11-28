@@ -17,6 +17,8 @@ Options:
   --orchestrator NAME  codex|agy (default: codex)
   --automatic          Mark run as automatic delegation (accepted for compatibility)
   --mcp-profile PROF   MCP profile for delegated agents (minimal|none|full|PATH, default: minimal)
+  --verify CMD         Run verification command in build worktree after worker exits
+  --verify-timeout SEC Timeout in seconds for --verify (default: 120)
   --help               Display this help
 
 Environment:
@@ -98,9 +100,10 @@ is_provider_quota_error() {
 }
 AGENT=''; MODE=''; TASK=''; TASK_FILE=''; TASK_ID='task'; MODEL=''; BASE='HEAD'; ORCHESTRATOR='codex'; AUTOMATIC=0
 CLI_MCP_PROFILE=''
+VERIFY_CMD=''; VERIFY_SET=0; VERIFY_TIMEOUT=120
 while (($#)); do
   case "$1" in
-    --agent|--mode|--task|--task-file|--id|--model|--base|--orchestrator|--mcp-profile)
+    --agent|--mode|--task|--task-file|--id|--model|--base|--orchestrator|--mcp-profile|--verify|--verify-timeout)
       key=$1; shift; (($#)) || die "Missing value for $key"
       case "$key" in
         --agent) AGENT=$1 ;; --mode) MODE=$1 ;; --task) TASK=$1 ;;
@@ -108,6 +111,8 @@ while (($#)); do
         --model) MODEL=$1 ;; --base) BASE=$1 ;;
         --orchestrator) ORCHESTRATOR=$1 ;;
         --mcp-profile) CLI_MCP_PROFILE=$1 ;;
+        --verify) VERIFY_CMD=$1; VERIFY_SET=1 ;;
+        --verify-timeout) VERIFY_TIMEOUT=$1 ;;
       esac; shift ;;
     --automatic) AUTOMATIC=1; shift ;;
     --help|-h) usage; exit 0 ;;
@@ -127,6 +132,11 @@ if [[ -z $AGENT ]]; then
 fi
 [[ $AGENT == codex || $AGENT == opencode || $AGENT == copilot ]] || die 'Use --agent codex, opencode, or copilot'
 [[ $MODE == plan || $MODE == build ]] || die 'Use --mode plan or build'
+[[ $VERIFY_TIMEOUT =~ ^[1-9][0-9]*$ ]] || die '--verify-timeout must be a positive integer'
+if (( VERIFY_SET )); then
+  [[ $MODE == build ]] || die '--verify is only supported with --mode build'
+  [[ -n ${VERIFY_CMD//[[:space:]]/} ]] || die 'Verification command is empty'
+fi
 [[ $ORCHESTRATOR == codex || $ORCHESTRATOR == agy ]] || die 'Use --orchestrator codex or agy'
 [[ $ORCHESTRATOR != codex || $AGENT != codex ]] || die 'Codex cannot delegate to Codex'
 [[ -z $TASK || -z $TASK_FILE ]] || die 'Choose either --task or --task-file'
@@ -928,13 +938,20 @@ resolve_active_profile_path() {
 }
 
 list_dirty_paths() {
-  local repo_dir="$1"
+  local repo_dir="$1" test_paths="${2:-}" path display_path LC_ALL=C
   {
-    git -C "$repo_dir" diff --no-renames --name-only "$BASE_SHA"
-    git -C "$repo_dir" diff --no-renames --name-only
-    git -C "$repo_dir" diff --no-renames --name-only --cached
-    git -C "$repo_dir" ls-files --others --exclude-standard
-  } | LC_ALL=C sort -u
+    git -C "$repo_dir" diff --no-renames --name-only -z "$BASE_SHA" &&
+      git -C "$repo_dir" diff --no-renames --name-only -z &&
+      git -C "$repo_dir" diff --no-renames --name-only -z --cached &&
+      git -C "$repo_dir" ls-files --others --exclude-standard -z
+  } | while IFS= read -r -d '' path; do
+    # Use the same single-line representation for both sides of the overlap check.
+    printf -v display_path '%q' "$path"
+    if [[ -n $test_paths ]] && is_test_file_path "$path"; then
+      printf '%s\n' "$display_path" >>"$test_paths"
+    fi
+    printf '%s\n' "$display_path"
+  done | LC_ALL=C sort -u
 }
 
 BASE_STATUS=$(git -C "$ROOT" status --porcelain --untracked-files=normal) || die 'Failed inspecting base working tree status'
@@ -992,6 +1009,74 @@ RESPONSE:
 - Remaining issues and uncertainty
 PROMPT_END
 )
+is_test_file_path() {
+  local path=$1
+  local base=${path##*/}
+  [[ $path == tests/* || $path == */tests/* \
+    || $base == test_* || $base == *_test.* \
+    || $base == *.test.* || $base == *.spec.* ]]
+}
+
+run_verify_cmd() {
+  local worktree=$1
+  local timeout_sec=$2
+  local cmd=$3
+  local log_file=$4
+  local timeout_bin=''
+  timeout_bin=$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)
+  if [[ -n $timeout_bin ]]; then
+    local rc=0
+    (cd "$worktree" && "$timeout_bin" -k 2 "$timeout_sec" bash -c "$cmd") </dev/null >"$log_file" 2>&1 || rc=$?
+    if (( rc == 124 )); then
+      printf '\nVerification timed out after %ss\n' "$timeout_sec" >>"$log_file"
+    fi
+    return "$rc"
+  fi
+
+  local timed_out_flag="$log_file.timeout"
+  local done_flag="$log_file.done"
+  rm -f "$timed_out_flag" "$done_flag"
+
+  local had_monitor=0
+  if [[ -o monitor ]]; then
+    had_monitor=1
+  fi
+  set -m
+  (cd "$worktree" && exec bash -c "$cmd") </dev/null >"$log_file" 2>&1 &
+  local cmd_pid=$!
+  if (( ! had_monitor )); then
+    set +m
+  fi
+
+  (
+    sleep "$timeout_sec" &
+    sleep_pid=$!
+    trap 'kill "$sleep_pid" 2>/dev/null || true; exit 0' TERM INT
+    wait "$sleep_pid" 2>/dev/null || true
+    if [[ ! -f $done_flag ]] && kill -0 "$cmd_pid" 2>/dev/null; then
+      trap '' TERM INT
+      : >"$timed_out_flag"
+      kill -TERM -- "-$cmd_pid" 2>/dev/null || kill -TERM "$cmd_pid" 2>/dev/null || true
+      sleep 1
+      kill -KILL -- "-$cmd_pid" 2>/dev/null || kill -KILL "$cmd_pid" 2>/dev/null || true
+    fi
+  ) </dev/null >/dev/null 2>&1 &
+  local watchdog_pid=$!
+
+  local rc=0
+  wait "$cmd_pid" || rc=$?
+  : >"$done_flag"
+  kill -TERM "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  rm -f "$done_flag"
+  if [[ -f $timed_out_flag ]]; then
+    rm -f "$timed_out_flag"
+    printf '\nVerification timed out after %ss\n' "$timeout_sec" >>"$log_file"
+    return 124
+  fi
+  return "$rc"
+}
+
 ENTRY_AGENT=$AGENT
 printf '%s\n' "$PROMPT" >"$LOG_DIR/prompt.txt"
 EXIT_CODE=1
@@ -1004,6 +1089,7 @@ LAST_ATTEMPTED_AGENT=''
 LAST_ATTEMPTED_MODEL=''
 LAST_SKIPPED_MISSING_AGENT=''
 AUTH_FAILURE=0
+WORKER_ENV_FAILURE=0
 FAILED_AGENT=''
 TOTAL_CANDIDATES=${#CANDIDATE_AGENTS[@]}
 
@@ -1025,6 +1111,7 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
   if ! command -v "$CURRENT_AGENT" >/dev/null 2>&1; then
     if ! has_remaining_executable_candidate $((idx + 1)); then
       printf 'Agent %s executable not found on PATH and no further executable candidates remain; stopping.\n' "$CURRENT_AGENT" >&2
+      WORKER_ENV_FAILURE=1
       break
     fi
     if [[ $LAST_SKIPPED_MISSING_AGENT != "$CURRENT_AGENT" ]]; then
@@ -1039,9 +1126,11 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     if ! git -C "$WORKTREE" reset --hard "$BASE_SHA" >/dev/null 2>&1 \
       || ! git -C "$WORKTREE" clean -fdx >/dev/null 2>&1; then
       printf 'Failed to reset worktree before retry; stopping fallback.\n' >&2
+      WORKER_ENV_FAILURE=1
       break
     fi
   fi
+  WORKER_ENV_FAILURE=0
   ATTEMPTED_CANDIDATE=1
   LAST_ATTEMPTED_AGENT="$CURRENT_AGENT"
   LAST_ATTEMPTED_MODEL="$CURRENT_MODEL"
@@ -1145,9 +1234,13 @@ for (( idx=0; idx<TOTAL_CANDIDATES; idx++ )); do
     break
   fi
   if is_provider_quota_error "$CURRENT_AGENT"; then
+    WORKER_ENV_FAILURE=1
     if has_remaining_executable_candidate $((idx + 1)); then
       printf 'Agent %s (model %s) encountered provider/quota failure (exit %s); falling back to next candidate...\n' "$CURRENT_AGENT" "$CURRENT_MODEL" "$RUN_EXIT" >&2
     fi
+  elif [[ $RUN_EXIT -eq 126 || $RUN_EXIT -eq 127 ]]; then
+    WORKER_ENV_FAILURE=1
+    break
   else
     break
   fi
@@ -1155,30 +1248,9 @@ done
 
 AGENT=${SUCCESSFUL_AGENT:-${LAST_ATTEMPTED_AGENT:-$AGENT}}
 MODEL=${SUCCESSFUL_MODEL:-${LAST_ATTEMPTED_MODEL:-}}
-printf 'resolved_agent=%s\nresolved_model=%s\nexit_code=%s\nresolved_mcp_profile=%s\nresolved_mcp_profile_path=%s\n' "$AGENT" "${MODEL:-'(default)'}" "$EXIT_CODE" "$(resolve_active_profile "$AGENT")" "$(resolve_active_profile_path "$AGENT")" >>"$LOG_DIR/manifest.txt"
 
-# Review both tracked and untracked changes: git diff alone omits new files.
 git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
 git -C "$WORKTREE" diff --check >"$LOG_DIR/diff-check.txt" 2>&1 || EXIT_CODE=1
-git -C "$WORKTREE" diff --stat "$BASE_SHA" >"$LOG_DIR/diff-stat.txt"
-git -C "$WORKTREE" ls-files --others --exclude-standard >"$LOG_DIR/untracked-files.txt"
-list_dirty_paths "$WORKTREE" >"$LOG_DIR/worktree-changed-files.txt"
-{
-  cat "$LOG_DIR/base-dirty-files.txt"
-  list_dirty_paths "$ROOT"
-} | LC_ALL=C sort -u >"$LOG_DIR/base-dirty-files.tmp"
-mv "$LOG_DIR/base-dirty-files.tmp" "$LOG_DIR/base-dirty-files.txt"
-DIRTY_BASE_OVERLAP=0
-OVERLAPPING_BASE_FILES="$LOG_DIR/overlapping-base-files.txt"
-: >"$OVERLAPPING_BASE_FILES"
-if [[ -s $LOG_DIR/base-dirty-files.txt && -s $LOG_DIR/worktree-changed-files.txt ]]; then
-  LC_ALL=C comm -12 "$LOG_DIR/base-dirty-files.txt" "$LOG_DIR/worktree-changed-files.txt" >"$OVERLAPPING_BASE_FILES"
-  if [[ -s $OVERLAPPING_BASE_FILES ]]; then
-    DIRTY_BASE_OVERLAP=1
-    printf 'WARNING: Delegate modified files that also have uncommitted or untracked changes in base working tree; reconcile hunks manually and do not overwrite base files directly.\n' >&2
-  fi
-fi
-printf 'dirty_base_overlap=%s\n' "$DIRTY_BASE_OVERLAP" >>"$LOG_DIR/manifest.txt"
 FINAL_HEAD=$(git -C "$WORKTREE" rev-parse HEAD)
 if [[ "$FINAL_HEAD" != "$BASE_SHA" ]]; then
   printf 'WARNING: Delegate changed HEAD (commit/reset/rebase). Review Git history before integration.\n' >&2
@@ -1195,6 +1267,69 @@ if [[ $MODE == plan && -s $LOG_DIR/git-status.txt ]]; then
   printf 'WARNING: Planning delegate modified its isolated worktree; do not integrate those edits.\n' >&2
   EXIT_CODE=1
 fi
+
+VERIFICATION_STATUS='none_configured'
+VERIFICATION_EXIT='(none)'
+if (( VERIFY_SET )); then
+  if [[ $MODE == build && $EXIT_CODE -eq 0 ]]; then
+    set +e
+    run_verify_cmd "$WORKTREE" "$VERIFY_TIMEOUT" "$VERIFY_CMD" "$LOG_DIR/verify.log"
+    VERIFICATION_EXIT=$?
+    set -e
+    git -C "$WORKTREE" status --short >"$LOG_DIR/git-status.txt"
+    if [[ $VERIFICATION_EXIT -eq 0 ]]; then
+      VERIFICATION_STATUS='passed'
+    else
+      VERIFICATION_STATUS='failed'
+      EXIT_CODE=1
+    fi
+  else
+    VERIFICATION_STATUS='not_run'
+  fi
+fi
+
+# Review both tracked and untracked changes: git diff alone omits new files.
+git -C "$WORKTREE" diff --stat "$BASE_SHA" >"$LOG_DIR/diff-stat.txt"
+git -C "$WORKTREE" ls-files --others --exclude-standard >"$LOG_DIR/untracked-files.txt"
+: >"$LOG_DIR/modified-test-files.txt"
+list_dirty_paths "$WORKTREE" "$LOG_DIR/modified-test-files.txt" >"$LOG_DIR/worktree-changed-files.txt"
+LC_ALL=C sort -u -o "$LOG_DIR/modified-test-files.txt" "$LOG_DIR/modified-test-files.txt"
+CHANGED_FILES_COUNT=$(wc -l <"$LOG_DIR/worktree-changed-files.txt" | tr -d '[:space:]')
+MODIFIED_TEST_FILES_COUNT=$(wc -l <"$LOG_DIR/modified-test-files.txt" | tr -d '[:space:]')
+{
+  cat "$LOG_DIR/base-dirty-files.txt"
+  list_dirty_paths "$ROOT"
+} | LC_ALL=C sort -u >"$LOG_DIR/base-dirty-files.tmp"
+mv "$LOG_DIR/base-dirty-files.tmp" "$LOG_DIR/base-dirty-files.txt"
+DIRTY_BASE_OVERLAP=0
+OVERLAPPING_BASE_FILES="$LOG_DIR/overlapping-base-files.txt"
+: >"$OVERLAPPING_BASE_FILES"
+if [[ -s $LOG_DIR/base-dirty-files.txt && -s $LOG_DIR/worktree-changed-files.txt ]]; then
+  LC_ALL=C comm -12 "$LOG_DIR/base-dirty-files.txt" "$LOG_DIR/worktree-changed-files.txt" >"$OVERLAPPING_BASE_FILES"
+  if [[ -s $OVERLAPPING_BASE_FILES ]]; then
+    DIRTY_BASE_OVERLAP=1
+    printf 'WARNING: Delegate modified files that also have uncommitted or untracked changes in base working tree; reconcile hunks manually and do not overwrite base files directly.\n' >&2
+  fi
+fi
+
+FAILURE_CATEGORY='none'
+if [[ $EXIT_CODE -ne 0 ]]; then
+  if (( AUTH_FAILURE )); then
+    FAILURE_CATEGORY='auth_error'
+  elif [[ $VERIFICATION_STATUS == failed ]]; then
+    FAILURE_CATEGORY='verification_error'
+  elif (( WORKER_ENV_FAILURE )); then
+    FAILURE_CATEGORY='env_error'
+  else
+    FAILURE_CATEGORY='task_error'
+  fi
+fi
+
+printf 'resolved_agent=%s\nresolved_model=%s\nexit_code=%s\nfailure_category=%s\nverification=%s\nverification_exit=%s\nchanged_files_count=%s\nmodified_test_files_count=%s\ndirty_base_overlap=%s\nresolved_mcp_profile=%s\nresolved_mcp_profile_path=%s\n' \
+  "$AGENT" "${MODEL:-'(default)'}" "$EXIT_CODE" "$FAILURE_CATEGORY" "$VERIFICATION_STATUS" "$VERIFICATION_EXIT" \
+  "$CHANGED_FILES_COUNT" "$MODIFIED_TEST_FILES_COUNT" "$DIRTY_BASE_OVERLAP" \
+  "$(resolve_active_profile "$AGENT")" "$(resolve_active_profile_path "$AGENT")" >>"$LOG_DIR/manifest.txt"
+
 printf '\nDELEGATION_RESULT\n'
 printf '  Agent: %s (%s)\n' "$ENTRY_AGENT" "$MODE"
 printf '  Worker: %s\n' "$AGENT"
@@ -1205,6 +1340,17 @@ printf '  Worktree: %s\n' "$WORKTREE"
 printf '  Branch: %s\n' "$BRANCH"
 printf '  Logs: %s\n' "$LOG_DIR"
 printf '  Exit: %s\n' "$EXIT_CODE"
+printf '  Failure category: %s\n' "$FAILURE_CATEGORY"
+printf '  Verification: %s\n' "$VERIFICATION_STATUS"
+if [[ $VERIFICATION_STATUS == passed || $VERIFICATION_STATUS == failed ]]; then
+  printf '  Verification exit: %s\n' "$VERIFICATION_EXIT"
+  printf '  Verification output (last 40 lines):\n'
+  if [[ -s $LOG_DIR/verify.log ]]; then
+    tail -n 40 "$LOG_DIR/verify.log" | tail -c 8192 | sed 's/^/    /'
+  else
+    printf '    (no output)\n'
+  fi
+fi
 if (( DIRTY_BASE )); then
   printf '  Base snapshot note: dirty base working tree; uncommitted/untracked changes excluded from %s\n' "$BASE_SHA"
 fi
@@ -1212,6 +1358,10 @@ if (( DIRTY_BASE_OVERLAP )); then
   printf '  Overlapping dirty base files (reconcile hunks manually; do not overwrite base files):\n'
   sed 's/^/    /' "$OVERLAPPING_BASE_FILES"
 fi
+printf '  Changed files:\n'
+if [[ -s $LOG_DIR/worktree-changed-files.txt ]]; then sed 's/^/    /' "$LOG_DIR/worktree-changed-files.txt"; else printf '    (none)\n'; fi
+printf '  Modified test files:\n'
+if [[ -s $LOG_DIR/modified-test-files.txt ]]; then sed 's/^/    /' "$LOG_DIR/modified-test-files.txt"; else printf '    (none)\n'; fi
 printf '  Git changes:\n'
 if [[ -s $LOG_DIR/git-status.txt ]]; then sed 's/^/    /' "$LOG_DIR/git-status.txt"; else printf '    (none)\n'; fi
 printf '\n--- Delegate report ---\n'
@@ -1228,6 +1378,8 @@ if [[ $EXIT_CODE -ne 0 ]]; then
     else
       printf 'Authentication/provider setup failed for model %s. Stopping fallback. Check the OpenCode login and provider API key/configuration, then rerun. Details: %s/stderr.log\n' "$MODEL" "$LOG_DIR" >&2
     fi
+  elif [[ $VERIFICATION_STATUS == failed ]]; then
+    printf 'Verification failed (exit %s); inspect %s/verify.log.\n' "$VERIFICATION_EXIT" "$LOG_DIR" >&2
   else
     printf 'Delegate failed or requires manual verification; inspect stderr and status logs.\n' >&2
   fi
