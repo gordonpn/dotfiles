@@ -141,6 +141,14 @@ Only 6 core coding, search, and memory servers are enabled by default in `~/.cod
 
 All other 25 template servers remain fully defined in `~/.codex/config.toml` and `~/.config/opencode/opencode.json` (with their command, arguments, and environment variables pre-configured), but are set to `enabled = false` / `"enabled": false`. Existing top-level keys and custom unmanaged `mcp` entries in `~/.config/opencode/opencode.json` and `~/.copilot/mcp-config.json` are preserved across syncs, while retired entries (`sqlite`, `postgres`, `memory`, `chrome-devtools`, `puppeteer`, `server-services-configs`) are intentionally pruned by name across both OpenCode and Copilot configs.
 
+### Tier-2 CLI-First Workflows & Companion CLIs
+
+Heavy infrastructure and platform MCP servers (`github`, `docker`, `kubernetes`, `cloudflare`) remain enabled in `dotfiles/gemini/mcp_config.template.json` so Antigravity CLI can lazy-load them with `0` turn-0 prompt overhead, while eager profiles (`codex`, `opencode`, `copilot`, and `delegate.sh`) keep them disabled by default. For routine tasks, prefer local CLIs paired with skills and fall back to lazy-loaded `agy` MCP tools, per-session Codex overrides (`-c mcp_servers.<name>.enabled=true`), or persistent `mcp-sync` allowlist overrides (`--*-servers`, which remain in `~/.codex/config.toml`, `~/.config/opencode/opencode.json`, and `~/.copilot/mcp-config.json` until a later `mcp-sync` run restores the default `minimal` allowlist) when structured MCP schemas or resources are needed:
+
+- **Tier-2 Infrastructure CLIs (`gh`, `docker`, `kubectl`, `wrangler`):** Default to `gh` for repository/PR operations, `docker` for local container workflows (retaining `docker` MCP for multi-host SSH targets in `~/.gemini/docker-profiles.json`), `kubectl`/`helm` for cluster inspection (retaining `kubernetes` MCP for `k3s-master` resources and `agy` sessions), and `wrangler` for Cloudflare Workers workflows.
+- **Cloudflare `wrangler` CLI & Skills:** Install the global `wrangler` CLI as a manual post-Brewfile global install step via `pnpm add -g wrangler` (not tracked in `lists/Brewfile`) to pair with the Cloudflare Agent Skills (`wrangler`, `workers-best-practices`, `durable-objects`) alongside the lazy-loaded/opt-in `cloudflare` MCP server.
+- **Local Database CLIs (`libpq`, `redis`, `sqlite3`):** `lists/Brewfile` tracks `libpq` (`psql`) and `redis` (`redis-cli`) on macOS to pair with built-in `sqlite3` and the tracked `local-db-cli` skill (replacing the retired `sqlite` and `postgres` MCP servers). The `redis` MCP server remains available on demand in Antigravity CLI and is opt-in on eager clients. Homebrew installs `libpq` as keg-only, so prepend its binary directory when selecting its `psql`: `export PATH="$(brew --prefix libpq)/bin:$PATH"`.
+
 ### Measured Performance Reduction (Codex CLI)
 
 These measurements were captured on Codex CLI (`33` -> `9` managed startup processes, `593` -> `84` tools); cross-client startup and task-success benchmarking for OpenCode, DeepSeek, and Copilot is tracked in GitHub issue `#20`.
@@ -220,7 +228,7 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
    - Under default V1 configuration, per-server `codemode` settings are stripped with `"Omitted native setting that cannot be represented in V1"`, and enabled MCP tools load eagerly (`9.0s-11.8s` turn time).
    - Setting `OPENCODE_EXPERIMENTAL_CODE_MODE=1` activates the `execute` tool and `tools.$codemode.search(...)` (`29.37s` measured with `sequentialthinking` and default servers), while still connecting enabled MCP servers eagerly at startup.
 3. **Sync & Fallback Policy:**
-   - Keep `code_mode_tool_search` and `OPENCODE_EXPERIMENTAL_CODE_MODE` disabled in default synced configs. Both Codex and OpenCode fall back to the static `minimal` profile (`6` servers locally; `5` servers in `delegate.sh`), using per-session CLI overrides (`-c mcp_servers.<name>.enabled=true`, `--codex-profile`, `--opencode-profile`, `--codex-servers`, `--opencode-servers`) when additional servers are required.
+   - Keep `code_mode_tool_search` and `OPENCODE_EXPERIMENTAL_CODE_MODE` disabled in default synced configs. Both Codex and OpenCode fall back to the static `minimal` profile (`6` servers locally; `5` servers in `delegate.sh`), using Codex per-session CLI overrides (`-c mcp_servers.<name>.enabled=true`) or persistent `mcp-sync` overrides (`--codex-profile`, `--opencode-profile`, `--codex-servers`, `--opencode-servers`, reset when `mcp-sync` runs again with defaults) when additional servers are required.
 
 ---
 
@@ -238,7 +246,7 @@ Experimental probes against the live toolchains (keeping default `bin/mcp-sync` 
 | **`github`** | stdio | `~/.local/bin/github-mcp-server stdio` | Issues, PRs, Actions, code scanning, and repository search |
 | **`brave-search`** | stdio | `npx -y @modelcontextprotocol/server-brave-search` | Web search integration via Brave Search API |
 | **`exa`** | stdio | `npx -y exa-mcp-server` | Neural web search and webpage content extraction via Exa AI |
-| **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages |
+| **`cloudflare`** | stdio | `npx -y @cloudflare/mcp-server-cloudflare` | Cloudflare Workers, KV, D1, Queues, and Pages (paired with global `wrangler` CLI and `wrangler` / `workers-best-practices` / `durable-objects` skills) |
 | **`prometheus`** | stdio | `npx -y prometheus-mcp@latest stdio` | Metrics discovery and PromQL instant/range queries |
 | **`loki`** | stdio | `loki-mcp-server` | Grafana Loki log search, labels/series discovery, and LogQL queries |
 | **`docker`** | stdio | `npx -y @hypnosis/docker-mcp-server` | Local daemon & remote Swarm containers, logs, and Compose |
@@ -350,8 +358,8 @@ The K3s API server certificate on `master` generates TLS Subject Alternative Nam
 ### 2. Docker MCP Multi-Host Support
 `@hypnosis/docker-mcp-server` allows the agent to omit the profile argument during local development (`mode: "local"`), or pass `profile: "master"` to execute Docker and Docker Compose commands against remote servers over SSH.
 
-### 3. Cloudflare Wrangler OAuth
-Rather than requiring API tokens that expire or have restricted scopes, the Cloudflare server binds directly to the local Wrangler OAuth session initiated via `npx wrangler login`.
+### 3. Cloudflare Wrangler OAuth & CLI
+Rather than requiring API tokens that expire or have restricted scopes, the Cloudflare MCP server and global `wrangler` CLI (`pnpm add -g wrangler`) bind directly to the local Wrangler OAuth session initiated via `wrangler login`.
 
 ### 5. HashiCorp Vault FastMCP SDK Pinning
 FastMCP in `mcp` SDK v2.x restructured internal classes (`FastMCP` -> `MCPServer`). Running `bin/vault-mcp-server` with `uv run --with "mcp<2" --with "httpx"` ensures clean FastMCP compatibility and avoids virtual environment pollution.
